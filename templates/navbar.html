@@ -107,7 +107,20 @@
 
             <!-- Project Info & Mobile Button -->
             <div class="flex items-center gap-4">
-                <div class="hidden md:block text-xs text-gray-500 font-mono">Project: {{ project }}</div>
+                <div class="hidden md:block text-xs text-gray-500 font-mono flex items-center gap-2">
+                    Project: {{ project }}
+                </div>
+
+                <!-- Quick To-Do Button -->
+                <button onclick="toggleGlobalTodoModal()"
+                    class="text-gray-400 hover:text-white transition p-2 rounded-full hover:bg-gray-800"
+                    title="Quick Add Task">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4">
+                        </path>
+                    </svg>
+                </button>
 
                 <!-- Mobile menu button -->
                 <div class="-mr-2 flex md:hidden">
@@ -123,6 +136,25 @@
                     </button>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Global To-Do Quick Add Modal -->
+    <div id="globalTodoModal"
+        class="hidden absolute right-4 top-16 w-80 bg-gray-800 border border-gray-700 rounded-xl shadow-2xl p-4 z-50">
+        <div class="flex justify-between items-center mb-3">
+            <h3 class="font-bold text-white text-sm">Quick Add Task</h3>
+            <button onclick="toggleGlobalTodoModal()" class="text-gray-500 hover:text-white">&times;</button>
+        </div>
+        <input type="text" id="globalTodoTitle" placeholder="What needs to be done?"
+            class="w-full bg-gray-900 border border-gray-700 rounded p-2 text-sm text-white mb-3 outline-none focus:border-blue-500"
+            onkeydown="if(event.key === 'Enter') saveGlobalTodo()">
+        <textarea id="globalTodoDesc" placeholder="Optional details..." rows="2"
+            class="w-full bg-gray-900 border border-gray-700 rounded p-2 text-xs text-gray-400 mb-3 outline-none focus:border-blue-500 resize-none"></textarea>
+        <div class="flex justify-end">
+            <button id="globalTodoSaveBtn" onclick="saveGlobalTodo()"
+                class="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-4 py-2 rounded transition">Add
+                Task</button>
         </div>
     </div>
 
@@ -204,4 +236,94 @@
             }
         });
     });
+
+    // Global To-Do functionality
+    function toggleGlobalTodoModal() {
+        const modal = document.getElementById('globalTodoModal');
+        if (modal.classList.contains('hidden')) {
+            modal.classList.remove('hidden');
+            document.getElementById('globalTodoTitle').focus();
+        } else {
+            modal.classList.add('hidden');
+        }
+    }
+
+    async function saveGlobalTodo() {
+        const titleInput = document.getElementById('globalTodoTitle');
+        const descInput = document.getElementById('globalTodoDesc');
+        const btn = document.getElementById('globalTodoSaveBtn');
+
+        const title = titleInput.value.trim();
+        const description = descInput.value.trim();
+
+        if (!title) {
+            titleInput.classList.add('border-red-500');
+            setTimeout(() => titleInput.classList.remove('border-red-500'), 2000);
+            return;
+        }
+
+        btn.disabled = true;
+        btn.innerHTML = '<span class="animate-pulse">Saving...</span>';
+
+        try {
+            // Set default time to now + 1 hour rounded
+            const now = new Date();
+            now.setHours(now.getHours() + 1);
+            now.setMinutes(0);
+            const due_date = now.toISOString().split('T')[0];
+
+            const projectKey = (localStorage.getItem("project_key") || "").trim().toUpperCase();
+
+            const res = await fetch('/api/todos', {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-Project-Key": projectKey
+                },
+                body: JSON.stringify({
+                    title: title,
+                    description: description,
+                    priority: "Medium",
+                    due_date: due_date
+                })
+            });
+
+            if (res.ok) {
+                // Success feedback
+                btn.innerHTML = 'Saved!';
+                btn.classList.add('bg-green-600');
+                btn.classList.remove('bg-blue-600');
+
+                setTimeout(() => {
+                    titleInput.value = '';
+                    descInput.value = '';
+                    toggleGlobalTodoModal();
+
+                    // Reset button
+                    btn.disabled = false;
+                    btn.innerHTML = 'Add Task';
+                    btn.classList.remove('bg-green-600');
+                    btn.classList.add('bg-blue-600');
+
+                    // If we're on the todo page, instantly reload
+                    if (typeof loadTodos === 'function') {
+                        loadTodos();
+                    }
+                }, 800);
+            } else {
+                throw new Error("Failed to save");
+            }
+        } catch (error) {
+            console.error(error);
+            btn.innerHTML = 'Error';
+            btn.classList.add('bg-red-600');
+            btn.classList.remove('bg-blue-600');
+            setTimeout(() => {
+                btn.disabled = false;
+                btn.innerHTML = 'Add Task';
+                btn.classList.remove('bg-red-600');
+                btn.classList.add('bg-blue-600');
+            }, 2000);
+        }
+    }
 </script>
