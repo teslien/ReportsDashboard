@@ -2,6 +2,7 @@
 <html lang="en">
 
 <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta charset="UTF-8">
     <title>Jira Status Tracker - {{ project }}</title>
 
@@ -39,7 +40,8 @@
     </style>
     <link rel="stylesheet" href="/static/theme.css">
     <script src="/static/theme.js"></script>
-    <script src="/static/app.js"></script></head>
+    <script src="/static/app.js"></script>
+</head>
 
 <body class="bg-gray-900 min-h-screen text-white font-sans">
 
@@ -104,8 +106,8 @@
         </div>
 
         <!-- Results Section -->
-        <div class="glass rounded-2xl border border-gray-700 overflow-hidden">
-            <table class="w-full text-left">
+        <div class="glass rounded-2xl border border-gray-700 overflow-hidden overflow-x-auto">
+            <table class="w-full text-left min-w-[600px]">
                 <thead class="bg-gray-800/50 text-gray-400 text-xs uppercase tracking-wider">
                     <tr>
                         <th class="px-6 py-4 font-bold flex items-center">
