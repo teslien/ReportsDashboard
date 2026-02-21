@@ -6,6 +6,7 @@ import sqlite3
 import os
 from datetime import datetime, timedelta, timezone
 import re
+import json
 from urllib.parse import unquote
 
 app = Flask(__name__)
@@ -129,6 +130,13 @@ def init_db():
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS todo_tags (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            color TEXT DEFAULT 'blue'
+        )
+    ''')
     # Teams Table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS teams (
@@ -222,6 +230,11 @@ def init_db():
     if 'demo_done' not in columns:
         cursor.execute("ALTER TABLE sprint_tickets ADD COLUMN demo_done INTEGER DEFAULT 0")
 
+    cursor.execute("PRAGMA table_info(todos)")
+    columns = [row[1] for row in cursor.fetchall()]
+    if 'tags' not in columns:
+        cursor.execute("ALTER TABLE todos ADD COLUMN tags TEXT DEFAULT '[]'")
+
     conn.commit()
     conn.close()
 
@@ -271,6 +284,41 @@ def jira_settings_api():
                 "project_key": row[2]
             })
         return jsonify({"email": "", "token": "", "project_key": ""})
+
+@app.route("/api/settings/todo_tags", methods=["GET", "POST"])
+def todo_tags_settings_api():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    if request.method == "POST":
+        data = request.json or {}
+        name = (data.get("name") or "").strip()
+        color = (data.get("color") or "blue").strip()
+        
+        if not name:
+            conn.close()
+            return jsonify({"error": "Tag name is required"}), 400
+        
+        cursor.execute("INSERT INTO todo_tags (name, color) VALUES (?, ?)", (name, color))
+        conn.commit()
+        tag_id = cursor.lastrowid
+        conn.close()
+        return jsonify({"id": tag_id, "name": name, "color": color})
+        
+    else:
+        cursor.execute("SELECT id, name, color FROM todo_tags ORDER BY id ASC")
+        tags = [{"id": r[0], "name": r[1], "color": r[2]} for r in cursor.fetchall()]
+        conn.close()
+        return jsonify(tags)
+
+@app.route("/api/settings/todo_tags/<int:tag_id>", methods=["DELETE"])
+def delete_todo_tag(tag_id):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM todo_tags WHERE id = ?", (tag_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True})
 
 @app.route("/")
 def index():
@@ -907,14 +955,17 @@ def manage_todos():
         description = data.get("description", "")
         priority = data.get("priority", "Low")
         due_date = data.get("due_date") # YYYY-MM-DD
+        tags = data.get("tags", "[]")
+        if isinstance(tags, list):
+            tags = json.dumps(tags)
         
         if not title or not due_date:
             return jsonify({"error": "Title and due date are required"}), 400
             
         cursor.execute('''
-            INSERT INTO todos (title, description, priority, due_date)
-            VALUES (?, ?, ?, ?)
-        ''', (title, description, priority, due_date))
+            INSERT INTO todos (title, description, priority, due_date, tags)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (title, description, priority, due_date, tags))
         conn.commit()
         todo_id = cursor.lastrowid
         conn.close()
@@ -923,9 +974,9 @@ def manage_todos():
     else:
         date_filter = request.args.get("date")
         if date_filter:
-            cursor.execute("SELECT id, title, description, priority, due_date, status FROM todos WHERE due_date = ? ORDER BY created_at DESC", (date_filter,))
+            cursor.execute("SELECT id, title, description, priority, due_date, status, tags FROM todos WHERE due_date = ? ORDER BY created_at DESC", (date_filter,))
         else:
-            cursor.execute("SELECT id, title, description, priority, due_date, status FROM todos ORDER BY due_date ASC, created_at DESC")
+            cursor.execute("SELECT id, title, description, priority, due_date, status, tags FROM todos ORDER BY due_date ASC, created_at DESC")
             
         todos = []
         for r in cursor.fetchall():
@@ -935,7 +986,8 @@ def manage_todos():
                 "description": r[2],
                 "priority": r[3],
                 "due_date": r[4],
-                "status": r[5]
+                "status": r[5],
+                "tags": r[6] or "[]"
             })
         conn.close()
         return jsonify(todos)
@@ -958,6 +1010,9 @@ def update_delete_todo(todo_id):
         description = data.get("description")
         priority = data.get("priority")
         due_date = data.get("due_date")
+        tags = data.get("tags")
+        if isinstance(tags, list):
+            tags = json.dumps(tags)
         
         update_fields = []
         params = []
@@ -976,6 +1031,9 @@ def update_delete_todo(todo_id):
         if due_date:
             update_fields.append("due_date = ?")
             params.append(due_date)
+        if tags is not None:
+            update_fields.append("tags = ?")
+            params.append(tags)
             
         if update_fields:
             params.append(todo_id)

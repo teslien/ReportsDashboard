@@ -1,0 +1,40 @@
+# Goal Description
+The goal is to allow users to create and assign customizable tags (badges) to their To-Do items. Users will be able to manage their available tags from the Settings page, and quickly select them when creating a new To-Do task from the global quick-add modal or the main To-Do page.
+
+## Proposed Changes
+
+### Database Changes ([app.py](file:///c:/Users/Dell/Rohit%20Bairwa/Automations/ReportsDashboard/app.py))
+- **[MODIFY] [app.py](file:///c:/Users/Dell/Rohit%20Bairwa/Automations/ReportsDashboard/app.py)**
+  - Update [init_db()](file:///c:/Users/Dell/Rohit%20Bairwa/Automations/ReportsDashboard/app.py#98-227) to create a new `todo_tags` table: `CREATE TABLE IF NOT EXISTS todo_tags (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, color TEXT DEFAULT 'blue')`
+  - Run a migration safely: `ALTER TABLE todos ADD COLUMN tags TEXT` (Storing tags as a comma-separated string or JSON array).
+  - Add API endpoints to manage tags:
+    - `GET /api/settings/todo_tags`
+    - `POST /api/settings/todo_tags` (to add a new tag)
+    - `DELETE /api/settings/todo_tags/<tag_id>`
+  - Modify `/api/todos` (GET, POST, PUT) to accept and return the `tags` field.
+
+### Settings UI ([templates/settings.html](file:///c:/Users/Dell/Rohit%20Bairwa/Automations/ReportsDashboard/templates/settings.html))
+- **[MODIFY] [templates/settings.html](file:///c:/Users/Dell/Rohit%20Bairwa/Automations/ReportsDashboard/templates/settings.html)**
+  - Add a new "To-Do Tags" section below the Jira Configuration.
+  - Implement a simple UI to list existing tags, delete them, and add new ones (with a color picker or preset colors like gray, red, yellow, green, blue, indigo, purple, pink).
+  - Hook these up to the new `/api/settings/todo_tags` endpoints.
+
+### To-Do UI Updates
+- **[MODIFY] [templates/navbar.html](file:///c:/Users/Dell/Rohit%20Bairwa/Automations/ReportsDashboard/templates/navbar.html)**
+  - In the Global Quick Add Modal, show the available tags below the description input.
+  - Allow users to click a tag to toggle it (visual selection).
+  - Include the selected tags in the `POST /api/todos` request.
+- **[MODIFY] [templates/todo.html](file:///c:/Users/Dell/Rohit%20Bairwa/Automations/ReportsDashboard/templates/todo.html)**
+  - Display the associated tags as badges on the tasks in the list.
+  - Update the "Add Task" / "Edit Task" modal to include a tag selector, similar to the global quick add.
+
+## Verification Plan
+### Automated Tests
+- This project doesn't have an automated test suite configured for these features, so we will rely on manual testing. 
+
+### Manual Verification
+1. Open the "Settings" page and verify you can add and delete To-Do tags of different colors.
+2. Open the "Quick Add" modal in the navbar and ensure the tags appear and can be selected.
+3. Save a task with a tag from the quick add menu.
+4. Navigate to the "To-Do" page and ensure the new task appears with the correct colored tag badge.
+5. Add/Edit a task directly on the To-Do page and ensure tags can be modified.

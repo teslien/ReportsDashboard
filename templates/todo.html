@@ -20,7 +20,8 @@
         }
     </style>
     <link rel="stylesheet" href="/static/theme.css">
-    <script src="/static/theme.js"></script></head>
+    <script src="/static/theme.js"></script>
+</head>
 
 <body class="bg-gray-900 min-h-screen text-white">
 
@@ -56,7 +57,14 @@
                 <button onclick="hideAddTask()" class="text-gray-500 hover:text-white transition">&times;</button>
             </div>
             <textarea id="taskDescription" placeholder="Description" rows="2"
-                class="w-full bg-transparent text-sm text-gray-400 outline-none placeholder-gray-600 mb-6 resize-none"></textarea>
+                class="w-full bg-transparent text-sm text-gray-400 outline-none placeholder-gray-600 mb-2 resize-none"></textarea>
+
+            <!-- Tag Selection -->
+            <div class="mb-4">
+                <div id="tagSelectorList" class="flex flex-wrap gap-1.5">
+                    <!-- Tags will be dynamically loaded here by JS -->
+                </div>
+            </div>
 
             <div class="flex items-center justify-between border-t border-white/5 pt-6">
                 <div class="flex items-center gap-4">
@@ -87,8 +95,8 @@
         const today = new Date().toISOString().split('T')[0];
         document.getElementById('dateFilter').value = today;
 
-        // Initialize
-        loadTodos();
+        // Initialize tags and todos
+        Promise.all([loadTodoTags(), loadTodos()]);
 
         async function loadTodos() {
             const date = document.getElementById('dateFilter').value;
@@ -114,30 +122,104 @@
                 return;
             }
 
-            taskList.innerHTML = todos.map(t => `
-                <div class="group flex items-center justify-between p-4 bg-gray-800/40 hover:bg-gray-800/60 transition rounded-xl border border-white/5">
-                    <div class="flex items-center gap-4 flex-1">
-                        <button onclick="toggleStatus(${t.id}, '${t.status}')" class="w-6 h-6 rounded-full border-2 ${t.status === 'Done' ? 'bg-green-500 border-green-500' : 'border-gray-600 hover:border-white'} transition-all flex items-center justify-center">
+            taskList.innerHTML = todos.map(t => {
+                let tagsHtml = '';
+                if (t.tags && t.tags !== '[]') {
+                    try {
+                        const tagsArray = JSON.parse(t.tags);
+                        if (tagsArray.length > 0 && window.availableTags) {
+                            tagsHtml = '<div class="flex gap-1 mt-1">' + tagsArray.map(tagName => {
+                                const tagObj = window.availableTags.find(x => x.name === tagName);
+                                if (tagObj) {
+                                    const style = window.colorClasses ? (window.colorClasses[tagObj.color] || window.colorClasses['blue']) : '';
+                                    return `<span class="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold ${style}">${tagName}</span>`;
+                                }
+                                return '';
+                            }).join('') + '</div>';
+                        }
+                    } catch (e) { console.error("Error parsing tags", e); }
+                }
+
+                return `
+                <div class="group flex flex-col md:flex-row md:items-center justify-between p-4 bg-gray-800/40 hover:bg-gray-800/60 transition rounded-xl border border-white/5 gap-4">
+                    <div class="flex items-start gap-4 flex-1">
+                        <button onclick="toggleStatus(${t.id}, '${t.status}')" class="mt-0.5 w-6 h-6 rounded-full border-2 shrink-0 ${t.status === 'Done' ? 'bg-green-500 border-green-500' : 'border-gray-600 hover:border-white'} transition-all flex items-center justify-center">
                             ${t.status === 'Done' ? '✓' : ''}
                         </button>
-                        <div class="flex-1">
-                            <h3 class="font-medium ${t.status === 'Done' ? 'line-through text-gray-500' : 'text-gray-100'}">${t.title}</h3>
-                            <p class="text-xs text-gray-500">${t.description || ''}</p>
+                        <div class="flex-1 min-w-0">
+                            <h3 class="font-medium truncate ${t.status === 'Done' ? 'line-through text-gray-500' : 'text-gray-100'}">${t.title}</h3>
+                            <p class="text-xs text-gray-500 break-words line-clamp-2">${t.description || ''}</p>
+                            ${tagsHtml}
                         </div>
                     </div>
-                    <div class="flex items-center gap-4">
-                        <span class="text-[10px] uppercase font-bold px-2 py-1 rounded ${getPriorityColor(t.priority)}">${t.priority}</span>
-                        <div class="flex items-center gap-4 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button onclick='editTodo(${JSON.stringify(t).replace(/'/g, "&apos;")})' class="text-gray-500 hover:text-blue-400 transition" title="Edit">
+                    <div class="flex items-center gap-4 justify-between md:justify-end w-full md:w-auto mt-2 md:mt-0">
+                        <span class="text-[10px] uppercase font-bold px-2 py-1 rounded shrink-0 ${getPriorityColor(t.priority)}">${t.priority}</span>
+                        <div class="flex items-center gap-4 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onclick='editTodo(${JSON.stringify(t).replace(/'/g, "&apos;")})' class="text-gray-500 hover:text-blue-400 transition p-1" title="Edit">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-5M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
                             </button>
-                            <button onclick="deleteTodo(${t.id})" class="text-gray-500 hover:text-red-500 transition" title="Delete">
+                            <button onclick="deleteTodo(${t.id})" class="text-gray-500 hover:text-red-500 transition p-1" title="Delete">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                             </button>
                         </div>
                     </div>
                 </div>
-            `).join('');
+                `;
+            }).join('');
+        }
+        let selectedTags = [];
+        window.availableTags = [];
+        window.colorClasses = {
+            'blue': 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+            'red': 'bg-red-500/20 text-red-400 border-red-500/30',
+            'green': 'bg-green-500/20 text-green-400 border-green-500/30',
+            'yellow': 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+            'purple': 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+            'pink': 'bg-pink-500/20 text-pink-400 border-pink-500/30',
+            'gray': 'bg-gray-500/20 text-gray-400 border-gray-500/30'
+        };
+
+        async function loadTodoTags() {
+            try {
+                const res = await fetch('/api/settings/todo_tags');
+                if (res.ok) {
+                    window.availableTags = await res.json();
+                }
+            } catch (err) {
+                console.error("Failed to load tags:", err);
+            }
+        }
+
+        function renderTagSelector() {
+            const container = document.getElementById('tagSelectorList');
+            if (window.availableTags.length === 0) {
+                container.innerHTML = '<span class="text-xs text-gray-500 italic">No tags created in settings.</span>';
+                return;
+            }
+            container.innerHTML = window.availableTags.map(t => {
+                const style = window.colorClasses[t.color] || window.colorClasses['blue'];
+                const isSelected = selectedTags.includes(t.name);
+                const opacityMsg = isSelected ? 'opacity-100 ring-1 ring-white' : 'opacity-40';
+                return `
+                    <button type="button" 
+                        onclick="toggleTagSelection(this, '${t.name}')" 
+                        class="inline-flex items-center px-2 py-0.5 rounded border text-[10px] font-semibold transition-all ${style} ${opacityMsg} hover:opacity-100">
+                        ${t.name}
+                    </button>
+                `;
+            }).join('');
+        }
+
+        function toggleTagSelection(btn, tagName) {
+            if (selectedTags.includes(tagName)) {
+                selectedTags = selectedTags.filter(t => t !== tagName);
+                btn.classList.remove('opacity-100', 'ring-1', 'ring-white');
+                btn.classList.add('opacity-40');
+            } else {
+                selectedTags.push(tagName);
+                btn.classList.remove('opacity-40');
+                btn.classList.add('opacity-100', 'ring-1', 'ring-white');
+            }
         }
 
         function getPriorityColor(p) {
@@ -155,6 +237,8 @@
             document.getElementById('taskName').value = "";
             document.getElementById('taskDescription').value = "";
             document.getElementById('taskPriority').value = "Low";
+            selectedTags = [];
+            renderTagSelector();
             saveBtn.innerText = "Save";
 
             form.classList.remove('hidden');
@@ -178,6 +262,11 @@
             document.getElementById('taskName').value = todo.title;
             document.getElementById('taskDescription').value = todo.description || "";
             document.getElementById('taskPriority').value = todo.priority;
+
+            try {
+                selectedTags = JSON.parse(todo.tags || "[]");
+            } catch (e) { selectedTags = []; }
+            renderTagSelector();
 
             // Map simple date back to datetime-local format (adding 09:00 default)
             document.getElementById('taskDueDate').value = `${todo.due_date}T09:00`;
@@ -206,6 +295,7 @@
             const priority = document.getElementById('taskPriority').value;
             const due_date_time = document.getElementById('taskDueDate').value;
             const due_date = due_date_time.split('T')[0];
+            const tags = JSON.stringify(selectedTags);
 
             if (!title || !due_date) {
                 alert("Please enter a title and date.");
@@ -218,11 +308,11 @@
 
             const res = await fetch(url, {
                 method: method,
-                headers: { 
+                headers: {
                     "Content-Type": "application/json",
                     "X-Project-Key": projectKey
                 },
-                body: JSON.stringify({ title, description, priority, due_date })
+                body: JSON.stringify({ title, description, priority, due_date, tags })
             });
 
             if (res.ok) {
@@ -244,7 +334,7 @@
         async function deleteTodo(id) {
             if (!confirm("Delete this task?")) return;
             const projectKey = (localStorage.getItem("project_key") || "").trim().toUpperCase();
-            const res = await fetch(`/api/todos/${id}`, { 
+            const res = await fetch(`/api/todos/${id}`, {
                 method: "DELETE",
                 headers: { "X-Project-Key": projectKey }
             });

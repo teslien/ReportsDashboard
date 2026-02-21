@@ -78,6 +78,45 @@
                 </div>
             </div>
         </div>
+
+        <!-- To-Do Tags Configuration -->
+        <div class="max-w-2xl mx-auto bg-gray-800 rounded-lg shadow-xl p-6 border border-gray-700 mt-8">
+            <h2 class="text-xl font-bold text-white mb-4 flex items-center">
+                <svg class="w-5 h-5 mr-2 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                </svg>
+                To-Do Tags
+            </h2>
+            <p class="text-xs text-gray-400 mb-6">Create tags to assign to your tasks for better organization.</p>
+
+            <div class="space-y-4">
+                <!-- Tag List -->
+                <div id="tagsList" class="flex flex-wrap gap-2 min-h-[40px]">
+                    <!-- Tags will be dynamically loaded here -->
+                </div>
+
+                <!-- Add New Tag Form -->
+                <div class="flex items-center gap-3 pt-4 border-t border-gray-700">
+                    <input type="text" id="newTagName" placeholder="New Tag Name"
+                        class="flex-1 bg-gray-700 border border-gray-600 rounded-md px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <select id="newTagColor"
+                        class="bg-gray-700 border border-gray-600 rounded-md px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="blue">Blue</option>
+                        <option value="red">Red</option>
+                        <option value="green">Green</option>
+                        <option value="yellow">Yellow</option>
+                        <option value="purple">Purple</option>
+                        <option value="pink">Pink</option>
+                        <option value="gray">Gray</option>
+                    </select>
+                    <button onclick="addTodoTag()"
+                        class="bg-gray-700 hover:bg-gray-600 text-white font-bold py-1.5 px-4 rounded-md transition-colors text-sm border border-gray-600">
+                        Add Tag
+                    </button>
+                </div>
+            </div>
+        </div>
     </main>
 
     <script>
@@ -94,7 +133,100 @@
             } catch (err) {
                 console.error("Failed to load Jira config:", err);
             }
+
+            // Load tags
+            loadTodoTags();
         });
+
+        const settingsColorClasses = {
+            'blue': 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+            'red': 'bg-red-500/20 text-red-400 border-red-500/30',
+            'green': 'bg-green-500/20 text-green-400 border-green-500/30',
+            'yellow': 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+            'purple': 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+            'pink': 'bg-pink-500/20 text-pink-400 border-pink-500/30',
+            'gray': 'bg-gray-500/20 text-gray-400 border-gray-500/30'
+        };
+
+        async function loadTodoTags() {
+            try {
+                const res = await fetch('/api/settings/todo_tags');
+                if (res.ok) {
+                    const tags = await res.json();
+                    const container = document.getElementById('tagsList');
+
+                    if (tags.length === 0) {
+                        container.innerHTML = '<span class="text-xs text-gray-500 italic py-2">No tags created yet.</span>';
+                        return;
+                    }
+
+                    container.innerHTML = tags.map(t => {
+                        const style = settingsColorClasses[t.color] || settingsColorClasses['blue'];
+                        return `
+                        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full border text-xs font-semibold ${style}">
+                            ${t.name}
+                            <button onclick="deleteTodoTag(${t.id})" class="hover:text-white focus:outline-none ml-1 opacity-70 hover:opacity-100 transition">
+                                &times;
+                            </button>
+                        </div>
+                        `;
+                    }).join('');
+                }
+            } catch (err) {
+                console.error("Failed to load tags:", err);
+            }
+        }
+
+        async function addTodoTag() {
+            const nameInput = document.getElementById('newTagName');
+            const colorInput = document.getElementById('newTagColor');
+
+            const name = nameInput.value.trim();
+            const color = colorInput.value;
+
+            if (!name) {
+                nameInput.classList.add('border-red-500');
+                setTimeout(() => nameInput.classList.remove('border-red-500'), 2000);
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/settings/todo_tags', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, color })
+                });
+
+                if (res.ok) {
+                    nameInput.value = '';
+                    loadTodoTags();
+                } else {
+                    const errorData = await res.json();
+                    alert('Error adding tag: ' + (errorData.error || 'Unknown error'));
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Connection error occurred.');
+            }
+        }
+
+        async function deleteTodoTag(id) {
+            if (!confirm('Are you sure you want to delete this tag? Tasks using it might lose the tag styling.')) return;
+
+            try {
+                const res = await fetch(`/api/settings/todo_tags/${id}`, {
+                    method: 'DELETE'
+                });
+
+                if (res.ok) {
+                    loadTodoTags();
+                } else {
+                    alert('Failed to delete tag.');
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        }
 
         function toggleVisibility(id) {
             const input = document.getElementById(id);
@@ -115,8 +247,6 @@
                 return;
             }
 
-            // Atlassian API tokens are typically very long (e.g. 100+ chars).
-            // A common mistake is double-clicking a token with hyphens, which only copies part of it.
             if (token.length < 50) {
                 const proceed = confirm(
                     "Warning: Your Jira API Token seems unusually short (" + token.length + " characters).\n\n" +
@@ -126,7 +256,6 @@
                 if (!proceed) return;
             }
 
-            // Clear legacy local storage to avoid confusion
             localStorage.removeItem('jira_email');
             localStorage.removeItem('jira_token');
             localStorage.removeItem('project_key');
@@ -134,7 +263,6 @@
             document.cookie = 'jira_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
             document.cookie = 'project_key=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
 
-            // Visual feedback
             const btn = document.getElementById('saveBtn');
             const originalText = btn.innerHTML;
             btn.innerHTML = `

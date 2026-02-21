@@ -151,7 +151,15 @@
             onkeydown="if(event.key === 'Enter') saveGlobalTodo()">
         <textarea id="globalTodoDesc" placeholder="Optional details..." rows="2"
             class="w-full bg-gray-900 border border-gray-700 rounded p-2 text-xs text-gray-400 mb-3 outline-none focus:border-blue-500 resize-none"></textarea>
-        <div class="flex justify-end">
+
+        <!-- Tag Selection Area -->
+        <div class="mb-3">
+            <div id="globalTodoTagsList" class="flex flex-wrap gap-1.5">
+                <!-- Tags will be injected here -->
+            </div>
+        </div>
+
+        <div class="flex justify-end pt-2 border-t border-gray-700">
             <button id="globalTodoSaveBtn" onclick="saveGlobalTodo()"
                 class="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-4 py-2 rounded transition">Add
                 Task</button>
@@ -237,12 +245,70 @@
         });
     });
 
+    // Tag Handling in Global Modal
+    let globalSelectedTags = [];
+    const navbarColorClasses = {
+        'blue': 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+        'red': 'bg-red-500/20 text-red-400 border-red-500/30',
+        'green': 'bg-green-500/20 text-green-400 border-green-500/30',
+        'yellow': 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+        'purple': 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+        'pink': 'bg-pink-500/20 text-pink-400 border-pink-500/30',
+        'gray': 'bg-gray-500/20 text-gray-400 border-gray-500/30'
+    };
+
+    async function loadGlobalTodoTags() {
+        try {
+            const res = await fetch('/api/settings/todo_tags');
+            if (res.ok) {
+                const tags = await res.json();
+                const container = document.getElementById('globalTodoTagsList');
+                if (tags.length === 0) {
+                    container.innerHTML = '<span class="text-xs text-gray-500 italic">No tags</span>';
+                    return;
+                }
+
+                container.innerHTML = tags.map(t => {
+                    const style = navbarColorClasses[t.color] || navbarColorClasses['blue'];
+                    return `
+                        <button type="button" 
+                            onclick="toggleGlobalTagSelection(this, '${t.name}')" 
+                            class="inline-flex items-center px-2 py-0.5 rounded border text-[10px] font-semibold transition-all ${style} opacity-40 hover:opacity-100">
+                            ${t.name}
+                        </button>
+                    `;
+                }).join('');
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    }
+
+    function toggleGlobalTagSelection(btn, tagName) {
+        if (globalSelectedTags.includes(tagName)) {
+            globalSelectedTags = globalSelectedTags.filter(t => t !== tagName);
+            btn.classList.remove('opacity-100', 'ring-1', 'ring-white');
+            btn.classList.add('opacity-40');
+        } else {
+            globalSelectedTags.push(tagName);
+            btn.classList.remove('opacity-40');
+            btn.classList.add('opacity-100', 'ring-1', 'ring-white');
+        }
+    }
+
     // Global To-Do functionality
     function toggleGlobalTodoModal() {
         const modal = document.getElementById('globalTodoModal');
         if (modal.classList.contains('hidden')) {
             modal.classList.remove('hidden');
             document.getElementById('globalTodoTitle').focus();
+
+            // Reset state
+            globalSelectedTags = [];
+            loadGlobalTodoTags();
+            document.getElementById('globalTodoTitle').value = '';
+            document.getElementById('globalTodoDesc').value = '';
+
         } else {
             modal.classList.add('hidden');
         }
@@ -274,18 +340,22 @@
 
             const projectKey = (localStorage.getItem("project_key") || "").trim().toUpperCase();
 
+            // Prepare payload
+            const payload = {
+                title: title,
+                description: description,
+                priority: "Medium",
+                due_date: due_date,
+                tags: JSON.stringify(globalSelectedTags)
+            };
+
             const res = await fetch('/api/todos', {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
                     "X-Project-Key": projectKey
                 },
-                body: JSON.stringify({
-                    title: title,
-                    description: description,
-                    priority: "Medium",
-                    due_date: due_date
-                })
+                body: JSON.stringify(payload)
             });
 
             if (res.ok) {
@@ -295,8 +365,6 @@
                 btn.classList.remove('bg-blue-600');
 
                 setTimeout(() => {
-                    titleInput.value = '';
-                    descInput.value = '';
                     toggleGlobalTodoModal();
 
                     // Reset button
