@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Query Builder - Jira Analytics</title>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/gridjs/dist/theme/mermaid.min.css" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/gridjs/dist/gridjs.umd.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gridjs/plugins/selection/dist/selection.umd.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="/static/app.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #0b0f1a;
+            color: white;
+            overflow-x: hidden;
+        }
+
+        .glass {
+            background: rgba(30, 41, 59, 0.4);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .glass-card {
+            background: rgba(30, 41, 59, 0.6);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.7);
+        }
+
+        /* Fix stacking context for dropdowns */
+        .dropdown-parent {
+            position: relative;
+            z-index: 50;
+        }
+
+        /* Select2 Custom Dark */
+        .select2-container--default .select2-selection--multiple {
+            background-color: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 0.75rem;
+            min-height: 44px;
+            color: white;
+            transition: all 0.2s;
+        }
+
+        .select2-container--default.select2-container--focus .select2-selection--multiple {
+            border-color: #3b82f6;
+            background-color: rgba(15, 23, 42, 0.8);
+        }
+
+        .select2-container--default .select2-selection--multiple .select2-selection__choice {
+            background-color: #3b82f6;
+            border: none;
+            color: white;
+            border-radius: 0.5rem;
+            padding: 2px 8px;
+            margin-top: 6px;
+        }
+
+        .select2-container--default .select2-selection--multiple .select2-selection__choice__remove {
+            color: white;
+            margin-right: 5px;
+        }
+
+        .select2-container--default .select2-selection--multiple .select2-selection__choice__remove:hover {
+            color: #ef4444;
+            background: transparent;
+        }
+
+        .select2-dropdown {
+            background-color: #1e293b;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 0.75rem;
+            overflow: hidden;
+            color: #e2e8f0;
+        }
+
+        .select2-results__option--highlighted {
+            background-color: #3b82f6 !important;
+        }
+
+        .select2-search__field {
+            background-color: transparent !important;
+            color: white !important;
+            margin-top: 8px !important;
+        }
+
+        /* Grid.js Custom Theme */
+        .gridjs-container,
+        .gridjs-wrapper,
+        .gridjs-table,
+        .gridjs-tbody,
+        .gridjs-tr,
+        .gridjs-td {
+            background-color: transparent !important;
+            border: none !important;
+        }
+
+        .gridjs-tr {
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+            transition: all 0.2s;
+        }
+
+        .gridjs-tr:hover {
+            background-color: rgba(255, 255, 255, 0.04) !important;
+        }
+
+        .gridjs-td {
+            color: #f1f5f9 !important;
+            padding: 18px 24px !important;
+            font-size: 0.875rem;
+        }
+
+        .gridjs-thead {
+            background: rgba(15, 23, 42, 0.4) !important;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.05) !important;
+        }
+
+        .gridjs-th {
+            background: transparent !important;
+            color: #64748b !important;
+            font-size: 0.7rem !important;
+            text-transform: uppercase !important;
+            border: none !important;
+            font-weight: 700 !important;
+            letter-spacing: 0.08em;
+            padding: 16px 20px !important;
+        }
+
+        .gridjs-footer {
+            background: transparent !important;
+            border-top: 1px solid rgba(255, 255, 255, 0.05) !important;
+            padding: 16px !important;
+        }
+
+        .gridjs-pagination .gridjs-pages button {
+            background: rgba(15, 23, 42, 0.6) !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            color: #94a3b8 !important;
+            border-radius: 0.5rem !important;
+            margin: 0 4px;
+            padding: 6px 14px !important;
+        }
+
+        .gridjs-pagination .gridjs-pages button.gridjs-currentPage {
+            background: #3b82f6 !important;
+            color: white !important;
+            border-color: #3b82f6 !important;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .animate-fade-in {
+            animation: fadeIn 0.4s ease-out forwards;
+        }
+
+        /* Selection Checkbox Styling */
+        .row-checkbox,
+        .header-checkbox {
+            width: 18px !important;
+            height: 18px !important;
+            cursor: pointer !important;
+            accent-color: #3b82f6 !important;
+            background-color: #1f2937 !important;
+            border: 1px solid rgba(255, 255, 255, 0.2) !important;
+            border-radius: 4px !important;
+            appearance: checkbox !important;
+            -webkit-appearance: checkbox !important;
+        }
+
+        .gridjs-th .header-checkbox {
+            margin-top: 4px;
+        }
+    </style>
+    <link rel="stylesheet" href="/static/theme.css">
+    <script src="/static/theme.js"></script></head>
+
+<body class="min-h-screen">
+    <!-- Navigation -->
+    {% include 'navbar.html' %}
+
+    <main class="pt-28 pb-12 px-8 max-w-[1800px] mx-auto">
+        <div class="mb-10 animate-fade-in">
+            <h1 class="text-4xl font-extrabold tracking-tight mb-2">Query Builder</h1>
+            <p class="text-gray-500 font-medium">Construct complex JQL queries using intuitive filters.</p>
+        </div>
+
+        <div
+            class="glass-card rounded-[2.5rem] p-8 border border-white/10 shadow-3xl mb-12 animate-fade-in dropdown-parent">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-8">
+                <!-- Assignees -->
+                <div class="space-y-3">
+                    <label
+                        class="text-[10px] font-black text-gray-500 uppercase tracking-widest block px-1">Assignees</label>
+                    <select id="assigneeSelect" class="w-full" multiple="multiple"></select>
+                </div>
+
+                <!-- Date Range -->
+                <div class="space-y-3">
+                    <label class="text-[10px] font-black text-gray-500 uppercase tracking-widest block px-1">Date Range
+                        (Updated)</label>
+                    <div class="flex gap-3">
+                        <input type="date" id="startDate"
+                            class="flex-1 bg-slate-900/60 border border-white/10 rounded-xl h-[44px] px-4 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500/40 transition hover:bg-slate-900/80" />
+                        <input type="date" id="endDate"
+                            class="flex-1 bg-slate-900/60 border border-white/10 rounded-xl h-[44px] px-4 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500/40 transition hover:bg-slate-900/80" />
+                    </div>
+                </div>
+
+                <!-- Priorities -->
+                <div class="space-y-3">
+                    <label class="text-[10px] font-black text-gray-500 uppercase tracking-widest block px-1">Priorities
+                        (Optional)</label>
+                    <select id="prioritySelect" class="w-full" multiple="multiple">
+                        <option value="Highest">Highest</option>
+                        <option value="High">High</option>
+                        <option value="Medium">Medium</option>
+                        <option value="Low">Low</option>
+                        <option value="Lowest">Lowest</option>
+                    </select>
+                </div>
+
+                <!-- Statuses -->
+                <div class="space-y-3">
+                    <label
+                        class="text-[10px] font-black text-gray-500 uppercase tracking-widest block px-1">Statuses</label>
+                    <select id="statusSelect" class="w-full" multiple="multiple">
+                        <option value="DEPLOYED">DEPLOYED</option>
+                        <option value="DESIGN CORRECTIONS NEEDED">DESIGN CORRECTIONS NEEDED</option>
+                        <option value="DESIGN IN PROGRESS">DESIGN IN PROGRESS</option>
+                        <option value="DEVELOPMENT IN PROGRESS">DEVELOPMENT IN PROGRESS</option>
+                        <option value="DEV CORRECTIONS NEEDED">DEV CORRECTIONS NEEDED</option>
+                        <option value="DONE">DONE</option>
+                        <option value="NOT A BUG">NOT A BUG</option>
+                        <option value="ON HOLD">ON HOLD</option>
+                        <option value="OPEN">OPEN</option>
+                        <option value="READY FOR DESIGN">READY FOR DESIGN</option>
+                        <option value="READY FOR DEV">READY FOR DEV</option>
+                        <option value="READY FOR INTERNAL DEMO">READY FOR INTERNAL DEMO</option>
+                        <option value="READY FOR QA">READY FOR QA</option>
+                        <option value="READY FOR STAGING">READY FOR STAGING</option>
+                        <option value="RESOLVED">RESOLVED</option>
+                        <option value="STAGED">STAGED</option>
+                        <option value="UNABLE TO REPRODUCE">UNABLE TO REPRODUCE</option>
+                    </select>
+                </div>
+
+                <!-- Platform Filter -->
+                <div class="space-y-3">
+                    <label
+                        class="text-[10px] font-black text-gray-500 uppercase tracking-widest block px-1">Platform</label>
+                    <select id="platformSelect"
+                        class="w-full bg-slate-900/60 border border-white/10 rounded-xl h-[44px] px-4 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500/40 transition hover:bg-slate-900/80">
+                        <option value="all">All Platforms</option>
+                        <option value="production">Production Only</option>
+                        <option value="non-production">Exclude Production</option>
+                    </select>
+                </div>
+            </div>
+
+            <div
+                class="flex justify-between items-center bg-slate-900/40 p-6 rounded-2xl border border-white/5 ring-1 ring-white/5">
+                <div class="flex items-center gap-4">
+                    <!-- Column Customizer -->
+                    <div class="relative group dropdown-parent">
+                        <button id="colToggleBtn" onclick="toggleColMenu(event)"
+                            class="glass h-[48px] px-6 rounded-xl text-sm font-bold flex items-center gap-3 hover:bg-white/5 transition-all active:scale-95 border border-white/5">
+                            <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                                    d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4">
+                                </path>
+                            </svg>
+                            <span>Display Columns</span>
+                        </button>
+                        <div id="colMenu"
+                            class="hidden absolute left-0 mt-3 w-64 rounded-2xl glass-card shadow-2xl z-[999] p-6 border border-white/20 ring-1 ring-black backdrop-blur-3xl">
+                            <h3 class="text-[10px] font-black text-gray-400 uppercase mb-4 tracking-[0.2em]">Attributes
+                            </h3>
+                            <div class="space-y-4" id="columnCheckboxes">
+                                <!-- Checkboxes will be injected here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-4">
+                    <button id="exportBtn" onclick="exportSelected()" disabled
+                        class="bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-400 px-6 h-[48px] rounded-xl text-sm font-extrabold border border-emerald-500/20 transition-all active:scale-95 flex items-center gap-3 disabled:opacity-30 disabled:cursor-not-allowed">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
+                            </path>
+                        </svg>
+                        Export Selected
+                    </button>
+                    <button onclick="runQuery()"
+                        class="bg-blue-600 hover:bg-blue-500 text-white px-10 h-[48px] rounded-xl text-sm font-extrabold shadow-2xl shadow-blue-500/20 transition-all hover:scale-[1.03] active:scale-95 flex items-center gap-3">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                        </svg>
+                        Apply Query
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div id="tableWrapper"
+            class="glass-card overflow-hidden border border-white/5 shadow-2xl relative min-h-[400px] animate-fade-in"
+            style="animation-delay: 0.2s">
+            <div id="placeholder"
+                class="flex flex-col items-center justify-center absolute inset-0 text-gray-600 gap-4 opacity-40">
+                <p class="text-xs uppercase font-black tracking-[0.3em]">Configure filters and apply query</p>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        let gridInstance = null;
+        let lastRawData = [];
+        let selectedKeys = new Set();
+        let currentIssues = [];
+
+        const allColumns = [
+            { id: "key", name: "Key", width: "120px", formatter: (cell) => gridjs.html(`<a href="https://lumberfi.atlassian.net/browse/${cell}" target="_blank" class="text-blue-400 font-mono font-bold">${cell}</a>`) },
+            { id: "type", name: "Type", width: "100px" },
+            { id: "summary", name: "Summary", width: "400px" },
+            { id: "customer", name: "Customer", width: "150px" },
+            { id: "status", name: "Status", width: "150px", formatter: (cell) => gridjs.html(`<span class="px-3 py-1 rounded-lg text-[10px] font-black uppercase border border-white/5 bg-slate-800 text-slate-400">${cell}</span>`) },
+            { id: "assignee", name: "Assignee", width: "180px" },
+            { id: "priority", name: "Priority", width: "120px" },
+            { id: "updated", name: "Updated", width: "160px", formatter: (cell) => new Date(cell).toLocaleDateString() },
+            { id: "created", name: "Created", width: "160px", formatter: (cell) => new Date(cell).toLocaleDateString() }
+        ];
+
+        let visibleColumns = ["key", "type", "summary", "status", "assignee", "priority"];
+
+        $(document).ready(function () {
+            initAssigneeSelect();
+            initPrioritySelect();
+            initStatusSelect();
+            initColumnMenu();
+        });
+
+        function initColumnMenu() {
+            const container = document.getElementById("columnCheckboxes");
+            container.innerHTML = allColumns.map(col => `
+                <label class="flex items-center justify-between cursor-pointer group">
+                    <span class="text-[11px] font-bold text-gray-500 group-hover:text-white transition uppercase tracking-tighter">${col.name}</span>
+                    <div class="relative inline-flex items-center">
+                        <input type="checkbox" value="${col.id}" ${visibleColumns.includes(col.id) ? 'checked' : ''} 
+                            onchange="updateColumnVisibility()" class="peer appearance-none w-10 h-5 rounded-full bg-slate-900 border border-white/10 checked:bg-blue-600 transition-all cursor-pointer" />
+                        <span class="absolute left-1 w-3 h-3 rounded-full bg-slate-600 peer-checked:bg-white peer-checked:translate-x-5 transition-all pointer-events-none shadow-xl"></span>
+                    </div>
+                </label>
+            `).join('');
+        }
+
+        function toggleColMenu(e) {
+            e.stopPropagation();
+            const el = document.getElementById("colMenu");
+            el.classList.toggle("hidden");
+        }
+
+        function updateColumnVisibility() {
+            const checks = document.querySelectorAll("#columnCheckboxes input:checked");
+            visibleColumns = Array.from(checks).map(c => c.value);
+            if (currentIssues.length > 0) renderTable(currentIssues);
+        }
+
+        window.addEventListener('click', (e) => {
+            if (!e.target.closest('#colMenu') && !e.target.closest('#colToggleBtn')) {
+                document.getElementById("colMenu").classList.add("hidden");
+            }
+        });
+
+        function initAssigneeSelect() {
+            $('#assigneeSelect').select2({
+                placeholder: "Add assignees (type custom if needed)...",
+                allowClear: true,
+                tags: true,
+                ajax: {
+                    url: '/api/assignees',
+                    type: 'GET',
+                    dataType: 'json',
+                    delay: 250,
+                    transport: function (params, success, failure) {
+                        var $request = $.ajax(params);
+                        $request.then(success);
+                        $request.fail(failure);
+                        return $request;
+                    },
+                    beforeSend: function(xhr) {
+                        const headers = getApiHeaders();
+                        Object.keys(headers).forEach(key => {
+                            xhr.setRequestHeader(key, headers[key]);
+                        });
+                    },
+                    processResults: function (data) {
+                        return { results: data.map(u => ({ id: u.name, text: u.name })) };
+                    },
+                    cache: true
+                }
+            });
+        }
+
+        function initPrioritySelect() {
+            $('#prioritySelect').select2({
+                placeholder: "Add priorities...",
+                allowClear: true
+            });
+        }
+
+        function initStatusSelect() {
+            $('#statusSelect').select2({
+                placeholder: "Add statuses (type custom if needed)...",
+                allowClear: true,
+                tags: true
+            });
+        }
+
+        async function runQuery() {
+            const tableEl = document.getElementById("tableWrapper");
+            let placeholder = document.getElementById("placeholder");
+
+            if (!placeholder) {
+                tableEl.innerHTML = `
+                    <div id="placeholder" class="flex flex-col items-center justify-center absolute inset-0 text-gray-600 gap-4 opacity-40">
+                        <p class="text-xs uppercase font-black tracking-[0.3em]">Configure filters and apply query</p>
+                    </div>
+                `;
+            }
+
+            const payload = {
+                assignees: $('#assigneeSelect').val(),
+                priorities: $('#prioritySelect').val(),
+                statuses: $('#statusSelect').val(),
+                startDate: document.getElementById('startDate').value,
+                endDate: document.getElementById('endDate').value,
+                platform: document.getElementById('platformSelect').value
+            };
+
+            // Loading state
+            if (gridInstance) {
+                gridInstance.updateConfig({
+                    data: []
+                }).forceRender();
+            }
+
+            try {
+                const res = await fetch("/api/query_builder", {
+                    method: "POST",
+                    headers: getApiHeaders(),
+                    body: JSON.stringify(payload)
+                });
+
+                if (!res.ok) throw new Error("Query failed");
+
+                const data = await res.json();
+                currentIssues = data.issues;
+                renderTable(currentIssues);
+
+            } catch (e) {
+                console.error(e);
+                alert("Error running query");
+            }
+        }
+
+        function toggleSelectAll(e) {
+            const checked = e.target.checked;
+            if (checked) {
+                lastRawData.forEach(i => selectedKeys.add(i.key));
+            } else {
+                selectedKeys.clear();
+            }
+
+            // Visual feedback for current page
+            const checkboxes = document.querySelectorAll('.row-checkbox');
+            checkboxes.forEach(cb => cb.checked = checked);
+
+            updateExportBtnState();
+        }
+
+        function toggleRowSelection(key, checked) {
+            if (checked) {
+                selectedKeys.add(key);
+            } else {
+                selectedKeys.delete(key);
+                const headerCb = document.getElementById('header-select-all');
+                if (headerCb) headerCb.checked = false;
+            }
+            updateExportBtnState();
+        }
+
+        function updateExportBtnState() {
+            const btn = document.getElementById("exportBtn");
+            if (btn) {
+                btn.disabled = selectedKeys.size === 0;
+            }
+        }
+
+        function renderTable(tickets) {
+            const tableEl = document.getElementById("tableWrapper");
+            tableEl.innerHTML = "";
+            if (gridInstance) gridInstance.destroy();
+
+            if (tickets.length === 0) {
+                tableEl.innerHTML = `<div class="flex items-center justify-center absolute inset-0 text-gray-600 opacity-40 uppercase font-black tracking-widest text-xs">No results found</div>`;
+                updateExportBtnState();
+                return;
+            }
+
+            const activeCols = allColumns.filter(c => visibleColumns.includes(c.id));
+
+            gridInstance = new gridjs.Grid({
+                columns: [
+                    {
+                        name: gridjs.html('<input type="checkbox" id="header-select-all" class="header-checkbox" onclick="toggleSelectAll(event)">'),
+                        width: '50px',
+                        sort: false,
+                        formatter: (cell) => gridjs.html(`<input type="checkbox" class="row-checkbox" data-key="${cell}" ${selectedKeys.has(cell) ? 'checked' : ''} onclick="toggleRowSelection('${cell}', this.checked)">`)
+                    },
+                    ...activeCols.map(c => ({
+                        id: c.id,
+                        name: c.name,
+                        width: c.width,
+                        formatter: c.formatter
+                    }))
+                ],
+                data: tickets.map(t => [t.key, ...activeCols.map(c => t[c.id])]),
+                sort: true,
+                pagination: { limit: 10 },
+                style: {
+                    table: { background: 'transparent' }
+                }
+            }).render(tableEl);
+        }
+
+        function exportSelected() {
+            if (selectedKeys.size === 0) return;
+
+            const exportData = lastRawData
+                .filter(i => selectedKeys.has(i.key))
+                .map(i => ({
+                    Key: i.key,
+                    Type: i.type,
+                    Summary: i.summary,
+                    Customer: i.customer,
+                    Status: i.status,
+                    Assignee: i.assignee,
+                    Priority: i.priority,
+                    Updated: i.updated ? new Date(i.updated).toLocaleDateString() : 'N/A',
+                    Created: new Date(i.created).toLocaleDateString()
+                }));
+
+            const ws = XLSX.utils.json_to_sheet(exportData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "SelectedIssues");
+
+            const fileName = `Jira_Query_Export_${new Date().toISOString().slice(0, 10)}.xlsx`;
+            XLSX.writeFile(wb, fileName);
+        }
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>My Tasks - Jira Analytics</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        .glass {
+            background: rgba(31, 41, 55, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+    </style>
+    <link rel="stylesheet" href="/static/theme.css">
+    <script src="/static/theme.js"></script></head>
+
+<body class="bg-gray-900 min-h-screen text-white">
+
+    <!-- Navigation -->
+    {% include 'navbar.html' %}
+
+    <main class="pt-24 pb-12 px-6 max-w-4xl mx-auto">
+        <div class="flex justify-between items-center mb-10">
+            <h1 class="text-3xl font-bold">My Tasks</h1>
+            <div class="flex items-center gap-2 bg-gray-800 p-2 rounded-lg border border-gray-700">
+                <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z">
+                    </path>
+                </svg>
+                <input type="date" id="dateFilter" onchange="loadTodos()"
+                    class="bg-transparent border-none outline-none text-sm text-white cursor-pointer" />
+            </div>
+        </div>
+
+        <!-- Task List Container -->
+        <div id="taskList" class="space-y-4 mb-8">
+            <!-- Tasks will be injected here -->
+        </div>
+
+        <!-- Add Task Form (Initially Hidden) -->
+        <div id="addTaskForm"
+            class="hidden glass p-6 rounded-2xl mb-8 border border-white/10 shadow-xl transition-all scale-95 opacity-0">
+            <div class="flex justify-between items-start mb-4">
+                <input type="hidden" id="todoId" value="" />
+                <input type="text" id="taskName" placeholder="Task Name"
+                    class="w-full bg-transparent text-xl font-semibold outline-none placeholder-gray-600" />
+                <button onclick="hideAddTask()" class="text-gray-500 hover:text-white transition">&times;</button>
+            </div>
+            <textarea id="taskDescription" placeholder="Description" rows="2"
+                class="w-full bg-transparent text-sm text-gray-400 outline-none placeholder-gray-600 mb-6 resize-none"></textarea>
+
+            <div class="flex items-center justify-between border-t border-white/5 pt-6">
+                <div class="flex items-center gap-4">
+                    <select id="taskPriority"
+                        class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-gray-300 outline-none">
+                        <option value="Low">Low Priority</option>
+                        <option value="Medium">Medium Priority</option>
+                        <option value="High">High Priority</option>
+                    </select>
+                    <input type="datetime-local" id="taskDueDate"
+                        class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-gray-300 outline-none" />
+                </div>
+                <button id="saveButton" onclick="saveTodo()"
+                    class="bg-green-700 hover:bg-green-600 text-white font-bold px-6 py-2 rounded-lg transition text-sm">Save</button>
+            </div>
+        </div>
+
+        <!-- Add Task Button -->
+        <button onclick="showAddTask()"
+            class="flex items-center gap-2 text-gray-400 hover:text-white transition font-semibold group">
+            <span class="text-xl group-hover:scale-125 transition-transform">+</span>
+            Add Task
+        </button>
+    </main>
+
+    <script>
+        // Set default date to today
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('dateFilter').value = today;
+
+        // Initialize
+        loadTodos();
+
+        async function loadTodos() {
+            const date = document.getElementById('dateFilter').value;
+            const taskList = document.getElementById('taskList');
+            taskList.innerHTML = '<div class="text-center py-10 text-gray-500">Loading tasks...</div>';
+
+            try {
+                const projectKey = (localStorage.getItem("project_key") || "").trim().toUpperCase();
+                const res = await fetch(`/api/todos?date=${date}`, {
+                    headers: { "X-Project-Key": projectKey }
+                });
+                const todos = await res.json();
+                renderTodos(todos);
+            } catch (e) {
+                taskList.innerHTML = '<div class="text-center py-10 text-red-500">Error loading tasks.</div>';
+            }
+        }
+
+        function renderTodos(todos) {
+            const taskList = document.getElementById('taskList');
+            if (todos.length === 0) {
+                taskList.innerHTML = '<div class="text-center py-20 text-gray-600 bg-gray-800/20 rounded-2xl border border-dashed border-gray-700">No tasks for this day. Enjoy your time!</div>';
+                return;
+            }
+
+            taskList.innerHTML = todos.map(t => `
+                <div class="group flex items-center justify-between p-4 bg-gray-800/40 hover:bg-gray-800/60 transition rounded-xl border border-white/5">
+                    <div class="flex items-center gap-4 flex-1">
+                        <button onclick="toggleStatus(${t.id}, '${t.status}')" class="w-6 h-6 rounded-full border-2 ${t.status === 'Done' ? 'bg-green-500 border-green-500' : 'border-gray-600 hover:border-white'} transition-all flex items-center justify-center">
+                            ${t.status === 'Done' ? '✓' : ''}
+                        </button>
+                        <div class="flex-1">
+                            <h3 class="font-medium ${t.status === 'Done' ? 'line-through text-gray-500' : 'text-gray-100'}">${t.title}</h3>
+                            <p class="text-xs text-gray-500">${t.description || ''}</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <span class="text-[10px] uppercase font-bold px-2 py-1 rounded ${getPriorityColor(t.priority)}">${t.priority}</span>
+                        <div class="flex items-center gap-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onclick='editTodo(${JSON.stringify(t).replace(/'/g, "&apos;")})' class="text-gray-500 hover:text-blue-400 transition" title="Edit">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-5M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+                            </button>
+                            <button onclick="deleteTodo(${t.id})" class="text-gray-500 hover:text-red-500 transition" title="Delete">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function getPriorityColor(p) {
+            if (p === 'High') return 'bg-red-900/30 text-red-400';
+            if (p === 'Medium') return 'bg-yellow-900/30 text-yellow-400';
+            return 'bg-gray-700 text-gray-300';
+        }
+
+        function showAddTask() {
+            const form = document.getElementById('addTaskForm');
+            const saveBtn = document.getElementById('saveButton');
+
+            // Default to "Save" and empty fields
+            document.getElementById('todoId').value = "";
+            document.getElementById('taskName').value = "";
+            document.getElementById('taskDescription').value = "";
+            document.getElementById('taskPriority').value = "Low";
+            saveBtn.innerText = "Save";
+
+            form.classList.remove('hidden');
+            setTimeout(() => {
+                form.classList.remove('scale-95', 'opacity-0');
+            }, 10);
+
+            // Set default time to now + 1 hour rounded
+            const now = new Date();
+            now.setHours(now.getHours() + 1);
+            now.setMinutes(0);
+            document.getElementById('taskDueDate').value = now.toISOString().slice(0, 16);
+            document.getElementById('taskName').focus();
+        }
+
+        function editTodo(todo) {
+            const form = document.getElementById('addTaskForm');
+            const saveBtn = document.getElementById('saveButton');
+
+            document.getElementById('todoId').value = todo.id;
+            document.getElementById('taskName').value = todo.title;
+            document.getElementById('taskDescription').value = todo.description || "";
+            document.getElementById('taskPriority').value = todo.priority;
+
+            // Map simple date back to datetime-local format (adding 09:00 default)
+            document.getElementById('taskDueDate').value = `${todo.due_date}T09:00`;
+
+            saveBtn.innerText = "Update";
+
+            form.classList.remove('hidden');
+            setTimeout(() => {
+                form.classList.remove('scale-95', 'opacity-0');
+            }, 10);
+            document.getElementById('taskName').focus();
+        }
+
+        function hideAddTask() {
+            const form = document.getElementById('addTaskForm');
+            form.classList.add('scale-95', 'opacity-0');
+            setTimeout(() => {
+                form.classList.add('hidden');
+            }, 200);
+        }
+
+        async function saveTodo() {
+            const id = document.getElementById('todoId').value;
+            const title = document.getElementById('taskName').value;
+            const description = document.getElementById('taskDescription').value;
+            const priority = document.getElementById('taskPriority').value;
+            const due_date_time = document.getElementById('taskDueDate').value;
+            const due_date = due_date_time.split('T')[0];
+
+            if (!title || !due_date) {
+                alert("Please enter a title and date.");
+                return;
+            }
+
+            const method = id ? "PUT" : "POST";
+            const url = id ? `/api/todos/${id}` : "/api/todos";
+            const projectKey = (localStorage.getItem("project_key") || "").trim().toUpperCase();
+
+            const res = await fetch(url, {
+                method: method,
+                headers: { 
+                    "Content-Type": "application/json",
+                    "X-Project-Key": projectKey
+                },
+                body: JSON.stringify({ title, description, priority, due_date })
+            });
+
+            if (res.ok) {
+                hideAddTask();
+                loadTodos();
+            }
+        }
+
+        async function toggleStatus(id, currentStatus) {
+            const newStatus = currentStatus === 'Pending' ? 'Done' : 'Pending';
+            const res = await fetch(`/api/todos/${id}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ status: newStatus })
+            });
+            if (res.ok) loadTodos();
+        }
+
+        async function deleteTodo(id) {
+            if (!confirm("Delete this task?")) return;
+            const projectKey = (localStorage.getItem("project_key") || "").trim().toUpperCase();
+            const res = await fetch(`/api/todos/${id}`, { 
+                method: "DELETE",
+                headers: { "X-Project-Key": projectKey }
+            });
+            if (res.ok) loadTodos();
+        }
+    </script>
+</body>
+
+</html>

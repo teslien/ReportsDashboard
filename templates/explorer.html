@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Ticket Explorer - Jira Analytics</title>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/gridjs/dist/theme/mermaid.min.css" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/gridjs/dist/gridjs.umd.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #0b0f1a;
+            color: white;
+            overflow-x: hidden;
+        }
+
+        .glass {
+            background: rgba(30, 41, 59, 0.4);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .glass-card {
+            background: rgba(30, 41, 59, 0.6);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.7);
+        }
+
+        /* Fix stacking context for dropdowns */
+        .dropdown-parent {
+            position: relative;
+            z-index: 1000;
+        }
+
+        /* Select2 Custom Dark */
+        .select2-container--default .select2-selection--single {
+            background-color: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 0.75rem;
+            height: 44px;
+            color: white;
+            display: flex;
+            align-items: center;
+            transition: all 0.2s;
+        }
+
+        .select2-container--default .select2-selection--single:hover {
+            border-color: rgba(255, 255, 255, 0.2);
+            background-color: rgba(15, 23, 42, 0.8);
+        }
+
+        .select2-container--default .select2-selection--single .select2-selection__rendered {
+            color: #e2e8f0;
+            padding-left: 12px;
+            font-size: 0.875rem;
+        }
+
+        .select2-dropdown {
+            background-color: #1e293b;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 0.75rem;
+            overflow: hidden;
+            color: #e2e8f0;
+        }
+
+        .select2-results__option--highlighted {
+            background-color: #3b82f6 !important;
+        }
+
+        .select2-container--default .select2-selection--single .select2-selection__arrow {
+            height: 42px;
+            right: 8px;
+        }
+
+        /* Grid.js Custom Theme - Aggressive Dark Mode */
+        .gridjs-container,
+        .gridjs-wrapper,
+        .gridjs-table,
+        .gridjs-tbody,
+        .gridjs-tr,
+        .gridjs-tr:nth-child(even),
+        .gridjs-tr:nth-child(odd),
+        .gridjs-td {
+            background-color: transparent !important;
+            background: transparent !important;
+            border: none !important;
+        }
+
+        .gridjs-tr {
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+            transition: all 0.2s;
+        }
+
+        .gridjs-tr:hover {
+            background-color: rgba(255, 255, 255, 0.04) !important;
+        }
+
+        .gridjs-td {
+            color: #f1f5f9 !important;
+            padding: 18px 24px !important;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
+        .gridjs-thead {
+            background: rgba(15, 23, 42, 0.4) !important;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.05) !important;
+        }
+
+        .gridjs-th {
+            background: transparent !important;
+            color: #64748b !important;
+            font-size: 0.7rem !important;
+            text-transform: uppercase !important;
+            border: none !important;
+            font-weight: 700 !important;
+            letter-spacing: 0.08em;
+            padding: 16px 20px !important;
+        }
+
+        .gridjs-footer {
+            background: transparent !important;
+            border-top: 1px solid rgba(255, 255, 255, 0.05) !important;
+            color: #64748b !important;
+            padding: 16px !important;
+        }
+
+        .gridjs-pagination .gridjs-pages button {
+            background: rgba(15, 23, 42, 0.6) !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            color: #94a3b8 !important;
+            border-radius: 0.5rem !important;
+            margin: 0 4px;
+            padding: 6px 14px !important;
+        }
+
+        .gridjs-pagination .gridjs-pages button:hover:not(:disabled) {
+            background: rgba(15, 23, 42, 0.9) !important;
+            color: white !important;
+            border-color: #3b82f6 !important;
+        }
+
+        .gridjs-pagination .gridjs-pages button.gridjs-currentPage {
+            background: #3b82f6 !important;
+            color: white !important;
+            border-color: #3b82f6 !important;
+            box-shadow: 0 4px 12px -2px rgba(59, 130, 246, 0.5);
+        }
+
+        .gridjs-search-input {
+            background: rgba(15, 23, 42, 0.6) !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            color: white !important;
+            border-radius: 0.75rem !important;
+            padding: 10px 16px !important;
+            font-size: 0.875rem !important;
+            width: 300px !important;
+        }
+
+        .gridjs-search-input:focus {
+            border-color: #3b82f6 !important;
+            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.2);
+            outline: none;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        /* Animations */
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .animate-fade-in {
+            animation: fadeIn 0.4s ease-out forwards;
+        }
+    </style>
+    <link rel="stylesheet" href="/static/theme.css">
+    <script src="/static/theme.js"></script>
+    <script src="/static/app.js"></script>
+</head>
+
+<body class="min-h-screen">
+    <!-- Navigation -->
+    {% include 'navbar.html' %}
+
+    <main class="pt-28 pb-12 px-8 max-w-[1800px] mx-auto">
+        <!-- Header -->
+        <div class="flex flex-col lg:flex-row justify-between items-start lg:items-end mb-10 gap-6">
+            <div class="animate-fade-in" style="animation-delay: 0s">
+                <h1 class="text-4xl font-extrabold tracking-tight mb-2">Ticket Explorer</h1>
+                <p class="text-gray-500 font-medium">Investigate, filter, and export Jira tickets in real-time.</p>
+            </div>
+
+            <div class="flex flex-wrap gap-3 animate-fade-in dropdown-parent" style="animation-delay: 0.1s">
+                <!-- Column Customizer -->
+                <div class="relative group">
+                    <button id="colToggleBtn" onclick="toggleColMenu(event)"
+                        class="glass h-[44px] px-5 rounded-xl text-sm font-bold flex items-center gap-3 hover:bg-white/5 transition-all active:scale-95">
+                        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                                d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4">
+                            </path>
+                        </svg>
+                        <span>Display Columns</span>
+                    </button>
+                    <div id="colMenu"
+                        class="hidden absolute right-0 mt-3 w-64 rounded-2xl glass-card shadow-2xl z-[999] p-6 border border-white/20 ring-1 ring-black backdrop-blur-3xl">
+                        <h3 class="text-[10px] font-black text-gray-400 uppercase mb-4 tracking-[0.2em]">Attributes</h3>
+                        <div class="space-y-4" id="columnCheckboxes">
+                            <!-- Checkboxes will be injected here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Export -->
+                <div class="relative group">
+                    <button id="exportToggleBtn" onclick="toggleExportMenu(event)"
+                        class="glass h-[44px] px-5 rounded-xl text-sm font-bold flex items-center gap-3 hover:bg-blue-500/10 transition-all border border-blue-500/10 active:scale-95 group-hover:border-blue-500/30">
+                        <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                                d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                        </svg>
+                        <span class="text-blue-400">Export Results</span>
+                    </button>
+                    <div id="exportMenu"
+                        class="hidden absolute right-0 mt-3 w-56 rounded-2xl glass-card shadow-2xl z-[999] overflow-hidden border border-white/20 ring-1 ring-black backdrop-blur-3xl">
+                        <button onclick="exportData('xlsx')"
+                            class="w-full text-left px-5 py-4 text-sm font-bold hover:bg-white/5 transition flex items-center gap-4">
+                            <span
+                                class="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]"></span>
+                            Excel Spreadsheet
+                        </button>
+                        <button onclick="exportData('csv')"
+                            class="w-full text-left px-5 py-4 text-sm font-bold hover:bg-white/5 transition border-t border-white/5 flex items-center gap-4">
+                            <span
+                                class="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]"></span>
+                            CSV Data File
+                        </button>
+                    </div>
+                </div>
+
+                <button onclick="fetchExplorerData()"
+                    class="bg-indigo-600 hover:bg-indigo-500 text-white px-10 h-[44px] rounded-xl text-sm font-extrabold shadow-2xl shadow-indigo-500/20 transition-all hover:scale-[1.03] active:scale-95 flex items-center gap-3">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                    </svg>
+                    Apply Filters
+                </button>
+
+                <button onclick="fetchStaleTickets()"
+                    class="glass hover:bg-red-500/10 text-red-400 px-6 h-[44px] rounded-xl text-sm font-extrabold transition-all hidden hover:scale-[1.03] active:scale-95 flex items-center gap-3 border border-red-500/10 hover:border-red-500/30">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    Identify Stale Tickets
+                </button>
+
+                <button onclick="fetchCriticalTickets()"
+                    class="bg-red-600 hover:bg-red-500 text-white px-6 h-[44px] rounded-xl text-sm font-extrabold shadow-2xl shadow-red-500/20 transition-all hover:scale-[1.03] active:scale-95 flex items-center gap-3">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z">
+                        </path>
+                    </svg>
+                    Display Critical Open
+                </button>
+            </div>
+        </div>
+
+        <!-- Query Editor -->
+        <div class="glass-card rounded-3xl p-6 border border-white/10 shadow-2xl mb-8 animate-fade-in"
+            style="animation-delay: 0.1s">
+            <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-lg bg-indigo-500/20 flex items-center justify-center text-indigo-400">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path>
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-bold text-white">Advanced JQL Editor</h3>
+                        <p class="text-[10px] text-gray-500 font-medium uppercase tracking-wider">Execute deep-layered
+                            queries across the nexus</p>
+                    </div>
+                </div>
+                <button onclick="runCustomJql()"
+                    class="bg-indigo-600 hover:bg-indigo-500 text-white px-6 h-[38px] rounded-lg text-xs font-black transition-all hover:scale-[1.02] active:scale-95 flex items-center gap-2 shadow-lg shadow-indigo-500/20">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3"
+                            d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                    </svg>
+                    SEND REQUEST
+                </button>
+            </div>
+            <textarea id="jqlEditor"
+                class="w-full h-24 bg-slate-900/80 border border-white/5 rounded-2xl p-4 text-sm font-mono text-indigo-300 placeholder-indigo-500/30 outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all resize-none"
+                placeholder="project = TIM AND status NOT IN ('Done') ORDER BY created DESC"></textarea>
+        </div>
+
+        <!-- Filters Control Center -->
+        <div class="glass-card rounded-[2.5rem] p-8 border border-white/10 shadow-3xl mb-12 relative group animate-fade-in"
+            style="animation-delay: 0.1s">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-8">
+                <!-- Assignee -->
+                <div class="space-y-3">
+                    <div class="flex items-center gap-2 px-1">
+                        <svg class="w-3 h-3 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"
+                                clip-rule="evenodd"></path>
+                        </svg>
+                        <label class="text-[10px] font-black text-gray-500 uppercase tracking-widest">Assignee</label>
+                    </div>
+                    <select id="assigneeSelect" class="w-full"></select>
+                </div>
+
+                <!-- Priority -->
+                <div class="space-y-3">
+                    <div class="flex items-center gap-2 px-1">
+                        <svg class="w-3 h-3 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd"
+                                d="M3 6a3 3 0 013-3h10a1 1 0 01.8 1.6L14.25 8l2.55 3.4A1 1 0 0116 13H6a1 1 0 00-1 1v3a1 1 0 11-2 0V6z"
+                                clip-rule="evenodd"></path>
+                        </svg>
+                        <label class="text-[10px] font-black text-gray-500 uppercase tracking-widest">Priority</label>
+                    </div>
+                    <select id="prioritySelect"
+                        class="w-full bg-slate-900/60 border border-white/10 rounded-xl h-[44px] px-4 text-sm font-medium outline-none focus:ring-2 focus:ring-indigo-500/40 transition-all hover:bg-slate-900/80 cursor-pointer">
+                        <option value="All">All Priorities</option>
+                        <option value="Highest">Highest</option>
+                        <option value="High">High</option>
+                        <option value="Medium">Medium</option>
+                        <option value="Low">Low</option>
+                        <option value="Lowest">Lowest</option>
+                    </select>
+                </div>
+
+                <!-- Timeline -->
+                <div class="space-y-3 lg:col-span-2">
+                    <div class="flex items-center gap-2 px-1">
+                        <svg class="w-3 h-3 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd"
+                                d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z"
+                                clip-rule="evenodd"></path>
+                        </svg>
+                        <label class="text-[10px] font-black text-gray-500 uppercase tracking-widest">Date Range
+                            Filter</label>
+                    </div>
+                    <div class="flex flex-col sm:flex-row gap-3">
+                        <select id="timelineSelect" onchange="toggleSpecificDate()"
+                            class="sm:w-1/3 bg-slate-900/60 border border-white/10 rounded-xl h-[44px] px-4 text-sm font-medium outline-none focus:ring-2 focus:ring-indigo-500/40 transition-all hover:bg-slate-900/80 cursor-pointer">
+                            <option value="all">All Time</option>
+                            <option value="today">Created Today</option>
+                            <option value="week">This Week</option>
+                            <option value="2weeks">Last 2 Weeks</option>
+                            <option value="month">This Month</option>
+                            <option value="year">This Year</option>
+                            <option value="range">Date Range</option>
+                        </select>
+                        <div id="dateRangeInputs" class="hidden flex-1 flex gap-3">
+                            <input type="date" id="startDate"
+                                class="flex-1 bg-slate-900/60 border border-white/10 rounded-xl h-[44px] px-4 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500/40 transition hover:bg-slate-900/80" />
+                            <input type="date" id="endDate"
+                                class="flex-1 bg-slate-900/60 border border-white/10 rounded-xl h-[44px] px-4 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500/40 transition hover:bg-slate-900/80" />
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Customer -->
+                <div class="space-y-3">
+                    <div class="flex items-center gap-2 px-1">
+                        <svg class="w-3 h-3 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd"
+                                d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-6-3a2 2 0 11-4 0 2 2 0 014 0zm-2 4a5 5 0 00-4.546 2.916A5.98 5.0 0 0110 16a5.979 5.979 0 014.546-2.916A5 5 0 0010 11z"
+                                clip-rule="evenodd"></path>
+                        </svg>
+                        <label class="text-[10px] font-black text-gray-500 uppercase tracking-widest">Customer</label>
+                    </div>
+                    <select id="customerSelect" class="w-full"></select>
+                </div>
+
+                <!-- Category Tags -->
+                <div class="space-y-3">
+                    <div class="flex items-center gap-2 px-1">
+                        <svg class="w-3 h-3 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd"
+                                d="M17.707 9.293a1 1 0 010 1.414l-7 7a1 1 0 01-1.414 0l-7-7A.997.997 0 012 10V5a3 3 0 013-3h5c.266 0 .52.105.707.293l7 7zM5 6a1 1 0 100-2 1 1 0 000 2z"
+                                clip-rule="evenodd"></path>
+                        </svg>
+                        <label class="text-[10px] font-black text-gray-500 uppercase tracking-widest">Categories</label>
+                    </div>
+                    <div class="flex items-center gap-6 h-[44px] px-2">
+                        <label class="flex items-center gap-4 cursor-pointer group">
+                            <div class="relative flex items-center justify-center">
+                                <input type="checkbox" id="productionCheck"
+                                    class="peer appearance-none w-5 h-5 rounded-md border border-white/10 bg-slate-900/60 checked:bg-blue-600 checked:border-blue-400 transition-all cursor-pointer" />
+                                <svg class="absolute w-3 h-3 text-white opacity-0 peer-checked:opacity-100 transition-opacity pointer-events-none"
+                                    fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3"
+                                        d="M5 13l4 4L19 7"></path>
+                                </svg>
+                            </div>
+                            <span
+                                class="text-[10px] font-black text-gray-500 group-hover:text-blue-400 transition tracking-tighter uppercase whitespace-nowrap">Production</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Content Area -->
+        <div id="tableWrapper"
+            class="glass-card overflow-hidden border border-white/5 shadow-2xl relative min-h-[600px] animate-fade-in"
+            style="animation-delay: 0.3s">
+            <div id="tablePlaceholder"
+                class="flex flex-col items-center justify-center absolute inset-0 text-gray-600 gap-6 opacity-40">
+                <div class="relative">
+                    <svg class="w-16 h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="0.5"
+                            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                    </svg>
+                    <div class="absolute -top-1 -right-1 w-4 h-4 bg-indigo-500 rounded-full animate-ping opacity-75">
+                    </div>
+                </div>
+                <p class="text-xs uppercase font-black tracking-[0.3em]">Query Dashboard Ready</p>
+            </div>
+        </div>
+    </main>
+
+    <footer class="py-12 text-center text-gray-600 text-[10px] font-black uppercase tracking-[0.4em]">
+        LumberFi Core Platform &copy; 2026
+    </footer>
+
+    <script>
+        let gridInstance = null;
+        let currentIssues = [];
+
+        const allColumns = [
+            { id: "type", name: "Type", width: "90px" },
+            { id: "key", name: "Ticket Key", width: "130px", formatter: (cell) => gridjs.html(`<a href="https://lumberfi.atlassian.net/browse/${cell}" target="_blank" class="bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 px-3 py-1.5 rounded-lg font-mono font-black text-xs transition border border-blue-500/10 hover:border-blue-500/30 inline-block">${cell}</a>`) },
+            { id: "summary", name: "Headline", width: "420px", formatter: (cell) => gridjs.html(`<div class="line-clamp-2 font-semibold text-slate-200 leading-relaxed">${cell}</div>`) },
+            { id: "customer", name: "Client", width: "160px", formatter: (cell) => gridjs.html(`<span class="px-2.5 py-1 rounded bg-slate-400/10 text-slate-400 text-[10px] font-black uppercase border border-white/5">${cell || "UNASSIGNED"}</span>`) },
+            {
+                id: "status", name: "Dev Status", width: "160px", formatter: (cell) => {
+                    let color = "bg-gray-500/10 text-gray-400 border-gray-500/20";
+                    const greenStatuses = ["DEPLOYED", "DONE", "NOT A BUG", "READY FOR STAGING", "RESOLVED", "STAGED", "UNABLE TO REPRODUCE", "READY FOR QA", "READY FOR INTERNAL DEMO"];
+                    if (cell && greenStatuses.includes(cell.toUpperCase())) color = "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
+                    if (cell === "In Progress" || cell === "In Review") color = "bg-indigo-500/10 text-indigo-400 border-indigo-500/20";
+                    if (["Rejected", "Blocked", "Cancelled"].includes(cell)) color = "bg-red-500/10 text-red-400 border-red-500/20";
+                    return gridjs.html(`<span class="px-3 py-1.5 rounded-lg text-[9px] font-black uppercase border ${color}">${cell}</span>`);
+                }
+            },
+            { id: "assignee", name: "Owner", width: "180px", formatter: (cell) => gridjs.html(`<div class="flex items-center gap-2"><div class="w-2 h-2 rounded-full bg-indigo-500/30 border border-indigo-500/50"></div><span class="font-medium truncate">${cell}</span></div>`) },
+            {
+                id: "priority", name: "Priority", width: "130px", formatter: (cell) => {
+                    let color = "text-slate-500";
+                    if (cell === "Highest" || cell === "High") color = "text-red-400 font-black";
+                    return gridjs.html(`<span class="${color} flex items-center gap-2 text-xs uppercase tracking-tight">${cell}</span>`);
+                }
+            },
+            { id: "created", name: "Created", width: "160px", formatter: (cell) => gridjs.html(`<span class="text-[11px] font-mono text-slate-500">${new Date(cell).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>`) },
+            { id: "updated", name: "Updated", width: "160px", formatter: (cell) => gridjs.html(`<span class="text-[11px] font-mono text-slate-500">${new Date(cell).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>`) }
+        ];
+
+        let visibleColumns = ["key", "summary", "customer", "status", "assignee", "priority"];
+
+        $(document).ready(function () {
+            initAssigneeSearch();
+            initCustomerSearch();
+            initColumnMenu();
+            fetchExplorerData();
+        });
+
+        function initAssigneeSearch() {
+            $('#assigneeSelect').select2({
+                placeholder: "Search team member...",
+                allowClear: true,
+                ajax: {
+                    url: '/api/assignees',
+                    type: 'GET',
+                    dataType: 'json',
+                    delay: 250,
+                    transport: function (params, success, failure) {
+                        var $request = $.ajax(params);
+                        $request.then(success);
+                        $request.fail(failure);
+                        return $request;
+                    },
+                    beforeSend: function(xhr) {
+                        const projectKey = (localStorage.getItem("project_key") || "").trim().toUpperCase();
+                        if (projectKey) {
+                            xhr.setRequestHeader("X-Project-Key", projectKey);
+                        }
+                    },
+                    processResults: function (data) {
+                        return { results: data.map(u => ({ id: u.id, text: u.name })) };
+                    },
+                    cache: true
+                },
+                minimumInputLength: 0,
+                theme: 'default'
+            });
+        }
+
+        function initCustomerSearch() {
+            $('#customerSelect').select2({
+                placeholder: "Filter by customer...",
+                allowClear: true,
+                ajax: {
+                    url: '/api/customers',
+                    type: 'GET',
+                    dataType: 'json',
+                    delay: 250,
+                    transport: function (params, success, failure) {
+                        var $request = $.ajax(params);
+                        $request.then(success);
+                        $request.fail(failure);
+                        return $request;
+                    },
+                    beforeSend: function(xhr) {
+                        const projectKey = (localStorage.getItem("project_key") || "").trim().toUpperCase();
+                        if (projectKey) {
+                            xhr.setRequestHeader("X-Project-Key", projectKey);
+                        }
+                    },
+                    processResults: function (data) {
+                        return { results: data.map(c => ({ id: c.id, text: c.name })) };
+                    },
+                    cache: true
+                },
+                minimumInputLength: 0,
+                theme: 'default'
+            });
+        }
+
+        function toggleSpecificDate() {
+            const val = document.getElementById("timelineSelect").value;
+            document.getElementById("dateRangeInputs").classList.toggle("hidden", val !== "range");
+        }
+
+        function toggleColMenu(e) {
+            e.stopPropagation();
+            const el = document.getElementById("colMenu");
+            const isOpen = !el.classList.contains("hidden");
+            document.querySelectorAll("#colMenu, #exportMenu").forEach(m => m.classList.add("hidden"));
+            if (!isOpen) el.classList.remove("hidden");
+        }
+
+        function toggleExportMenu(e) {
+            e.stopPropagation();
+            const el = document.getElementById("exportMenu");
+            const isOpen = !el.classList.contains("hidden");
+            document.querySelectorAll("#colMenu, #exportMenu").forEach(m => m.classList.add("hidden"));
+            if (!isOpen) el.classList.remove("hidden");
+        }
+
+        function initColumnMenu() {
+            const container = document.getElementById("columnCheckboxes");
+            container.innerHTML = allColumns.map(col => `
+                <label class="flex items-center justify-between cursor-pointer group">
+                    <span class="text-[11px] font-bold text-gray-500 group-hover:text-white transition uppercase tracking-tighter">${col.name}</span>
+                    <div class="relative inline-flex items-center">
+                        <input type="checkbox" value="${col.id}" ${visibleColumns.includes(col.id) ? 'checked' : ''} 
+                            onchange="updateColumnVisibility()" class="peer appearance-none w-10 h-5 rounded-full bg-slate-900 border border-white/10 checked:bg-indigo-600 transition-all cursor-pointer" />
+                        <span class="absolute left-1 w-3 h-3 rounded-full bg-slate-600 peer-checked:bg-white peer-checked:translate-x-5 transition-all pointer-events-none shadow-xl"></span>
+                    </div>
+                </label>
+            `).join('');
+        }
+
+        function updateColumnVisibility() {
+            const checks = document.querySelectorAll("#columnCheckboxes input:checked");
+            visibleColumns = Array.from(checks).map(c => c.value);
+            renderTable(currentIssues);
+        }
+
+        async function fetchExplorerData(queryType = "normal") {
+            const tableWrapper = document.getElementById("tableWrapper");
+            const placeholder = document.getElementById("tablePlaceholder");
+
+            let statusText = "Querying Atlassian Nexus...";
+            if (queryType === "stale") statusText = "Detecting Inactive Segments...";
+            if (queryType === "critical") statusText = "Scanning for Critical Vulnerabilities...";
+
+            if (placeholder) placeholder.innerHTML = `
+                <div class="flex flex-col items-center gap-4">
+                    <div class="w-12 h-12 border-4 border-indigo-500/10 border-t-indigo-500 rounded-full animate-spin"></div>
+                    <p class="text-[10px] font-black text-indigo-400 uppercase tracking-[0.3em]">${statusText}</p>
+                </div>
+            `;
+            if (placeholder) placeholder.classList.remove("hidden");
+
+            const payload = {
+                assignee: $('#assigneeSelect').val(),
+                customer: $('#customerSelect').val(),
+                priority: document.getElementById("prioritySelect").value,
+                timeline: document.getElementById("timelineSelect").value,
+                startDate: document.getElementById("startDate").value,
+                endDate: document.getElementById("endDate").value,
+                production: document.getElementById("productionCheck").checked,
+                queryType: queryType,
+                jql: queryType === "custom" ? document.getElementById("jqlEditor").value : null
+            };
+
+            try {
+                const headers = getApiHeaders();
+                // Add Content-Type to the headers
+                headers["Content-Type"] = "application/json";
+
+                const res = await fetch("/api/explorer", {
+                    method: "POST",
+                    headers: headers,
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+
+                if (data.error) throw new Error(data.error);
+                currentIssues = data.issues;
+                renderTable(data.issues);
+            } catch (e) {
+                if (placeholder) placeholder.innerHTML = `
+                <div class="text-center flex flex-col items-center gap-4">
+                    <div class="w-10 h-10 bg-red-500/10 border border-red-500/20 rounded-full flex items-center justify-center text-red-500">&times;</div>
+                    <p class="text-xs font-bold text-red-400">Connection Failed: ${e.message}</p>
+                </div>`;
+            }
+        }
+
+        async function runCustomJql() {
+            const jql = document.getElementById("jqlEditor").value;
+            if (!jql) {
+                alert("Please enter a JQL query.");
+                return;
+            }
+            await fetchExplorerData("custom");
+        }
+
+        function renderTable(tickets) {
+            const tableEl = document.getElementById("tableWrapper");
+            tableEl.innerHTML = "";
+
+            if (gridInstance) { gridInstance.destroy(); }
+
+            if (tickets.length === 0) {
+                tableEl.innerHTML = `<div class="flex flex-col items-center justify-center absolute inset-0 text-gray-700 gap-4">
+                    <svg class="w-10 h-10 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 9.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <p class="text-[10px] uppercase font-black tracking-[0.3em]">Sector Empty: No results found</p>
+                </div>`;
+                return;
+            }
+
+            const cols = allColumns.filter(c => visibleColumns.includes(c.id));
+            const rows = tickets.map(t => cols.map(c => t[c.id]));
+
+            gridInstance = new gridjs.Grid({
+                columns: cols.map(c => ({ name: c.name, width: c.width, id: c.id, formatter: c.formatter })),
+                data: rows,
+                sort: true,
+                search: true,
+                pagination: { limit: 12 },
+                autoWidth: false,
+                language: {
+                    search: { placeholder: 'LOCATE IN CURRENT BATCH...' }
+                },
+                style: {
+                    table: { background: 'transparent' },
+                    th: { 'background-color': 'rgba(15, 23, 42, 0.4)', color: '#64748b', 'border-bottom': '1px solid rgba(255, 255, 255, 0.05)', 'font-size': '0.7rem' }
+                }
+            }).render(tableEl);
+        }
+
+        function exportData(format) {
+            if (currentIssues.length === 0) {
+                alert("No data segments to transmit.");
+                return;
+            }
+            const exportData = currentIssues.map(t => ({
+                Key: t.key,
+                Type: t.type,
+                Summary: t.summary,
+                Customer: t.customer || "N/A",
+                Status: t.status,
+                Assignee: t.assignee,
+                Priority: t.priority,
+                Created: t.created,
+                Updated: t.updated
+            }));
+            const ws = XLSX.utils.json_to_sheet(exportData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "TicketData");
+            const fileName = `Jira_Nexus_Export_${new Date().toISOString().slice(0, 10)}`;
+            if (format === 'xlsx') { XLSX.writeFile(wb, `${fileName}.xlsx`); }
+            else { XLSX.writeFile(wb, `${fileName}.csv`, { bookType: 'csv' }); }
+        }
+
+        async function fetchStaleTickets() {
+            await fetchExplorerData("stale");
+        }
+
+        async function fetchCriticalTickets() {
+            await fetchExplorerData("critical");
+        }
+
+        window.addEventListener('click', (e) => {
+            if (!e.target.closest('#colMenu') && !e.target.closest('#colToggleBtn')) document.getElementById("colMenu").classList.add("hidden");
+            if (!e.target.closest('#exportMenu') && !e.target.closest('#exportToggleBtn')) document.getElementById("exportMenu").classList.add("hidden");
+        });
+    </script>
+</body>
+
+</html>

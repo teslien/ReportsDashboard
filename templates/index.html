@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Jira Analytics Dashboard - {{ project }}</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- jQuery (Required for Select2) -->
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+
+    <!-- Select2 CSS/JS -->
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+    <style>
+        /* Custom Dark Theme for Select2 */
+        .select2-container--default .select2-selection--single {
+            background-color: #1f2937;
+            /* Gray 800 */
+            border: 1px solid #374151;
+            /* Gray 700 */
+            color: white;
+            height: 42px;
+            display: flex;
+            align-items: center;
+        }
+
+        .select2-container--default .select2-selection--single .select2-selection__rendered {
+            color: #d1d5db;
+            /* Gray 300 */
+            padding-left: 12px;
+        }
+
+        .select2-container--default .select2-selection--single .select2-selection__arrow {
+            height: 40px;
+        }
+
+        .select2-dropdown {
+            background-color: #1f2937;
+            border: 1px solid #374151;
+            color: #d1d5db;
+        }
+
+        .select2-results__option--highlighted {
+            background-color: #2563eb !important;
+            /* Blue 600 */
+        }
+
+        .select2-search__field {
+            background-color: #374151 !important;
+            color: white !important;
+            border: 1px solid #4b5563 !important;
+        }
+
+        /* Fix Clear Button Position */
+        .select2-container--default .select2-selection--single .select2-selection__clear {
+            position: absolute !important;
+            right: 35px;
+            /* Left of the arrow */
+            top: 50%;
+            transform: translateY(-50%);
+            margin-right: 0;
+            color: #9ca3af;
+            font-weight: bold;
+            font-size: 18px;
+            z-index: 10;
+        }
+
+        .select2-container--default .select2-selection--single .select2-selection__clear:hover {
+            color: #ef4444;
+        }
+
+        /* Glassmorphism */
+        .glass {
+            background: rgba(31, 41, 55, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+    </style>
+    <link rel="stylesheet" href="/static/theme.css">
+    <script src="/static/theme.js"></script></head>
+
+<body class="bg-gray-900 min-h-screen text-white font-sans">
+
+    <!-- Navigation -->
+    {% include 'navbar.html' %}
+
+    <!-- Main Content -->
+    <main class="pt-24 pb-12 px-6 max-w-7xl mx-auto">
+
+        <!-- Controls Section -->
+        <div
+            class="bg-gray-800 p-6 rounded-2xl shadow-xl border border-gray-700 mb-8 flex flex-col md:flex-row gap-6 items-end">
+            <div class="flex-1 w-full">
+                <label class="block text-sm font-bold text-gray-400 mb-2">Select Assignee</label>
+                <select id="assigneeSelect" class="w-full">
+                    <option></option> <!-- Placeholder -->
+                </select>
+            </div>
+
+            <div id="rangeSelectWrapper" class="w-full md:w-48">
+                <label class="block text-sm font-bold text-gray-400 mb-2">Time Range</label>
+                <select id="timeRange"
+                    class="w-full bg-gray-700 text-white h-[42px] rounded px-3 border border-gray-600 focus:border-blue-500 outline-none"
+                    onchange="handleRangeChange()">
+                    <option value="day">Today</option>
+                    <option value="yesterday">Yesterday</option>
+                    <option value="week">This Week</option>
+                    <option value="month" selected>This Month</option>
+                    <option value="year">This Year</option>
+                    <option value="date">Specific Date</option>
+                </select>
+            </div>
+
+            <div id="specificDateWrapper" class="w-full md:w-48 hidden">
+                <label class="block text-sm font-bold text-gray-400 mb-2">Select Date</label>
+                <div class="flex gap-2">
+                    <input type="date" id="specificDate"
+                        class="flex-1 bg-gray-700 text-white h-[42px] rounded px-3 border border-gray-600 focus:border-blue-500 outline-none">
+                    <button onclick="resetRange()" class="text-gray-500 hover:text-white transition px-2">
+                        &times;
+                    </button>
+                </div>
+            </div>
+
+            <button onclick="loadDashboardData()"
+                class="bg-blue-600 hover:bg-blue-500 text-white font-bold h-[42px] px-6 rounded shadow-lg transition w-full md:w-auto">
+                Analyze
+            </button>
+        </div>
+
+        <!-- KPI Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <!-- Velocity -->
+            <a id="kpiDoneLink" href="#"
+                class="glass p-6 rounded-2xl relative overflow-hidden group hover:-translate-y-1 transition duration-300 block cursor-pointer">
+                <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition">
+                    <svg class="w-24 h-24 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path
+                            d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z" />
+                    </svg>
+                </div>
+                <h3 class="text-gray-400 text-sm font-bold uppercase tracking-wider">Tickets Done</h3>
+                <div class="text-4xl font-black text-white mt-2" id="kpiDone">-</div>
+                <div class="text-green-400 text-xs mt-1 font-mono" id="kpiDoneTrend">Closed in range</div>
+            </a>
+
+            <!-- High Impact -->
+            <div
+                class="glass p-6 rounded-2xl relative overflow-hidden group hover:-translate-y-1 transition duration-300">
+                <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition">
+                    <svg class="w-24 h-24 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                        <path
+                            d="M12.316 3.051a1 1 0 01.633 1.265l-4 12a1 1 0 11-1.898-.632l4-12a1 1 0 011.265-.633zM5.707 6.293a1 1 0 010 1.414L3.414 10l2.293 2.293a1 1 0 11-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0zm8.586 0a1 1 0 011.414 0l3 3a1 1 0 010 1.414l-3 3a1 1 0 11-1.414-1.414L16.586 10l-2.293-2.293a1 1 0 010-1.414z" />
+                    </svg>
+                </div>
+                <h3 class="text-gray-400 text-sm font-bold uppercase tracking-wider">High Priority Done</h3>
+                <div class="text-4xl font-black text-white mt-2" id="kpiHigh">-</div>
+                <div class="text-red-400 text-xs mt-1 font-mono">Critical impact</div>
+            </div>
+
+            <!-- Current Load -->
+            <div
+                class="glass p-6 rounded-2xl relative overflow-hidden group hover:-translate-y-1 transition duration-300">
+                <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition">
+                    <svg class="w-24 h-24 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path
+                            d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
+                    </svg>
+                </div>
+                <h3 class="text-gray-400 text-sm font-bold uppercase tracking-wider">Current Load</h3>
+                <div class="text-4xl font-black text-white mt-2" id="kpiOpen">-</div>
+                <div class="text-yellow-400 text-xs mt-1 font-mono">Active (Not Done)</div>
+            </div>
+
+            <!-- Productivity Score -->
+            <div
+                class="glass p-6 rounded-2xl relative overflow-hidden group hover:-translate-y-1 transition duration-300 bg-gradient-to-br from-blue-900/50 to-purple-900/50 border-blue-800">
+                <h3 class="text-gray-100 text-sm font-bold uppercase tracking-wider">Focus Factor</h3>
+                <div class="text-4xl font-black text-white mt-2" id="kpiFocus">-</div>
+                <div class="text-blue-200 text-xs mt-1 font-mono">Ratio High/Total</div>
+            </div>
+        </div>
+
+        <!-- Charts Section -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+
+            <!-- Type Distribution -->
+            <div class="glass p-6 rounded-2xl border border-gray-700">
+                <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
+                    <span class="w-2 h-6 bg-blue-500 rounded-full"></span>
+                    What they worked on
+                </h3>
+                <div class="h-64">
+                    <canvas id="typeChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Priority Breakout -->
+            <div class="glass p-6 rounded-2xl border border-gray-700">
+                <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
+                    <span class="w-2 h-6 bg-red-500 rounded-full"></span>
+                    Priority Breakdown
+                </h3>
+                <div class="h-64 relative">
+                    <canvas id="priorityChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Current Backlog Status -->
+            <div class="glass p-6 rounded-2xl border border-gray-700">
+                <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
+                    <span class="w-2 h-6 bg-yellow-500 rounded-full"></span>
+                    Current Work Status
+                </h3>
+                <div class="h-64">
+                    <canvas id="statusChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <script src="/static/app.js"></script>
+    <script>
+        // Inline Init Logic for Dashboard specific stuff (mostly Select2)
+        $(document).ready(function () {
+            // Init Select2
+            $('#assigneeSelect').select2({
+                placeholder: 'Search for a team member...',
+                allowClear: true,
+                width: '100%' // Fix width issue
+            });
+
+            // Populate Select2 from API
+            fetchAssigneesForSelect();
+        });
+
+        async function fetchAssigneesForSelect() {
+            try {
+                // Use GET as the backend is now optimized for it
+                const res = await fetch("/api/assignees", {
+                    method: "GET",
+                    headers: getApiHeaders()
+                });
+                const data = await res.json();
+
+                const sel = $('#assigneeSelect');
+                sel.empty().append(new Option('All Team Members', ''));
+
+                // The API now returns a flat list of {id, name} objects
+                data.forEach(u => {
+                    sel.append(new Option(u.name, u.id));
+                });
+            } catch (err) {
+                console.error("Error fetching assignees:", err);
+            }
+        }
+
+        function handleRangeChange() {
+            const val = document.getElementById("timeRange").value;
+            if (val === "date") {
+                document.getElementById("rangeSelectWrapper").classList.add("hidden");
+                document.getElementById("specificDateWrapper").classList.remove("hidden");
+                // Default to today
+                if (!document.getElementById("specificDate").value) {
+                    document.getElementById("specificDate").value = new Date().toISOString().split('T')[0];
+                }
+            } else {
+                loadDashboardData();
+            }
+        }
+
+        function resetRange() {
+            document.getElementById("timeRange").value = "month";
+            document.getElementById("rangeSelectWrapper").classList.remove("hidden");
+            document.getElementById("specificDateWrapper").classList.add("hidden");
+            loadDashboardData();
+        }
+
+        // Define loadDashboardData globally so button can call it
+        window.loadDashboardData = async function () {
+            const accountId = $('#assigneeSelect').val();
+            const range = document.getElementById("timeRange").value;
+            const specificDate = document.getElementById("specificDate").value;
+
+            if (!accountId) {
+                alert("Please select an assignee first.");
+                return;
+            }
+
+            // Show Loading State
+            document.getElementById("kpiDone").innerText = "...";
+            document.getElementById("kpiHigh").innerText = "...";
+            document.getElementById("kpiOpen").innerText = "...";
+
+            // Call new API
+            try {
+                const res = await fetch("/api/assignee_full_profile", {
+                    method: "POST",
+                    headers: getApiHeaders(),
+                    body: JSON.stringify({ accountId, range, specificDate })
+                });
+                const data = await res.json();
+
+                const link = document.getElementById("kpiDoneLink");
+                if (range === "date") {
+                    link.href = `/user/${accountId}?range=date&date=${specificDate}`;
+                } else {
+                    link.href = `/user/${accountId}?range=${range}`;
+                }
+
+                renderDashboard(data);
+
+            } catch (e) {
+                console.error(e);
+                alert("Error fetching data");
+            }
+        };
+
+        let typeChart, priorityChart, statusChart;
+
+        function renderDashboard(data) {
+            const done = data.done;
+            const open = data.open;
+
+            // 1. KPIs
+            document.getElementById("kpiDone").innerText = done.length;
+
+            const highPri = done.filter(i => i.fields.priority.name === "High" || i.fields.priority.name === "Highest").length;
+            document.getElementById("kpiHigh").innerText = highPri;
+
+            document.getElementById("kpiOpen").innerText = open.length;
+
+            // Focus Factor: (High / Total Done) * 100
+            const focus = done.length > 0 ? Math.round((highPri / done.length) * 100) : 0;
+            document.getElementById("kpiFocus").innerText = focus + "%";
+
+            // 2. Charts
+            renderTypeChart(done);
+            renderPriorityChart(done);
+            renderStatusChart(open);
+        }
+
+        function renderTypeChart(issues) {
+            const ctx = document.getElementById("typeChart").getContext('2d');
+            const counts = {};
+            issues.forEach(i => {
+                const type = i.fields.issuetype.name;
+                counts[type] = (counts[type] || 0) + 1;
+            });
+
+            if (typeChart) typeChart.destroy();
+
+            typeChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(counts),
+                    datasets: [{
+                        label: 'Count',
+                        data: Object.values(counts),
+                        backgroundColor: '#3b82f6',
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.1)' }, ticks: { color: '#9ca3af' } },
+                        x: { grid: { display: false }, ticks: { color: '#9ca3af' } }
+                    }
+                }
+            });
+        }
+
+        function renderPriorityChart(issues) {
+            const ctx = document.getElementById("priorityChart").getContext('2d');
+            const counts = {};
+            issues.forEach(i => {
+                const p = i.fields.priority.name;
+                counts[p] = (counts[p] || 0) + 1;
+            });
+
+            if (priorityChart) priorityChart.destroy();
+
+            priorityChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(counts),
+                    datasets: [{
+                        data: Object.values(counts),
+                        backgroundColor: ['#ef4444', '#f59e0b', '#3b82f6', '#10b981', '#6b7280'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'right', labels: { color: '#d1d5db' } }
+                    },
+                    cutout: '70%'
+                }
+            });
+        }
+
+        function renderStatusChart(issues) {
+            const ctx = document.getElementById("statusChart").getContext('2d');
+            const counts = {};
+            issues.forEach(i => {
+                const s = i.fields.status.name;
+                counts[s] = (counts[s] || 0) + 1;
+            });
+
+            if (statusChart) statusChart.destroy();
+
+            statusChart = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: Object.keys(counts),
+                    datasets: [{
+                        data: Object.values(counts),
+                        backgroundColor: ['#8b5cf6', '#ec4899', '#6366f1', '#14b8a6'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'right', labels: { color: '#d1d5db' } }
+                    }
+                }
+            });
+        }
+
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,557 @@
+/* ============================================================
+   LIGHT / DARK THEME SYSTEM
+   Applied via: <html data-theme="light"> or <html data-theme="dark">
+   ============================================================ */
+
+/* ─── CSS Variable Definitions ─────────────────────────────── */
+:root {
+    --theme-bg: #111827;
+    /* gray-900 */
+    --theme-bg2: #1f2937;
+    /* gray-800 */
+    --theme-bg3: #374151;
+    /* gray-700 */
+    --theme-card: rgba(31, 41, 55, 0.75);
+    --theme-card-border: rgba(255, 255, 255, 0.07);
+    --theme-text: #ffffff;
+    --theme-text-muted: #9ca3af;
+    /* gray-400 */
+    --theme-text-sub: #6b7280;
+    /* gray-500 */
+    --theme-input-bg: #1f2937;
+    --theme-input-border: #374151;
+    --theme-nav-bg: rgba(17, 24, 39, 0.7);
+    --theme-divider: #374151;
+    --theme-shadow: rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="light"] {
+    --theme-bg: #f1f5f9;
+    /* slate-100 */
+    --theme-bg2: #ffffff;
+    --theme-bg3: #e2e8f0;
+    /* slate-200 */
+    --theme-card: rgba(255, 255, 255, 0.9);
+    --theme-card-border: rgba(0, 0, 0, 0.08);
+    --theme-text: #0f172a;
+    /* slate-900 */
+    --theme-text-muted: #475569;
+    /* slate-600 */
+    --theme-text-sub: #94a3b8;
+    /* slate-400 */
+    --theme-input-bg: #ffffff;
+    --theme-input-border: #cbd5e1;
+    /* slate-300 */
+    --theme-nav-bg: rgba(255, 255, 255, 0.85);
+    --theme-divider: #e2e8f0;
+    --theme-shadow: rgba(0, 0, 0, 0.08);
+}
+
+/* ─── Body & Root Background ────────────────────────────────── */
+[data-theme="light"] body {
+    background-color: #f1f5f9 !important;
+    color: #0f172a !important;
+}
+
+/* Deep dark body overrides (for planning/support pages using bg-[#0f172a]) */
+[data-theme="light"] body.bg-\[#0f172a\] {
+    background-color: #f1f5f9 !important;
+}
+
+/* ─── Navigation ────────────────────────────────────────────── */
+[data-theme="light"] nav {
+    background: rgba(255, 255, 255, 0.9) !important;
+    border-bottom-color: #e2e8f0 !important;
+}
+
+[data-theme="light"] nav a {
+    color: #475569 !important;
+}
+
+[data-theme="light"] nav a:hover {
+    color: #0f172a !important;
+}
+
+[data-theme="light"] nav a.text-blue-400,
+[data-theme="light"] nav a.text-white {
+    color: #2563eb !important;
+}
+
+[data-theme="light"] .text-xs.text-gray-500.font-mono {
+    color: #64748b !important;
+}
+
+/* ─── Tailwind Gray Background Overrides ───────────────────── */
+[data-theme="light"] .bg-gray-900 {
+    background-color: #f1f5f9 !important;
+}
+
+[data-theme="light"] .bg-gray-800 {
+    background-color: #ffffff !important;
+}
+
+[data-theme="light"] .bg-gray-800\/60 {
+    background-color: rgba(255, 255, 255, 0.8) !important;
+}
+
+[data-theme="light"] .bg-gray-700 {
+    background-color: #e2e8f0 !important;
+}
+
+[data-theme="light"] .bg-gray-700\/60 {
+    background-color: rgba(226, 232, 240, 0.7) !important;
+}
+
+[data-theme="light"] .bg-gray-600 {
+    background-color: #cbd5e1 !important;
+}
+
+[data-theme="light"] .bg-gray-800\/40 {
+    background-color: rgba(255, 255, 255, 0.75) !important;
+}
+
+[data-theme="light"] .bg-gray-800\/70 {
+    background-color: rgba(255, 255, 255, 0.9) !important;
+}
+
+[data-theme="light"] .bg-gray-900\/20 {
+    background-color: rgba(241, 245, 249, 0.5) !important;
+}
+
+[data-theme="light"] .bg-gray-900\/50 {
+    background-color: rgba(255, 255, 255, 0.6) !important;
+}
+
+/* planning.html deep bg */
+[data-theme="light"] .bg-\[#0f172a\] {
+    background-color: #f1f5f9 !important;
+}
+
+[data-theme="light"] .bg-\[#0f172a\]\/80 {
+    background-color: rgba(255, 255, 255, 0.9) !important;
+}
+
+/* ─── Text Color Overrides ──────────────────────────────────── */
+[data-theme="light"] .text-white {
+    color: #0f172a !important;
+}
+
+[data-theme="light"] .text-gray-100 {
+    color: #1e293b !important;
+}
+
+[data-theme="light"] .text-gray-200 {
+    color: #334155 !important;
+}
+
+[data-theme="light"] .text-gray-300 {
+    color: #475569 !important;
+}
+
+[data-theme="light"] .text-gray-400 {
+    color: #64748b !important;
+}
+
+[data-theme="light"] .text-gray-500 {
+    color: #94a3b8 !important;
+}
+
+[data-theme="light"] .text-gray-600 {
+    color: #94a3b8 !important;
+}
+
+[data-theme="light"] .text-\[#f8fafc\] {
+    color: #0f172a !important;
+}
+
+[data-theme="light"] .text-blue-200\/40 {
+    color: #64748b !important;
+}
+
+[data-theme="light"] .text-blue-200\/60 {
+    color: #3b82f6 !important;
+}
+
+[data-theme="light"] .text-blue-100\/40 {
+    color: #64748b !important;
+}
+
+[data-theme="light"] .text-blue-100\/70 {
+    color: #1e40af !important;
+}
+
+[data-theme="light"] .text-white\/80 {
+    color: #1e293b !important;
+}
+
+[data-theme="light"] .text-white\/20 {
+    color: #cbd5e1 !important;
+}
+
+/* ─── Border Overrides ──────────────────────────────────────── */
+[data-theme="light"] .border-gray-700 {
+    border-color: #cbd5e1 !important;
+}
+
+[data-theme="light"] .border-gray-700\/60 {
+    border-color: rgba(203, 213, 225, 0.7) !important;
+}
+
+[data-theme="light"] .border-gray-800 {
+    border-color: #e2e8f0 !important;
+}
+
+[data-theme="light"] .border-gray-800\/60 {
+    border-color: rgba(226, 232, 240, 0.6) !important;
+}
+
+[data-theme="light"] .border-gray-600 {
+    border-color: #cbd5e1 !important;
+}
+
+[data-theme="light"] .border-white\/5 {
+    border-color: rgba(0, 0, 0, 0.07) !important;
+}
+
+[data-theme="light"] .border-white\/10 {
+    border-color: rgba(0, 0, 0, 0.1) !important;
+}
+
+[data-theme="light"] .divide-gray-800>*+* {
+    border-color: #e2e8f0 !important;
+}
+
+[data-theme="light"] .divide-gray-800\/60>*+* {
+    border-color: rgba(226, 232, 240, 0.6) !important;
+}
+
+/* ─── Glass Components ──────────────────────────────────────── */
+[data-theme="light"] .glass {
+    background: rgba(255, 255, 255, 0.85) !important;
+    border: 1px solid rgba(0, 0, 0, 0.08) !important;
+    backdrop-filter: blur(12px);
+}
+
+/* Glass variants with inline styles or custom vars */
+[data-theme="light"] [style*="rgba(31, 41, 55"] {
+    background: rgba(255, 255, 255, 0.85) !important;
+}
+
+/* ─── Input Fields ──────────────────────────────────────────── */
+[data-theme="light"] input[type="text"],
+[data-theme="light"] input[type="date"],
+[data-theme="light"] input[type="email"],
+[data-theme="light"] input[type="number"],
+[data-theme="light"] textarea,
+[data-theme="light"] select {
+    background-color: #ffffff !important;
+    border-color: #cbd5e1 !important;
+    color: #0f172a !important;
+}
+
+[data-theme="light"] input::placeholder,
+[data-theme="light"] textarea::placeholder {
+    color: #94a3b8 !important;
+}
+
+/* Select2 light mode */
+[data-theme="light"] .select2-container--default .select2-selection--single {
+    background-color: #ffffff !important;
+    border-color: #cbd5e1 !important;
+    color: #0f172a !important;
+}
+
+[data-theme="light"] .select2-container--default .select2-selection--single .select2-selection__rendered {
+    color: #374151 !important;
+}
+
+[data-theme="light"] .select2-dropdown {
+    background-color: #ffffff !important;
+    border-color: #cbd5e1 !important;
+    color: #374151 !important;
+}
+
+[data-theme="light"] .select2-results__option {
+    color: #374151 !important;
+}
+
+[data-theme="light"] .select2-search__field {
+    background-color: #f8fafc !important;
+    color: #0f172a !important;
+    border-color: #cbd5e1 !important;
+}
+
+/* ─── Tables ────────────────────────────────────────────────── */
+[data-theme="light"] table {
+    color: #1e293b !important;
+}
+
+[data-theme="light"] thead tr {
+    background-color: rgba(241, 245, 249, 0.8) !important;
+}
+
+[data-theme="light"] tbody tr:hover {
+    background-color: rgba(59, 130, 246, 0.05) !important;
+}
+
+[data-theme="light"] th {
+    color: #64748b !important;
+}
+
+/* ─── Cards / Panels ────────────────────────────────────────── */
+[data-theme="light"] .bg-gray-800.p-6.rounded-2xl,
+[data-theme="light"] .bg-gray-800.p-4.rounded-2xl,
+[data-theme="light"] .bg-gray-800.p-5.rounded-2xl {
+    background-color: #ffffff !important;
+    box-shadow: 0 1px 8px rgba(0, 0, 0, 0.08) !important;
+}
+
+/* ─── Ticket / Status Cards (planning.html) ─────────────────── */
+[data-theme="light"] .ticket-card {
+    background: rgba(255, 255, 255, 0.95) !important;
+    border-color: rgba(0, 0, 0, 0.1) !important;
+}
+
+[data-theme="light"] .ticket-card:hover {
+    border-color: rgba(59, 130, 246, 0.4) !important;
+    background: rgba(255, 255, 255, 1) !important;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* ─── Scrum Notes page specific ──────────────────────────────── */
+[data-theme="light"] .member-card {
+    border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+[data-theme="light"] .status-badge-done {
+    background: rgba(16, 185, 129, 0.1) !important;
+    color: #047857 !important;
+}
+
+[data-theme="light"] .status-badge-pending {
+    background: rgba(217, 119, 6, 0.1) !important;
+    color: #b45309 !important;
+}
+
+/* ─── Modal Backdrop ────────────────────────────────────────── */
+[data-theme="light"] .modal-backdrop {
+    background: rgba(15, 23, 42, 0.5) !important;
+}
+
+/* ─── Scrollbar (light) ──────────────────────────────────────── */
+[data-theme="light"] ::-webkit-scrollbar-track {
+    background: #f1f5f9;
+}
+
+[data-theme="light"] ::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+}
+
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+/* ─── Charts: force light bg behind canvas ──────────────────── */
+[data-theme="light"] canvas {
+    filter: none;
+}
+
+/* ─── Grid.js (report_view) ─────────────────────────────────── */
+[data-theme="light"] .gridjs-wrapper {
+    background: #ffffff !important;
+    border-color: #e2e8f0 !important;
+}
+
+[data-theme="light"] .gridjs-thead th {
+    background: #f8fafc !important;
+    color: #475569 !important;
+    border-color: #e2e8f0 !important;
+}
+
+[data-theme="light"] .gridjs-tbody td {
+    color: #1e293b !important;
+    border-color: #f1f5f9 !important;
+}
+
+[data-theme="light"] .gridjs-pagination {
+    background: #ffffff !important;
+    border-color: #e2e8f0 !important;
+    color: #475569 !important;
+}
+
+[data-theme="light"] .gridjs-pagination button {
+    color: #3b82f6 !important;
+}
+
+/* ─── Theme Toggle Button ────────────────────────────────────── */
+#theme-toggle-btn {
+    position: fixed;
+    bottom: 28px;
+    right: 28px;
+    z-index: 9999;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    transition: all 0.25s ease;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+    background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+    color: white;
+}
+
+#theme-toggle-btn:hover {
+    transform: scale(1.1) rotate(15deg);
+    box-shadow: 0 6px 24px rgba(59, 130, 246, 0.4);
+}
+
+[data-theme="light"] #theme-toggle-btn {
+    background: linear-gradient(135deg, #f59e0b, #ef4444);
+    box-shadow: 0 4px 16px rgba(245, 158, 11, 0.3);
+}
+
+[data-theme="light"] #theme-toggle-btn:hover {
+    box-shadow: 0 6px 24px rgba(245, 158, 11, 0.5);
+}
+
+/* ─── Additional Black / High-opacity background overrides ──── */
+[data-theme="light"] .bg-black\/40 {
+    background-color: rgba(241, 245, 249, 0.9) !important;
+}
+
+[data-theme="light"] .bg-black\/60 {
+    background-color: rgba(241, 245, 249, 0.95) !important;
+}
+
+[data-theme="light"] .bg-black\/80 {
+    background-color: rgba(241, 245, 249, 0.97) !important;
+}
+
+[data-theme="light"] .bg-black\/20 {
+    background-color: rgba(0, 0, 0, 0.03) !important;
+}
+
+/* Nav with semi-transparent dark bg */
+[data-theme="light"] nav.bg-gray-900\/50 {
+    background: rgba(255, 255, 255, 0.9) !important;
+}
+
+[data-theme="light"] nav.bg-\[#0f172a\]\/80 {
+    background: rgba(255, 255, 255, 0.92) !important;
+}
+
+/* ─── Blue accent text brightness fix for light mode ────────── */
+[data-theme="light"] .text-blue-400 {
+    color: #2563eb !important;
+}
+
+[data-theme="light"] .text-blue-300 {
+    color: #3b82f6 !important;
+}
+
+[data-theme="light"] .text-emerald-400 {
+    color: #059669 !important;
+}
+
+[data-theme="light"] .text-purple-400 {
+    color: #7c3aed !important;
+}
+
+[data-theme="light"] .text-amber-400 {
+    color: #d97706 !important;
+}
+
+[data-theme="light"] .text-red-400 {
+    color: #dc2626 !important;
+}
+
+/* Preserve gradient text readability */
+[data-theme="light"] .bg-clip-text.text-transparent {
+    -webkit-text-fill-color: transparent !important;
+}
+
+/* ─── Status Tracker bar colors ──────────────────────────────── */
+[data-theme="light"] .bg-blue-500\/10 {
+    background-color: rgba(59, 130, 246, 0.12) !important;
+}
+
+[data-theme="light"] .bg-emerald-500\/10 {
+    background-color: rgba(16, 185, 129, 0.12) !important;
+}
+
+[data-theme="light"] .bg-amber-500\/10 {
+    background-color: rgba(245, 158, 11, 0.12) !important;
+}
+
+[data-theme="light"] .bg-purple-500\/10 {
+    background-color: rgba(139, 92, 246, 0.12) !important;
+}
+
+[data-theme="light"] .bg-red-500\/10 {
+    background-color: rgba(239, 68, 68, 0.12) !important;
+}
+
+/* ─── Blue tinted input backgrounds ─────────────────────────── */
+[data-theme="light"] .bg-blue-900\/40 {
+    background-color: rgba(255, 255, 255, 0.85) !important;
+}
+
+[data-theme="light"] .bg-blue-500\/5 {
+    background-color: rgba(241, 245, 249, 0.8) !important;
+}
+
+[data-theme="light"] .bg-blue-500\/10 {
+    background-color: rgba(239, 246, 255, 0.8) !important;
+}
+
+[data-theme="light"] .bg-blue-600\/10 {
+    background-color: rgba(239, 246, 255, 0.6) !important;
+}
+
+[data-theme="light"] .bg-blue-600\/20 {
+    background-color: rgba(219, 234, 254, 0.7) !important;
+}
+
+/* ─── Focus ring / highlight color fixes ────────────────────── */
+[data-theme="light"] .focus\:border-blue-500\/40:focus {
+    border-color: rgba(59, 130, 246, 0.5) !important;
+}
+
+[data-theme="light"] .focus\:bg-blue-500\/10:focus {
+    background-color: rgba(239, 246, 255, 0.8) !important;
+}
+
+/* ─── Inline rgba glass hack for scoreboard.html ────────────── */
+/* Targets elements with inline background: rgba(31, 41, 55, ...) */
+[data-theme="light"] [style*="rgba(31,41,55"],
+[data-theme="light"] [style*="rgba(31, 41, 55"] {
+    background: rgba(255, 255, 255, 0.88) !important;
+    border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+/* ─── Scrum Notes: panel & modal glass backgrounds ───────────  */
+[data-theme="light"] .bg-gray-900\/80 {
+    background-color: rgba(255, 255, 255, 0.95) !important;
+}
+
+[data-theme="light"] .bg-gray-900\/60 {
+    background-color: rgba(255, 255, 255, 0.88) !important;
+}
+
+[data-theme="light"] .border-white\/5 {
+    border-color: rgba(0, 0, 0, 0.07) !important;
+}
+
+/* ─── Todo checklist items ───────────────────────────────────── */
+[data-theme="light"] .line-through {
+    color: #94a3b8 !important;
+}
+
+/* ─── Bulk update row highlight ─────────────────────────────── */
+[data-theme="light"] tr.selected-row {
+    background-color: rgba(59, 130, 246, 0.08) !important;
+}

@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Report View - {{ project }}</title>
+
+    <!-- Tailwind -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Grid.js -->
+    <link href="https://unpkg.com/gridjs/dist/theme/mermaid.min.css" rel="stylesheet" />
+    <script src="https://unpkg.com/gridjs/dist/gridjs.umd.js"></script>
+
+    <!-- SheetJS (Excel Export) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <style>
+        /* Dark Theme Override for Grid.js */
+        .gridjs-container {
+            background-color: transparent !important;
+            color: #d1d5db !important;
+            border: none !important;
+        }
+
+        .gridjs-summary {
+            color: #ffffff;
+        }
+
+        .gridjs-wrapper {
+            background-color: #1f2937;
+            border-radius: 12px;
+            border: 1px solid #374151;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .gridjs-head {
+            background-color: #111827;
+        }
+
+        .gridjs-th {
+            background-color: #111827 !important;
+            color: #9ca3af !important;
+            border-bottom: 1px solid #374151 !important;
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.05em;
+            padding: 12px 16px !important;
+        }
+
+        .gridjs-tr {
+            background-color: #1f2937;
+        }
+
+        .gridjs-tr:hover td {
+            background-color: #374151 !important;
+        }
+
+        .gridjs-td {
+            background-color: transparent !important;
+            border-bottom: 1px solid #374151 !important;
+            color: #e5e7eb;
+            font-size: 0.875rem;
+            padding: 10px 16px !important;
+            text-wrap: auto;
+        }
+
+        .gridjs-footer {
+            background-color: #111827 !important;
+            border-top: 1px solid #374151 !important;
+            border-radius: 0 0 12px 12px;
+        }
+
+        /* Pagination Styling */
+        .gridjs-pagination .gridjs-pages button {
+            background-color: #374151 !important;
+            color: #d1d5db;
+            border: 1px solid #4b5563;
+            border-radius: 6px;
+            margin: 0 2px;
+        }
+
+        .gridjs-pagination .gridjs-pages button:hover {
+            background-color: #4b5563;
+            color: white;
+        }
+
+        .gridjs-pagination .gridjs-pages button.gridjs-currentPage {
+            background-color: #2563eb;
+            color: white;
+            border-color: #2563eb;
+        }
+
+        /* Search Input */
+        input.gridjs-input {
+            background-color: #111827;
+            border: 1px solid #4b5563;
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+        }
+
+        input.gridjs-input:focus {
+            border-color: #3b82f6;
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
+        }
+
+
+        /* width */
+        ::-webkit-scrollbar {
+            width: 7px !important;
+        }
+
+        /* Track */
+        ::-webkit-scrollbar-track {
+            background: rgb(68, 68, 68) !important;
+        }
+
+        /* Handle */
+        ::-webkit-scrollbar-thumb {
+            background: #50c2a6 !important;
+            border-radius: 5px !important;
+            opacity: 0.5 !important;
+        }
+
+        /* Handle on hover */
+        ::-webkit-scrollbar-thumb:hover {
+            background: #378370 !important;
+            opacity: 1 !important;
+        }
+
+        .back-btn-report {
+            background: #222e46;
+            padding: 1rem;
+            border-radius: 5px;
+        }
+
+        /* Selection Checkbox Styling */
+        .gridjs-checkbox,
+        .row-checkbox,
+        .header-checkbox {
+            width: 18px !important;
+            height: 18px !important;
+            cursor: pointer !important;
+            accent-color: #3b82f6 !important;
+            background-color: #1f2937 !important;
+            border: 1px solid #4b5563 !important;
+            border-radius: 4px !important;
+            appearance: checkbox !important;
+            -webkit-appearance: checkbox !important;
+        }
+
+        .gridjs-th .header-checkbox {
+            margin-top: 4px;
+        }
+    </style>
+    <link rel="stylesheet" href="/static/theme.css">
+    <script src="/static/theme.js"></script>
+    <script src="/static/app.js"></script></head>
+
+<body class="bg-gray-900 min-h-screen text-white font-sans">
+
+    <!-- Navigation -->
+    {% include 'navbar.html' %}
+
+
+    <main class="pt-24 pb-12 px-6 max-w-[95%] mx-auto">
+        <!-- Header -->
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+            <div class="flex items-center gap-4">
+                <a href="/reports"
+                    class="text-gray-400 hover:text-white transition flex items-center gap-1 back-btn-report">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+                    </svg>
+                    Back
+                </a>
+                <div>
+                    <h1 class="text-3xl font-bold text-white" id="reportName">Loading...</h1>
+                    <div class="flex items-center gap-3">
+                        <button onclick="toggleJql()"
+                            class="text-xs text-gray-500 hover:text-gray-300 flex items-center gap-1 mt-1 transition">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            Show configured JQL
+                        </button>
+                        <button onclick="openEditModal()"
+                            class="text-xs text-blue-500 hover:text-blue-300 flex items-center gap-1 mt-1 transition">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z">
+                                </path>
+                            </svg>
+                            Edit Query
+                        </button>
+                    </div>
+                    <code id="reportJql"
+                        class="hidden text-xs text-gray-500 font-mono mt-2 block bg-gray-800 p-2 rounded max-w-2xl whitespace-pre-wrap"></code>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-3 ml-auto">
+                <span id="cacheInfo" class="text-xs text-gray-500 italic hidden md:inline"></span>
+                <button onclick="openExportModal()"
+                    class="bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 px-4 py-2 rounded-lg font-bold border border-blue-500/30 transition flex items-center gap-2 text-sm">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 002-2h-2a2 2 0 00-2 2">
+                        </path>
+                    </svg>
+                    Columns
+                </button>
+                <button id="exportBtn" onclick="exportSelected()"
+                    class="bg-emerald-600 hover:bg-emerald-500 px-4 py-2 rounded-lg font-bold shadow-lg transition flex items-center gap-2 text-sm hidden">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
+                        </path>
+                    </svg>
+                    Export Selected
+                </button>
+                <button onclick="fetchData(true)"
+                    class="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-lg font-bold shadow-lg transition flex items-center gap-2 text-sm">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15">
+                        </path>
+                    </svg>
+                    Refresh Data
+                </button>
+            </div>
+        </div>
+
+        <!-- Grid Container -->
+        <div id="tableWrapper" class="fade-in"></div>
+
+        <!-- Edit Modal -->
+        <div id="editModal" class="fixed inset-0 bg-black/80 hidden flex items-center justify-center z-50">
+            <div class="bg-gray-800 p-8 rounded-xl w-full max-w-lg shadow-2xl border border-gray-700">
+                <h2 class="text-2xl font-bold mb-6 text-white">Edit Report JQL</h2>
+
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-1">JQL Query</label>
+                        <textarea id="editJqlInput" rows="6"
+                            class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white font-mono text-sm outline-none focus:border-blue-500"
+                            placeholder="project = ABC AND status = Done..."></textarea>
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-3 mt-8">
+                    <button onclick="closeEditModal()" class="text-gray-400 hover:text-white px-4 py-2">Cancel</button>
+                    <button onclick="saveUpdatedJql()"
+                        class="bg-blue-600 hover:bg-blue-500 px-6 py-2 rounded font-bold transition text-white">Update &
+                        Refresh</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Export Columns Modal -->
+        <div id="exportModal" class="fixed inset-0 bg-black/80 hidden flex items-center justify-center z-50">
+            <div class="bg-gray-800 p-8 rounded-xl w-full max-w-2xl shadow-2xl border border-gray-700">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-2xl font-bold text-white">Export Columns</h2>
+                    <div class="flex gap-2">
+                        <button onclick="selectAllColumns(true)" class="text-xs text-blue-400 hover:underline">Select
+                            All</button>
+                        <span class="text-gray-600">|</span>
+                        <button onclick="selectAllColumns(false)" class="text-xs text-blue-400 hover:underline">Clear
+                            All</button>
+                    </div>
+                </div>
+
+                <div id="columnList" class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
+                    <!-- Columns will be injected here -->
+                </div>
+
+                <div class="flex justify-end gap-3">
+                    <button onclick="closeExportModal()"
+                        class="text-gray-400 hover:text-white px-4 py-2 transition">Cancel</button>
+                    <button onclick="saveExportColumns()"
+                        class="bg-emerald-600 hover:bg-emerald-500 px-6 py-2 rounded-lg font-bold transition text-white shadow-lg">Save
+                        Selection</button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        let gridInstance = null;
+        let lastRawData = [];
+        let selectedKeys = new Set();
+
+        window.onload = init;
+
+        function toggleJql() {
+            document.getElementById("reportJql").classList.toggle("hidden");
+        }
+
+        function openEditModal() {
+            const id = getReportId();
+            const reports = JSON.parse(localStorage.getItem('reports_v1') || '[]');
+            const report = reports.find(r => r.id === id);
+            if (!report) return;
+
+            document.getElementById("editJqlInput").value = report.jql;
+            document.getElementById("editModal").classList.remove("hidden");
+        }
+
+        function closeEditModal() {
+            document.getElementById("editModal").classList.add("hidden");
+        }
+
+        function saveUpdatedJql() {
+            const id = getReportId();
+            const newJql = document.getElementById("editJqlInput").value.trim();
+            if (!newJql) return alert("JQL cannot be empty");
+
+            console.log("Saving updated JQL for ID:", id, "JQL:", newJql);
+
+            let reports = JSON.parse(localStorage.getItem('reports_v1') || '[]');
+            reports = reports.map(r => r.id === id ? { ...r, jql: newJql } : r);
+            localStorage.setItem('reports_v1', JSON.stringify(reports));
+
+            // Update UI
+            document.getElementById("reportJql").innerText = newJql;
+
+            closeEditModal();
+            fetchData(true); // Force refresh with new JQL
+        }
+
+        function toggleSelectAll(e) {
+            const checked = e.target.checked;
+            const checkboxes = document.querySelectorAll('.row-checkbox');
+            checkboxes.forEach(cb => {
+                cb.checked = checked;
+                const key = cb.dataset.key;
+                if (checked) selectedKeys.add(key);
+                else selectedKeys.delete(key);
+            });
+            updateExportBtnVisibility();
+        }
+
+        function toggleRowSelection(key, checked) {
+            if (checked) {
+                selectedKeys.add(key);
+            } else {
+                selectedKeys.delete(key);
+                const headerCb = document.getElementById('header-select-all');
+                if (headerCb) headerCb.checked = false;
+            }
+            updateExportBtnVisibility();
+        }
+
+        function updateExportBtnVisibility() {
+            const btn = document.getElementById("exportBtn");
+            if (btn) {
+                if (selectedKeys.size > 0) btn.classList.remove("hidden");
+                else btn.classList.add("hidden");
+            }
+        }
+
+        // Export Column Definitions
+        const ALL_EXPORT_COLUMNS = [
+            { id: 'key', label: 'Ticket Number' },
+            { id: 'project', label: 'Project' },
+            { id: 'type', label: 'Type' },
+            { id: 'summary', label: 'Summary' },
+            { id: 'assignee', label: 'Assignee' },
+            { id: 'reporter', label: 'Reporter' },
+            { id: 'priority', label: 'Priority' },
+            { id: 'status', label: 'Status' },
+            { id: 'resolution', label: 'Resolution' },
+            { id: 'created', label: 'Created Date' },
+            { id: 'updated', label: 'Updated Date' },
+            { id: 'resolutiondate', label: 'Resolution Date' },
+            { id: 'duedate', label: 'Due Date' },
+            { id: 'points', label: 'Story Points' }
+        ];
+
+        let selectedExportColumns = JSON.parse(localStorage.getItem('export_columns_v1')) ||
+            ['key', 'summary', 'assignee', 'priority', 'status'];
+
+        function openExportModal() {
+            const container = document.getElementById("columnList");
+            container.innerHTML = "";
+
+            ALL_EXPORT_COLUMNS.forEach(col => {
+                const isChecked = selectedExportColumns.includes(col.id);
+                const div = document.createElement("div");
+                div.className = "flex items-center gap-3 p-3 rounded bg-gray-700/50 hover:bg-gray-700 transition cursor-pointer border border-transparent hover:border-gray-600";
+                div.innerHTML = `
+                    <input type="checkbox" id="col_${col.id}" class="column-selector w-4 h-4 accent-emerald-500" 
+                        ${isChecked ? 'checked' : ''} value="${col.id}">
+                    <label for="col_${col.id}" class="text-sm cursor-pointer">${col.label}</label>
+                `;
+                div.onclick = (e) => {
+                    if (e.target.tagName !== 'INPUT') {
+                        const cb = div.querySelector('input');
+                        cb.checked = !cb.checked;
+                    }
+                };
+                container.appendChild(div);
+            });
+
+            document.getElementById("exportModal").classList.remove("hidden");
+        }
+
+        function closeExportModal() {
+            document.getElementById("exportModal").classList.add("hidden");
+        }
+
+        function selectAllColumns(val) {
+            document.querySelectorAll('.column-selector').forEach(cb => cb.checked = val);
+        }
+
+        function saveExportColumns() {
+            const checkboxes = document.querySelectorAll('.column-selector:checked');
+            const newSelection = Array.from(checkboxes).map(cb => cb.value);
+
+            if (newSelection.length === 0) {
+                alert("Please select at least one column to export.");
+                return;
+            }
+
+            selectedExportColumns = newSelection;
+            localStorage.setItem('export_columns_v1', JSON.stringify(newSelection));
+            closeExportModal();
+        }
+
+        function exportSelected() {
+            if (!gridInstance) return;
+
+            if (selectedKeys.size === 0) {
+                alert("Please select at least one row to export.");
+                return;
+            }
+
+            console.log("Exporting selected keys:", Array.from(selectedKeys));
+
+            const dataToExport = lastRawData
+                .filter(i => selectedKeys.has(i.key))
+                .map(i => {
+                    const row = {};
+                    selectedExportColumns.forEach(id => {
+                        const colDef = ALL_EXPORT_COLUMNS.find(c => c.id === id);
+                        const fields = i.fields;
+
+                        let val = "-";
+                        switch (id) {
+                            case 'key': val = i.key; break;
+                            case 'project': val = fields.project?.name || fields.project?.key || "-"; break;
+                            case 'type': val = fields.issuetype?.name || "-"; break;
+                            case 'summary': val = fields.summary || "-"; break;
+                            case 'assignee': val = fields.assignee?.displayName || "Unassigned"; break;
+                            case 'reporter': val = fields.reporter?.displayName || "Unknown"; break;
+                            case 'priority': val = fields.priority?.name || "None"; break;
+                            case 'status': val = fields.status?.name || "Unknown"; break;
+                            case 'resolution': val = fields.resolution?.name || "-"; break;
+                            case 'created': val = fields.created ? new Date(fields.created).toLocaleDateString() : "-"; break;
+                            case 'updated': val = fields.updated ? new Date(fields.updated).toLocaleDateString() : "-"; break;
+                            case 'resolutiondate': val = fields.resolutiondate ? new Date(fields.resolutiondate).toLocaleDateString() : "-"; break;
+                            case 'duedate': val = fields.duedate ? new Date(fields.duedate).toLocaleDateString() : "-"; break;
+                            case 'points': val = fields.customfield_10016 !== undefined ? fields.customfield_10016 : "-"; break;
+                        }
+                        row[colDef.label] = val;
+                    });
+                    return row;
+                });
+
+            if (dataToExport.length === 0) {
+                alert("Could not extract data for selection. Try again.");
+                return;
+            }
+
+            const ws = XLSX.utils.json_to_sheet(dataToExport);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "SelectedTickets");
+
+            const fileName = `Jira_Report_Export_${new Date().getTime()}.xlsx`;
+            XLSX.writeFile(wb, fileName);
+        }
+
+        function getReportId() {
+            return new URLSearchParams(window.location.search).get('id');
+        }
+
+        function init() {
+            const id = getReportId();
+            if (!id) {
+                window.location.href = '/reports';
+                return;
+            }
+
+            const reports = JSON.parse(localStorage.getItem('reports_v1') || '[]');
+            const report = reports.find(r => r.id === id);
+
+            if (!report) {
+                alert("Report configuration not found!");
+                window.location.href = '/reports';
+                return;
+            }
+
+            document.getElementById("reportName").innerText = report.name;
+            document.getElementById("reportJql").innerText = report.jql;
+
+            // Load logic
+            fetchData(false);
+        }
+
+        async function fetchData(forceRefresh) {
+            const id = getReportId();
+            const reports = JSON.parse(localStorage.getItem('reports_v1') || '[]');
+            const report = reports.find(r => r.id === id);
+            const cacheKey = `cache_${id}`;
+
+            document.getElementById("tableWrapper").innerHTML = '<div class="text-center p-20 text-gray-500 animate-pulse">Loading data from Jira...</div>';
+
+            // Check Cache
+            const cached = localStorage.getItem(cacheKey);
+            if (!forceRefresh && cached) {
+                try {
+                    const parsed = JSON.parse(cached);
+                    console.log("Using cached data");
+                    lastRawData = parsed.data;
+                    selectedKeys.clear();
+                    updateExportBtnVisibility();
+                    showCacheTime(parsed.timestamp);
+                    renderTable(parsed.data);
+                    return;
+                } catch (e) { }
+            }
+
+            // Fetch from API
+            try {
+                const report = reports.find(r => r.id === id); // Ensure report is defined in scope or use from above
+                console.log("Fetching data with JQL:", report.jql);
+                
+                const res = await fetch("/api/execute_jql", {
+                    method: "POST",
+                    headers: getApiHeaders(),
+                    body: JSON.stringify({ jql: report.jql })
+                });
+
+                const data = await res.json();
+                console.log("Data received from Jira:", data.length, "items");
+
+                if (data.error) {
+                    document.getElementById("tableWrapper").innerHTML = `<div class="text-red-400 p-8 text-center bg-red-900/20 rounded border border-red-900">Jira Error: <pre>${JSON.stringify(data.error, null, 2)}</pre></div>`;
+                    return;
+                }
+
+                lastRawData = data;
+                selectedKeys.clear();
+                updateExportBtnVisibility();
+
+                // Cache it
+                localStorage.setItem(cacheKey, JSON.stringify({
+                    timestamp: Date.now(),
+                    data: data
+                }));
+
+                showCacheTime(Date.now());
+                renderTable(data);
+
+            } catch (e) {
+                console.error(e);
+                document.getElementById("tableWrapper").innerHTML = '<div class="text-red-400 text-center">Network Error</div>';
+            }
+        }
+
+        function showCacheTime(ts) {
+            const date = new Date(ts).toLocaleTimeString();
+            document.getElementById("cacheInfo").innerText = `Last updated: ${date}`;
+        }
+
+        function renderTable(rawData) {
+            const tableWrapper = document.getElementById("tableWrapper");
+            tableWrapper.innerHTML = "";
+
+            if (gridInstance) {
+                console.log("Destroying previous grid instance");
+                gridInstance.destroy();
+                gridInstance = null;
+            }
+
+            if (rawData.length === 0) {
+                document.getElementById("tableWrapper").innerHTML = '<div class="text-center py-20 text-gray-500">No issues found matching this query.</div>';
+                return;
+            }
+
+            // Map data
+            const rows = rawData.map(i => {
+                const f = i.fields;
+                return [
+                    i.key, // Column 0: Checkbox identifier
+                    f.issuetype?.name || "?",
+                    i.key,
+                    f.summary,
+                    f.assignee?.displayName || "Unassigned",
+                    f.reporter?.displayName || "Unknown",
+                    f.priority?.name || "None",
+                    f.status?.name || "Unknown",
+                    f.resolution?.name || "-",
+                    f.created ? new Date(f.created).toLocaleDateString() : "-",
+                    f.updated ? new Date(f.updated).toLocaleDateString() : "-",
+                    (f.duedate && f.duedate !== null) ? new Date(f.duedate).toLocaleDateString() : "-",
+                    f.customfield_10016 !== undefined ? f.customfield_10016 : "-"
+                ];
+            });
+
+            gridInstance = new gridjs.Grid({
+                columns: [
+                    {
+                        name: gridjs.html('<input type="checkbox" id="header-select-all" class="header-checkbox" onclick="toggleSelectAll(event)">'),
+                        width: '50px',
+                        sort: false,
+                        formatter: (cell) => gridjs.html(`<input type="checkbox" class="row-checkbox" data-key="${cell}" ${selectedKeys.has(cell) ? 'checked' : ''} onclick="toggleRowSelection('${cell}', this.checked)">`)
+                    },
+                    { name: "Type", width: "80px" },
+                    {
+                        name: "Key",
+                        width: "120px",
+                        formatter: (cell) => gridjs.html(`<a href="https://lumberfi.atlassian.net/browse/${cell}" target="_blank" class="text-blue-400 hover:underline font-mono">${cell}</a>`)
+                    },
+                    { name: "Summary", width: "400px" },
+                    { name: "Assignee", width: "150px" },
+                    { name: "Reporter", width: "150px" },
+                    {
+                        name: "Priority",
+                        width: "100px",
+                        formatter: (cell) => {
+                            let color = "text-gray-400";
+                            if (cell === "High" || cell === "Highest") color = "text-red-400 font-bold";
+                            if (cell === "Medium") color = "text-yellow-400";
+                            return gridjs.html(`<span class="${color}">${cell}</span>`)
+                        }
+                    },
+                    {
+                        name: "Status",
+                        width: "130px",
+                        formatter: (cell) => {
+                            let color = "bg-gray-700 text-gray-300";
+                            const greenStatuses = ["DEPLOYED", "DONE", "NOT A BUG", "READY FOR STAGING", "RESOLVED", "STAGED", "UNABLE TO REPRODUCE", "READY FOR QA", "READY FOR INTERNAL DEMO"];
+                            if (cell && greenStatuses.includes(cell.toUpperCase())) color = "bg-green-900 text-green-300 border border-green-700";
+                            if (cell === "In Progress") color = "bg-blue-900 text-blue-300 border border-blue-700";
+                            if (cell === "To Do" || cell === "Backlog") color = "bg-gray-800 text-gray-400 border border-gray-600";
+                            return gridjs.html(`<span class="${color} px-2 py-1 rounded text-xs font-bold whitespace-nowrap">${cell}</span>`)
+                        }
+                    },
+                    { name: "Resolution", width: "120px" },
+                    { name: "Created", width: "120px" },
+                    { name: "Updated", width: "120px" },
+                    { name: "Due Date", width: "120px" },
+                    { name: "Pts", width: "60px" }
+                ],
+                data: rows,
+                search: true,
+                sort: true,
+                pagination: { limit: 30 },
+                fixedHeader: true,
+                height: '75vh', // Fixed height with scroll for better view
+                style: {
+                    table: { 'white-space': 'nowrap' }
+                }
+            }).render(document.getElementById("tableWrapper"));
+        }
+    </script>
+</body>
+
+</html>

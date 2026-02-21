@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings - Jira Analytics</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <link rel="stylesheet" href="/static/theme.css">
+    <script src="/static/theme.js"></script>
+</head>
+
+<body class="bg-gray-900 min-h-screen text-white font-sans">
+
+    <!-- Navigation -->
+    {% include 'navbar.html' %}
+
+    <!-- Main Content -->
+    <main class="pt-24 pb-12 px-6 max-w-7xl mx-auto">
+        <div class="max-w-2xl mx-auto bg-gray-800 rounded-lg shadow-xl p-6 border border-gray-700">
+            <h1 class="text-2xl font-bold text-white mb-6 flex items-center">
+                <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                Jira Configuration
+            </h1>
+
+            <div class="space-y-6">
+                <div>
+                    <label class="block text-sm font-medium text-gray-400 mb-2">Jira Email</label>
+                    <input type="email" id="jira_email"
+                        class="w-full bg-gray-700 border border-gray-600 rounded-md px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="your.email@company.com">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-400 mb-2">Jira API Token</label>
+                    <div class="relative">
+                        <input type="password" id="jira_token"
+                            class="w-full bg-gray-700 border border-gray-600 rounded-md px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="Enter your Jira API Token">
+                        <button type="button" onclick="toggleVisibility('jira_token')"
+                            class="absolute right-3 top-2.5 text-gray-400 hover:text-white">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                        </button>
+                    </div>
+                    <p class="mt-1 text-xs text-gray-500">You can generate an API token at <a
+                            href="https://id.atlassian.com/manage-profile/security/api-tokens" target="_blank"
+                            class="text-blue-400 hover:underline">Atlassian Security</a></p>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-400 mb-2">Project Key</label>
+                    <input type="text" id="project_key"
+                        class="w-full bg-gray-700 border border-gray-600 rounded-md px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase"
+                        placeholder="e.g. PROJ">
+                </div>
+
+                <div class="pt-4 flex justify-end">
+                    <button id="saveBtn" onclick="saveSettings()"
+                        class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-md transition-colors flex items-center">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                        </svg>
+                        Save Configuration
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Load settings from database API on page load
+        document.addEventListener('DOMContentLoaded', async function () {
+            try {
+                const res = await fetch('/api/settings/jira');
+                if (res.ok) {
+                    const data = await res.json();
+                    document.getElementById('jira_email').value = data.email || '';
+                    document.getElementById('jira_token').value = data.token || '';
+                    document.getElementById('project_key').value = data.project_key || '';
+                }
+            } catch (err) {
+                console.error("Failed to load Jira config:", err);
+            }
+        });
+
+        function toggleVisibility(id) {
+            const input = document.getElementById(id);
+            if (input.type === 'password') {
+                input.type = 'text';
+            } else {
+                input.type = 'password';
+            }
+        }
+
+        async function saveSettings() {
+            const email = document.getElementById('jira_email').value.trim();
+            const token = document.getElementById('jira_token').value.trim();
+            const project = document.getElementById('project_key').value.trim().toUpperCase();
+
+            if (!email || !token || !project) {
+                alert('Please fill in all fields');
+                return;
+            }
+
+            // Atlassian API tokens are typically very long (e.g. 100+ chars).
+            // A common mistake is double-clicking a token with hyphens, which only copies part of it.
+            if (token.length < 50) {
+                const proceed = confirm(
+                    "Warning: Your Jira API Token seems unusually short (" + token.length + " characters).\n\n" +
+                    "Tip: If you double-clicked the token to copy it, you might have only grabbed the part before a hyphen (-). Make sure to select the ENTIRE token.\n\n" +
+                    "Do you still want to save this token?"
+                );
+                if (!proceed) return;
+            }
+
+            // Clear legacy local storage to avoid confusion
+            localStorage.removeItem('jira_email');
+            localStorage.removeItem('jira_token');
+            localStorage.removeItem('project_key');
+            document.cookie = 'jira_email=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+            document.cookie = 'jira_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+            document.cookie = 'project_key=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+
+            // Visual feedback
+            const btn = document.getElementById('saveBtn');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = `
+                <svg class="w-5 h-5 mr-2 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Saving...
+            `;
+            btn.disabled = true;
+
+            try {
+                const res = await fetch('/api/settings/jira', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, token, project_key: project })
+                });
+
+                if (res.ok) {
+                    alert('Settings saved successfully! You can now use the dashboard with your credentials.');
+                    window.location.href = '/';
+                } else {
+                    const errorData = await res.json();
+                    alert('Error saving settings: ' + (errorData.error || 'Unknown error'));
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+                }
+            } catch (err) {
+                alert('Connection error occurred while saving.');
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        }
+    </script>
+</body>
+
+</html>

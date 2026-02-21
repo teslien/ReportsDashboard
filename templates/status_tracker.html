@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Jira Status Tracker - {{ project }}</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- SheetJS (Excel Export) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <style>
+        /* Glassmorphism */
+        .glass {
+            background: rgba(31, 41, 55, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #111827;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #374151;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #4b5563;
+        }
+    </style>
+    <link rel="stylesheet" href="/static/theme.css">
+    <script src="/static/theme.js"></script>
+    <script src="/static/app.js"></script></head>
+
+<body class="bg-gray-900 min-h-screen text-white font-sans">
+
+    <!-- Navigation -->
+    {% include 'navbar.html' %}
+
+    <!-- Main Content -->
+    <main class="pt-24 pb-12 px-6 max-w-7xl mx-auto">
+        <div class="mb-8 flex justify-between items-end">
+            <div>
+                <h1 class="text-3xl font-black mb-2">Status Tracker</h1>
+                <p class="text-gray-400">Search for tickets by key or date to track status updates and view detailed
+                    changelogs.</p>
+            </div>
+            <div class="flex items-center gap-3">
+                <button onclick="openExportModal()"
+                    class="bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 px-4 py-2 rounded-lg font-bold border border-blue-500/30 transition flex items-center gap-2 text-sm">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 002-2h-2a2 2 0 00-2 2">
+                        </path>
+                    </svg>
+                    Columns
+                </button>
+                <button id="exportBtn" onclick="exportSelected()"
+                    class="bg-emerald-600 hover:bg-emerald-500 px-4 py-2 rounded-lg font-bold shadow-lg transition flex items-center gap-2 text-sm hidden">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
+                        </path>
+                    </svg>
+                    Export Selected
+                </button>
+            </div>
+        </div>
+
+        <!-- Controls Section -->
+        <div class="bg-gray-800 p-6 rounded-2xl shadow-xl border border-gray-700 mb-8">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+                <div>
+                    <label class="block text-sm font-bold text-gray-400 mb-2">Issue Keys (Space or comma
+                        separated)</label>
+                    <textarea id="issueKeys"
+                        class="w-full bg-gray-700 text-white rounded-lg p-3 border border-gray-600 focus:border-blue-500 outline-none h-32 resize-none"
+                        placeholder="e.g. TIM-20448, TIM-20504"></textarea>
+                </div>
+                <div class="flex flex-col gap-6">
+                    <div>
+                        <label class="block text-sm font-bold text-gray-400 mb-2">Target Date</label>
+                        <input type="date" id="targetDate"
+                            class="w-full bg-gray-700 text-white h-[42px] rounded-lg px-3 border border-gray-600 focus:border-blue-500 outline-none">
+                    </div>
+                    <button onclick="fetchStatusHistory()"
+                        class="bg-blue-600 hover:bg-blue-500 text-white font-bold h-[42px] px-6 rounded-lg shadow-lg transition flex items-center justify-center gap-2">
+                        <span id="btnText">Fetch Status Updates</span>
+                        <div id="loader"
+                            class="hidden w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin">
+                        </div>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Results Section -->
+        <div class="glass rounded-2xl border border-gray-700 overflow-hidden">
+            <table class="w-full text-left">
+                <thead class="bg-gray-800/50 text-gray-400 text-xs uppercase tracking-wider">
+                    <tr>
+                        <th class="px-6 py-4 font-bold flex items-center">
+                            <input type="checkbox" id="header-select-all"
+                                class="w-4 h-4 bg-gray-700 border-gray-600 rounded text-blue-500 focus:ring-blue-500 mr-2"
+                                onclick="toggleSelectAll(event)">
+                            Issue
+                        </th>
+                        <th class="px-6 py-4 font-bold">Author</th>
+                        <th class="px-6 py-4 font-bold">Time</th>
+                        <th class="px-6 py-4 font-bold">From</th>
+                        <th class="px-6 py-4 font-bold">To</th>
+                        <th class="px-6 py-4 font-bold">History</th>
+                    </tr>
+                </thead>
+                <tbody id="resultsBody" class="divide-y divide-gray-800">
+                    <tr>
+                        <td colspan="6" class="px-6 py-12 text-center text-gray-500">
+                            Enter issue keys or select a date and click "Fetch Status Updates".
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </main>
+
+    <!-- History Modal -->
+    <div id="historyModal" class="fixed inset-0 z-[60] hidden">
+        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeHistory()"></div>
+        <div
+            class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-3xl max-h-[80vh] bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+            <div class="p-6 border-b border-gray-800 flex justify-between items-center bg-gray-800/50">
+                <div>
+                    <h3 id="modalTitle" class="text-xl font-bold text-blue-400"></h3>
+                    <p id="modalSummary" class="text-sm text-gray-400 truncate max-w-xl"></p>
+                </div>
+                <button onclick="closeHistory()" class="text-gray-400 hover:text-white">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12">
+                        </path>
+                    </svg>
+                </button>
+            </div>
+            <div id="modalContent" class="p-6 overflow-y-auto bg-gray-900">
+                <!-- History Items -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Export Columns Modal -->
+    <div id="exportModal" class="fixed inset-0 bg-black/80 hidden flex items-center justify-center z-[70]">
+        <div class="bg-gray-800 p-8 rounded-xl w-full max-w-2xl shadow-2xl border border-gray-700">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-white">Export Columns</h2>
+                <div class="flex gap-2 text-sm">
+                    <button onclick="selectAllColumns(true)" class="text-blue-400 hover:text-blue-300">Select
+                        All</button>
+                    <span class="text-gray-600">|</span>
+                    <button onclick="selectAllColumns(false)" class="text-blue-400 hover:text-blue-300">Clear
+                        All</button>
+                </div>
+            </div>
+
+            <div id="columnList" class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
+                <!-- Columns will be injected here -->
+            </div>
+
+            <div class="flex justify-end gap-3">
+                <button onclick="closeExportModal()"
+                    class="text-gray-400 hover:text-white px-4 py-2 transition">Cancel</button>
+                <button onclick="saveExportColumns()"
+                    class="bg-emerald-600 hover:bg-emerald-500 px-6 py-2 rounded-lg font-bold transition text-white shadow-lg">Save
+                    Selection</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Set default date to today
+        document.getElementById('targetDate').value = new Date().toISOString().split('T')[0];
+
+        let lastResults = [];
+        let selectedKeys = new Set();
+        let selectedExportColumns = JSON.parse(localStorage.getItem('tracker_export_columns_v1')) ||
+            ['key', 'summary', 'author', 'time', 'from', 'to'];
+
+        const ALL_EXPORT_COLUMNS = [
+            { id: 'key', label: 'Issue Key' },
+            { id: 'summary', label: 'Summary' },
+            { id: 'author', label: 'Author' },
+            { id: 'time', label: 'Update Time' },
+            { id: 'from', label: 'From Status' },
+            { id: 'to', label: 'To Status' },
+            { id: 'date', label: 'Update Date' }
+        ];
+
+        async function fetchStatusHistory() {
+            const issueKeys = document.getElementById('issueKeys').value;
+            const targetDate = document.getElementById('targetDate').value;
+
+            if (!issueKeys.trim() && !targetDate) {
+                alert("Please enter issue keys or select a date.");
+                return;
+            }
+
+            const btnText = document.getElementById('btnText');
+            const loader = document.getElementById('loader');
+            const resultsBody = document.getElementById('resultsBody');
+
+            // Reset selection
+            selectedKeys.clear();
+            updateExportBtnVisibility();
+            const headerCb = document.getElementById('header-select-all');
+            if (headerCb) headerCb.checked = false;
+
+            // Loading state
+            btnText.innerText = "Fetching...";
+            loader.classList.remove('hidden');
+            resultsBody.innerHTML = `
+                <tr>
+                    <td colspan="6" class="px-6 py-12 text-center text-gray-400">
+                        <div class="flex items-center justify-center gap-3">
+                            <div class="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                            Scanning Jira history...
+                        </div>
+                    </td>
+                </tr>
+            `;
+
+            try {
+                const params = new URLSearchParams({ issue_keys: issueKeys, target_date: targetDate });
+                const res = await fetch(`/api/status_history?${params.toString()}`, {
+                    method: 'GET',
+                    headers: getApiHeaders()
+                });
+
+                const data = await res.json();
+
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+
+                lastResults = data;
+
+                if (data.length === 0) {
+                    resultsBody.innerHTML = `
+                        <tr>
+                            <td colspan="6" class="px-6 py-12 text-center text-gray-500">
+                                No status updates found for the given criteria.
+                            </td>
+                        </tr>
+                    `;
+                } else {
+                    resultsBody.innerHTML = data.map((update, index) => `
+                        <tr class="hover:bg-gray-800/30 transition">
+                            <td class="px-6 py-4">
+                                <div class="flex items-center">
+                                    <input type="checkbox" class="row-checkbox w-4 h-4 bg-gray-700 border-gray-600 rounded text-blue-500 mr-4" 
+                                        data-key="${update.key}" data-index="${index}" onclick="toggleRowSelection(this)">
+                                    <div>
+                                        <div class="font-bold text-blue-400">${update.key}</div>
+                                        <div class="text-xs text-gray-500 truncate max-w-xs">${update.summary}</div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="px-6 py-4">
+                                <div class="flex items-center gap-3">
+                                    <img src="${update.author.avatar}" class="w-6 h-6 rounded-full border border-gray-700">
+                                    <span class="text-sm">${update.author.name}</span>
+                                </div>
+                            </td>
+                            <td class="px-6 py-4 text-sm text-gray-400">
+                                ${new Date(update.created).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </td>
+                            <td class="px-6 py-4">
+                                <span class="px-2 py-1 bg-gray-700 text-gray-400 text-xs rounded font-medium">${update.from}</span>
+                            </td>
+                            <td class="px-6 py-4">
+                                <span class="px-2 py-1 bg-blue-900/50 text-blue-300 text-xs rounded font-medium border border-blue-800/50">${update.to}</span>
+                            </td>
+                            <td class="px-6 py-4">
+                                <button onclick="showHistory('${update.key}')" class="px-3 py-1 bg-gray-700 hover:bg-gray-600 border border-gray-600 text-[10px] font-bold rounded text-gray-300 transition uppercase tracking-wider">
+                                    History
+                                </button>
+                            </td>
+                        </tr>
+                    `).join('');
+                }
+            } catch (err) {
+                console.error(err);
+                resultsBody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="px-6 py-12 text-center text-red-400">
+                            Error: ${err.message}
+                        </td>
+                    </tr>
+                `;
+            } finally {
+                btnText.innerText = "Fetch Status Updates";
+                loader.classList.add('hidden');
+            }
+        }
+
+        function toggleSelectAll(e) {
+            const checked = e.target.checked;
+            const checkboxes = document.querySelectorAll('.row-checkbox');
+            checkboxes.forEach(cb => {
+                cb.checked = checked;
+                const index = cb.dataset.index;
+                const update = lastResults[index];
+                const selectionId = `${update.key}_${update.created}`;
+                if (checked) selectedKeys.add(selectionId);
+                else selectedKeys.delete(selectionId);
+            });
+            updateExportBtnVisibility();
+        }
+
+        function toggleRowSelection(cb) {
+            const index = cb.dataset.index;
+            const update = lastResults[index];
+            const selectionId = `${update.key}_${update.created}`;
+
+            if (cb.checked) {
+                selectedKeys.add(selectionId);
+            } else {
+                selectedKeys.delete(selectionId);
+            }
+
+            updateExportBtnVisibility();
+        }
+
+        function updateExportBtnVisibility() {
+            const btn = document.getElementById("exportBtn");
+            if (selectedKeys.size > 0) btn.classList.remove("hidden");
+            else btn.classList.add("hidden");
+        }
+
+        function openExportModal() {
+            const container = document.getElementById("columnList");
+            container.innerHTML = "";
+
+            ALL_EXPORT_COLUMNS.forEach(col => {
+                const isChecked = selectedExportColumns.includes(col.id);
+                const div = document.createElement("div");
+                div.className = "flex items-center gap-3 p-3 rounded bg-gray-700/50 hover:bg-gray-700 transition cursor-pointer border border-transparent hover:border-gray-600";
+                div.innerHTML = `
+                    <input type="checkbox" id="col_${col.id}" class="column-selector w-4 h-4 accent-emerald-500" 
+                        ${isChecked ? 'checked' : ''} value="${col.id}">
+                    <label for="col_${col.id}" class="text-sm cursor-pointer">${col.label}</label>
+                `;
+                div.onclick = (e) => {
+                    if (e.target.tagName !== 'INPUT') {
+                        const cb = div.querySelector('input');
+                        cb.checked = !cb.checked;
+                    }
+                };
+                container.appendChild(div);
+            });
+
+            document.getElementById("exportModal").classList.remove("hidden");
+        }
+
+        function closeExportModal() {
+            document.getElementById("exportModal").classList.add("hidden");
+        }
+
+        function selectAllColumns(val) {
+            document.querySelectorAll('.column-selector').forEach(cb => cb.checked = val);
+        }
+
+        function saveExportColumns() {
+            const checkboxes = document.querySelectorAll('.column-selector:checked');
+            const newSelection = Array.from(checkboxes).map(cb => cb.value);
+
+            if (newSelection.length === 0) {
+                alert("Please select at least one column to export.");
+                return;
+            }
+
+            selectedExportColumns = newSelection;
+            localStorage.setItem('tracker_export_columns_v1', JSON.stringify(newSelection));
+            closeExportModal();
+        }
+
+        function exportSelected() {
+            if (selectedKeys.size === 0) {
+                alert("Please select at least one row to export.");
+                return;
+            }
+
+            const dataToExport = lastResults
+                .filter(u => selectedKeys.has(`${u.key}_${u.created}`))
+                .map(u => {
+                    const row = {};
+                    selectedExportColumns.forEach(id => {
+                        const colDef = ALL_EXPORT_COLUMNS.find(c => c.id === id);
+                        let val = "-";
+                        switch (id) {
+                            case 'key': val = u.key; break;
+                            case 'summary': val = u.summary; break;
+                            case 'author': val = u.author.name; break;
+                            case 'time': val = new Date(u.created).toLocaleTimeString(); break;
+                            case 'from': val = u.from; break;
+                            case 'to': val = u.to; break;
+                            case 'date': val = new Date(u.created).toLocaleDateString(); break;
+                        }
+                        row[colDef.label] = val;
+                    });
+                    return row;
+                });
+
+            const ws = XLSX.utils.json_to_sheet(dataToExport);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "StatusUpdates");
+
+            const fileName = `Jira_Status_Export_${new Date().getTime()}.xlsx`;
+            XLSX.writeFile(wb, fileName);
+        }
+
+        async function showHistory(key) {
+            const modal = document.getElementById('historyModal');
+            const title = document.getElementById('modalTitle');
+            const summary = document.getElementById('modalSummary');
+            const content = document.getElementById('modalContent');
+
+            modal.classList.remove('hidden');
+            title.innerText = `History for ${key}`;
+            summary.innerText = "Loading details...";
+            content.innerHTML = '<div class="flex justify-center py-12"><div class="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div></div>';
+
+            try {
+                const res = await fetch(`/api/ticket_history/${key}`);
+                const data = await res.json();
+
+                if (data.error) throw new Error(data.error);
+
+                summary.innerText = data.summary;
+
+                if (data.history.length === 0) {
+                    content.innerHTML = '<div class="text-center py-12 text-gray-500">No history items found.</div>';
+                } else {
+                    content.innerHTML = data.history.map(item => `
+                        <div class="mb-6 last:mb-0 relative pl-8 border-l border-gray-800">
+                            <div class="absolute -left-[5px] top-0 w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]"></div>
+                            <div class="flex items-center gap-2 mb-2">
+                                <img src="${item.author.avatar}" class="w-5 h-5 rounded-full border border-gray-700">
+                                <span class="text-xs font-bold text-gray-300">${item.author.name}</span>
+                                <span class="text-[10px] text-gray-500 font-mono">${new Date(item.created).toLocaleString()}</span>
+                            </div>
+                            <div class="text-sm">
+                                <span class="text-gray-400">Changed </span>
+                                <span class="font-bold text-purple-400">${item.field}</span>
+                                <span class="text-gray-400"> from </span>
+                                <span class="text-gray-300 font-medium">${item.from || 'None'}</span>
+                                <span class="text-gray-500 mx-2">→</span>
+                                <span class="text-blue-300 font-medium">${item.to || 'None'}</span>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+
+            } catch (err) {
+                content.innerHTML = `<div class="text-center py-12 text-red-400">Error: ${err.message}</div>`;
+            }
+        }
+
+        function closeHistory() {
+            document.getElementById('historyModal').classList.add('hidden');
+        }
+    </script>
+</body>
+
+</html>

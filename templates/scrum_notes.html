@@ -1,0 +1,929 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Scrum Notes - {{ project }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .glass {
+            background: rgba(31, 41, 55, 0.75);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.07);
+        }
+
+        .tab-active {
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            color: white;
+        }
+
+        .status-badge-done {
+            background: rgba(16, 185, 129, 0.15);
+            color: #34d399;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .status-badge-pending {
+            background: rgba(251, 191, 36, 0.12);
+            color: #fbbf24;
+            border: 1px solid rgba(251, 191, 36, 0.3);
+        }
+
+        .priority-highest {
+            color: #ef4444;
+        }
+
+        .priority-high {
+            color: #f97316;
+        }
+
+        .priority-medium {
+            color: #f59e0b;
+        }
+
+        .priority-low {
+            color: #3b82f6;
+        }
+
+        .priority-lowest {
+            color: #6b7280;
+        }
+
+        .ticket-row:hover {
+            background: rgba(59, 130, 246, 0.06);
+        }
+
+        .member-card {
+            transition: box-shadow 0.2s;
+            border: 1px solid rgba(255, 255, 255, 0.07);
+        }
+
+        .member-card:hover {
+            box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.4);
+        }
+
+        .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-top-color: #60a5fa;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+            display: inline-block;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Modal backdrop */
+        .modal-backdrop {
+            background: rgba(0, 0, 0, 0.65);
+            backdrop-filter: blur(4px);
+        }
+
+        /* Scrollable report table */
+        .report-table-wrap {
+            overflow-x: auto;
+        }
+    </style>
+    <link rel="stylesheet" href="/static/theme.css">
+    <script src="/static/theme.js"></script>
+    <script src="/static/app.js"></script>
+</head>
+
+<body class="bg-gray-900 min-h-screen text-white font-sans">
+
+    <!-- ===== NAVBAR ===== -->
+    {% include 'navbar.html' %}
+
+    <!-- ===== MAIN ===== -->
+    <main class="pt-24 pb-16 px-6 max-w-7xl mx-auto">
+
+        <!-- Header -->
+        <div class="flex items-center justify-between mb-8">
+            <div>
+                <h1
+                    class="text-3xl font-black mb-1 bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-400">
+                    📋 Scrum Notes
+                </h1>
+                <p class="text-gray-400 text-sm">Your daily standup tracker — log tickets per teammate, per day.</p>
+            </div>
+            <!-- Tab switcher -->
+            <div class="flex gap-2 bg-gray-800 p-1 rounded-xl">
+                <button id="tabNotes" onclick="switchTab('notes')"
+                    class="tab-active px-5 py-2 rounded-lg text-sm font-semibold transition">
+                    📅 Daily Notes
+                </button>
+                <button id="tabReport" onclick="switchTab('report')"
+                    class="px-5 py-2 rounded-lg text-sm font-semibold text-gray-400 hover:text-white transition">
+                    📊 Report
+                </button>
+            </div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!--  TAB: DAILY NOTES                                            -->
+        <!-- ============================================================ -->
+        <div id="notesTab">
+            <!-- Controls: Date + Team -->
+            <div class="glass rounded-2xl p-5 mb-6 flex flex-wrap gap-4 items-end">
+
+                <!-- Calendar / Date navigator -->
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Date</label>
+                    <div class="flex items-center gap-2">
+                        <button onclick="shiftDate(-1)" title="Previous Day"
+                            class="bg-gray-700 hover:bg-gray-600 text-white w-9 h-9 rounded-lg font-bold transition flex items-center justify-center">‹</button>
+                        <input type="date" id="scrumDate"
+                            class="bg-gray-800 border border-gray-700 text-white rounded-lg px-3 h-9 outline-none focus:border-blue-500 transition text-sm"
+                            onchange="loadNotes()">
+                        <button onclick="shiftDate(1)" title="Next Day"
+                            class="bg-gray-700 hover:bg-gray-600 text-white w-9 h-9 rounded-lg font-bold transition flex items-center justify-center">›</button>
+                        <button onclick="goToday()"
+                            class="bg-blue-700 hover:bg-blue-600 text-white px-3 h-9 rounded-lg text-xs font-bold transition">Today</button>
+                    </div>
+                </div>
+
+                <!-- Team selector -->
+                <div class="flex-1 min-w-[200px]">
+                    <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Team</label>
+                    <select id="teamSelect" onchange="onTeamChange()"
+                        class="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 h-9 outline-none focus:border-blue-500 transition text-sm">
+                        <option value="">— Select a team —</option>
+                    </select>
+                </div>
+
+                <!-- Date display badge -->
+                <div class="ml-auto">
+                    <div id="dateDisplay" class="text-xl font-black text-white/80"></div>
+                    <div id="dayDisplay" class="text-xs text-gray-500 text-right"></div>
+                </div>
+            </div>
+
+            <!-- Loading / Empty states -->
+            <div id="notesLoading" class="hidden text-center py-16 text-gray-500">
+                <div class="spinner mx-auto mb-3"></div>
+                <p class="text-sm">Loading notes…</p>
+            </div>
+            <div id="notesEmpty" class="hidden glass rounded-2xl p-12 text-center text-gray-500">
+                <div class="text-5xl mb-4">📭</div>
+                <p class="text-lg font-semibold">No notes for this day yet.</p>
+                <p class="text-sm mt-1">Select a team and start adding tickets below.</p>
+            </div>
+
+            <!-- Member cards grid -->
+            <div id="membersGrid" class="space-y-4"></div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!--  TAB: REPORT                                                  -->
+        <!-- ============================================================ -->
+        <div id="reportTab" class="hidden">
+            <div class="glass rounded-2xl p-5 mb-6">
+                <div class="flex flex-wrap gap-4 items-end">
+                    <div>
+                        <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">From</label>
+                        <input type="date" id="reportStart"
+                            class="bg-gray-800 border border-gray-700 text-white rounded-lg px-3 h-9 outline-none focus:border-blue-500 transition text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">To</label>
+                        <input type="date" id="reportEnd"
+                            class="bg-gray-800 border border-gray-700 text-white rounded-lg px-3 h-9 outline-none focus:border-blue-500 transition text-sm">
+                    </div>
+                    <div class="min-w-[180px]">
+                        <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Team</label>
+                        <select id="reportTeam" onchange="loadReportMembers()"
+                            class="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 h-9 outline-none focus:border-blue-500 transition text-sm">
+                            <option value="">All Teams</option>
+                        </select>
+                    </div>
+                    <div class="min-w-[180px]">
+                        <label
+                            class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Member</label>
+                        <select id="reportMember"
+                            class="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 h-9 outline-none focus:border-blue-500 transition text-sm">
+                            <option value="">All Members</option>
+                        </select>
+                    </div>
+                    <button onclick="generateReport()"
+                        class="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-bold px-6 h-9 rounded-lg shadow-lg transition">
+                        Generate Report
+                    </button>
+                </div>
+            </div>
+
+            <!-- Report Summary Cards -->
+            <div id="reportSummary" class="hidden grid grid-cols-2 md:grid-cols-4 gap-4 mb-6"></div>
+
+            <!-- Report Table -->
+            <div id="reportTableWrap" class="hidden glass rounded-2xl overflow-hidden">
+                <div class="p-4 border-b border-gray-700 flex items-center justify-between">
+                    <span class="font-bold text-sm" id="reportCount">0 notes found</span>
+                    <button onclick="exportReport()"
+                        class="text-xs text-blue-400 hover:text-blue-300 transition font-semibold">↓ Export CSV</button>
+                </div>
+                <div class="report-table-wrap">
+                    <table class="w-full text-sm" id="reportTable">
+                        <thead>
+                            <tr class="text-gray-400 text-xs uppercase tracking-wider bg-gray-800/60">
+                                <th class="px-4 py-3 text-left">Date</th>
+                                <th class="px-4 py-3 text-left">Member</th>
+                                <th class="px-4 py-3 text-left">Ticket</th>
+                                <th class="px-4 py-3 text-left">Summary</th>
+                                <th class="px-4 py-3 text-left">Status</th>
+                                <th class="px-4 py-3 text-left">Priority</th>
+                                <th class="px-4 py-3 text-left">Deadline</th>
+                                <th class="px-4 py-3 text-left">Comment</th>
+                                <th class="px-4 py-3 text-left">Note Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="reportBody" class="divide-y divide-gray-800"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div id="reportEmpty" class="hidden glass rounded-2xl p-12 text-center text-gray-500">
+                <div class="text-5xl mb-4">📊</div>
+                <p>No notes found for the selected filters.</p>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- ============================================================ -->
+    <!--  ADD TICKET MODAL                                            -->
+    <!-- ============================================================ -->
+    <div id="addTicketModal" class="fixed inset-0 z-[60] hidden">
+        <div class="modal-backdrop absolute inset-0" onclick="closeModal()"></div>
+        <div
+            class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg glass rounded-2xl p-8 shadow-2xl">
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-xl font-bold">Add Ticket</h3>
+                <button onclick="closeModal()"
+                    class="text-gray-500 hover:text-white transition text-2xl leading-none">&times;</button>
+            </div>
+
+            <!-- Hidden meta -->
+            <input type="hidden" id="modalMemberId">
+            <input type="hidden" id="modalMemberName">
+
+            <!-- Ticket Key Input -->
+            <div class="mb-4">
+                <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Ticket Key <span
+                        class="text-blue-400">*</span></label>
+                <div class="flex gap-2">
+                    <input type="text" id="ticketKeyInput" placeholder="e.g. TIM-1234"
+                        class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 outline-none focus:border-blue-500 transition text-sm uppercase"
+                        oninput="this.value=this.value.toUpperCase()" onkeydown="if(event.key==='Enter') fetchTicket()">
+                    <button onclick="fetchTicket()" id="fetchBtn"
+                        class="bg-blue-600 hover:bg-blue-500 text-white px-4 rounded-lg font-bold transition text-sm">
+                        Fetch
+                    </button>
+                </div>
+            </div>
+
+            <!-- Jira Preview -->
+            <div id="ticketPreview"
+                class="hidden bg-gray-800/70 border border-gray-700 rounded-xl p-4 mb-4 text-sm space-y-2">
+                <div class="flex items-start gap-3">
+                    <div class="flex-1">
+                        <div class="flex items-center gap-2 mb-1">
+                            <span id="previewKey" class="font-mono font-bold text-blue-400 text-xs"></span>
+                            <span id="previewType" class="text-xs text-gray-500"></span>
+                        </div>
+                        <p id="previewSummary" class="font-semibold text-white leading-snug"></p>
+                        <div class="flex gap-4 mt-2">
+                            <span class="text-xs text-gray-400">Status: <span id="previewStatus"
+                                    class="text-gray-200 font-medium"></span></span>
+                            <span class="text-xs text-gray-400">Priority: <span id="previewPriority"
+                                    class="font-medium"></span></span>
+                            <span class="text-xs text-gray-400">Assignee: <span id="previewAssignee"
+                                    class="text-gray-200"></span></span>
+                        </div>
+                    </div>
+                    <div class="flex flex-col items-center gap-2">
+                        <span class="text-green-400 text-xl leading-none">✓</span>
+                        <button onclick="clearTicketPreview()" title="Clear Ticket"
+                            class="text-gray-500 hover:text-red-400 font-bold transition text-lg leading-none">&times;</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="ticketError"
+                class="hidden bg-red-900/30 border border-red-700/50 rounded-xl p-3 mb-4 text-sm text-red-400"></div>
+
+            <!-- Comment -->
+            <div class="mb-4">
+                <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Comment <span
+                        class="text-gray-600">(optional)</span></label>
+                <textarea id="ticketComment" rows="2" placeholder="e.g. Will complete today, blocked on API review…"
+                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 outline-none focus:border-blue-500 transition text-sm resize-none"></textarea>
+            </div>
+
+            <!-- Deadline -->
+            <div class="mb-6">
+                <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Deadline <span
+                        class="text-gray-600">(optional)</span></label>
+                <input type="date" id="ticketDeadline"
+                    class="bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 outline-none focus:border-blue-500 transition text-sm">
+            </div>
+
+            <div class="flex justify-end gap-3">
+                <button onclick="closeModal()"
+                    class="text-gray-400 hover:text-white font-medium px-4 py-2 transition">Cancel</button>
+                <button onclick="saveTicketNote()" id="saveBtn"
+                    class="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-bold px-6 py-2 rounded-lg shadow-lg transition">
+                    Save Note
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!--  INLINE EDIT MODAL (comment + deadline)                      -->
+    <!-- ============================================================ -->
+    <div id="editModal" class="fixed inset-0 z-[60] hidden">
+        <div class="modal-backdrop absolute inset-0" onclick="closeEditModal()"></div>
+        <div
+            class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md glass rounded-2xl p-8 shadow-2xl">
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-xl font-bold">Edit Note — <span id="editKey" class="text-blue-400 font-mono"></span>
+                </h3>
+                <button onclick="closeEditModal()"
+                    class="text-gray-500 hover:text-white transition text-2xl leading-none">&times;</button>
+            </div>
+            <input type="hidden" id="editNoteId">
+            <div class="mb-4">
+                <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Comment</label>
+                <textarea id="editComment" rows="3"
+                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 outline-none focus:border-blue-500 transition text-sm resize-none"></textarea>
+            </div>
+            <div class="mb-6">
+                <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Deadline</label>
+                <input type="date" id="editDeadline"
+                    class="bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 outline-none focus:border-blue-500 transition text-sm">
+            </div>
+            <div class="flex justify-end gap-3">
+                <button onclick="closeEditModal()"
+                    class="text-gray-400 hover:text-white font-medium px-4 py-2 transition">Cancel</button>
+                <button onclick="saveEdit()"
+                    class="bg-blue-600 hover:bg-blue-500 text-white font-bold px-6 py-2 rounded-lg transition">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!--  SCRIPT                                                       -->
+    <!-- ============================================================ -->
+    <script>
+        // ─── State ───────────────────────────────────────────────────────
+        let allTeams = [];
+        let currentMembers = []; // [{id, displayName, avatar_url}]
+        let currentNotes = [];   // notes from DB for today
+        let jiraCache = {};      // key -> ticket info cache
+        let reportData = [];
+        let currentModalMemberId = '';  // set when opening Add Ticket modal, never from DOM
+        let currentModalMemberName = '';
+
+        // ─── Init ────────────────────────────────────────────────────────
+        (async function init() {
+            // Set today's date
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('scrumDate').value = today;
+            updateDateDisplay(today);
+
+            // Load teams
+            await loadTeams();
+
+            // Default report dates (last 7 days)
+            const d = new Date();
+            document.getElementById('reportEnd').value = today;
+            d.setDate(d.getDate() - 7);
+            document.getElementById('reportStart').value = d.toISOString().split('T')[0];
+        })();
+
+        // ─── Tabs ─────────────────────────────────────────────────────────
+        function switchTab(tab) {
+            document.getElementById('notesTab').classList.toggle('hidden', tab !== 'notes');
+            document.getElementById('reportTab').classList.toggle('hidden', tab !== 'report');
+            document.getElementById('tabNotes').className = tab === 'notes'
+                ? 'tab-active px-5 py-2 rounded-lg text-sm font-semibold transition'
+                : 'px-5 py-2 rounded-lg text-sm font-semibold text-gray-400 hover:text-white transition';
+            document.getElementById('tabReport').className = tab === 'report'
+                ? 'tab-active px-5 py-2 rounded-lg text-sm font-semibold transition'
+                : 'px-5 py-2 rounded-lg text-sm font-semibold text-gray-400 hover:text-white transition';
+        }
+
+        // ─── Date helpers ─────────────────────────────────────────────────
+        function shiftDate(delta) {
+            const el = document.getElementById('scrumDate');
+            const d = new Date(el.value + 'T12:00:00');
+            d.setDate(d.getDate() + delta);
+            el.value = d.toISOString().split('T')[0];
+            updateDateDisplay(el.value);
+            loadNotes();
+        }
+
+        function goToday() {
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('scrumDate').value = today;
+            updateDateDisplay(today);
+            loadNotes();
+        }
+
+        function updateDateDisplay(iso) {
+            const d = new Date(iso + 'T12:00:00');
+            const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            document.getElementById('dateDisplay').textContent =
+                `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+            document.getElementById('dayDisplay').textContent = days[d.getDay()];
+        }
+
+        // ─── Teams ────────────────────────────────────────────────────────
+        async function loadTeams() {
+            const res = await fetch('/api/teams');
+            allTeams = await res.json();
+
+            const sel = document.getElementById('teamSelect');
+            const rSel = document.getElementById('reportTeam');
+            allTeams.forEach(t => {
+                sel.add(new Option(t.name, t.id));
+                rSel.add(new Option(t.name, t.id));
+            });
+        }
+
+        async function onTeamChange() {
+            const teamId = document.getElementById('teamSelect').value;
+            if (!teamId) { document.getElementById('membersGrid').innerHTML = ''; return; }
+            await loadMembers(teamId);
+            await loadNotes();
+        }
+
+        async function loadMembers(teamId) {
+            const res = await fetch(`/api/teams/${teamId}/members`);
+            currentMembers = await res.json();
+        }
+
+        // ─── Notes (Daily) ────────────────────────────────────────────────
+        async function loadNotes() {
+            const date = document.getElementById('scrumDate').value;
+            const teamId = document.getElementById('teamSelect').value;
+            if (!teamId || !date) return;
+
+            document.getElementById('notesLoading').classList.remove('hidden');
+            document.getElementById('membersGrid').innerHTML = '';
+            document.getElementById('notesEmpty').classList.add('hidden');
+
+            const res = await fetch(`/api/scrum_notes?date=${date}&team_id=${teamId}`);
+            const data = await res.json();
+            currentNotes = Array.isArray(data) ? data : [];
+
+            document.getElementById('notesLoading').classList.add('hidden');
+
+            if (currentMembers.length === 0) {
+                document.getElementById('notesEmpty').classList.remove('hidden');
+                return;
+            }
+
+            // Pre-fetch Jira data for all unique ticket keys not in cache
+            const keys = [...new Set(currentNotes.map(n => n.ticket_key).filter(k => k && !jiraCache[k]))];
+            await Promise.all(keys.map(k => fetchJiraAndCache(k)));
+
+            renderMemberCards();
+        }
+
+        async function fetchJiraAndCache(key) {
+            try {
+                const headers = window.getApiHeaders ? window.getApiHeaders() : {
+                    'X-Project-Key': (localStorage.getItem("project_key") || "").trim().toUpperCase()
+                };
+                const res = await fetch(`/api/jira/ticket/${key}`, { headers });
+                if (res.ok) jiraCache[key] = await res.json();
+            } catch (_) { }
+        }
+
+        function renderMemberCards() {
+            const grid = document.getElementById('membersGrid');
+            const date = document.getElementById('scrumDate').value;
+            const teamId = document.getElementById('teamSelect').value;
+
+            if (currentMembers.length === 0) {
+                document.getElementById('notesEmpty').classList.remove('hidden');
+                return;
+            }
+
+            grid.innerHTML = currentMembers.map(member => {
+                const memberId = member.accountId ?? member.account_id;
+                const matchNote = (n) => {
+                    const idMatch = memberId != null && String(n.member_id).trim() === String(memberId).trim();
+                    const nameMatch = n.member_name && member.displayName &&
+                        String(n.member_name).trim().toLowerCase() === String(member.displayName).trim().toLowerCase();
+                    return idMatch || nameMatch;
+                };
+                const notes = currentNotes.filter(matchNote);
+                const avatarColor = getAvatarColor(member.displayName);
+                const initials = getInitials(member.displayName);
+
+                const rows = notes.length === 0
+                    ? `<tr><td colspan="7" class="px-4 py-6 text-center text-gray-600 text-sm italic">No tickets logged yet</td></tr>`
+                    : notes.map(n => {
+                        const jira = jiraCache[n.ticket_key] || {};
+                        const priority = jira.priority || '—';
+                        const statusText = jira.status || '—';
+                        const summary = jira.summary || '<span class="text-gray-600 italic">Loading…</span>';
+                        const noteStatus = n.status;
+                        const isOwner = jira.assignee || '—';
+                        return `
+                <tr class="ticket-row transition" data-note-id="${n.id}">
+                    <td class="px-4 py-3">
+                        <a href="https://lumberfi.atlassian.net/browse/${n.ticket_key}" target="_blank"
+                           class="font-mono text-blue-400 hover:text-blue-300 font-bold text-xs transition">${n.ticket_key}</a>
+                    </td>
+                    <td class="px-4 py-3 text-gray-200 text-xs max-w-xs truncate" title="${jira.summary || ''}">${summary}</td>
+                    <td class="px-4 py-3">
+                        <span class="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">${statusText}</span>
+                    </td>
+                    <td class="px-4 py-3 text-xs priority-${(priority || '').toLowerCase()}">${priority}</td>
+                    <td class="px-4 py-3 text-xs text-gray-400">${n.deadline || '—'}</td>
+                    <td class="px-4 py-3 text-xs text-gray-300 max-w-[160px] truncate" title="${n.comment || ''}">${n.comment || '<span class="text-gray-600 italic">—</span>'}</td>
+                    <td class="px-4 py-3">
+                        <div class="flex items-center gap-1.5 flex-nowrap">
+                            <span class="text-xs px-2 py-0.5 rounded-full font-semibold ${noteStatus === 'Done' ? 'status-badge-done' : 'status-badge-pending'}">
+                                ${noteStatus}
+                            </span>
+                            <button onclick="toggleStatus(${n.id}, '${noteStatus}')" title="Toggle status"
+                                class="text-gray-500 hover:text-green-400 transition text-base leading-none">✓</button>
+                            <button onclick="openEditModal(${n.id}, '${n.ticket_key}', \`${(n.comment || '').replace(/`/g, '\\`')}\`, '${n.deadline || ''}')" title="Edit"
+                                class="text-gray-500 hover:text-yellow-400 transition">✎</button>
+                            <button onclick="deleteNote(${n.id})" title="Delete"
+                                class="text-gray-600 hover:text-red-400 transition ml-0.5">✕</button>
+                        </div>
+                    </td>
+                </tr>`;
+                    }).join('');
+
+                const safeId = (memberId && String(memberId) !== 'undefined') ? memberId : '';
+
+                return `
+        <div class="member-card glass rounded-2xl overflow-hidden">
+            <!-- Member header -->
+            <div class="flex items-center gap-3 px-5 py-4 bg-gray-800/60 border-b border-gray-700/60">
+                <div class="flex-shrink-0 w-9 h-9 rounded-full ${avatarColor} flex items-center justify-center text-xs font-black text-white shadow-md">
+                    ${initials}
+                </div>
+                <div class="flex-1">
+                    <h3 class="font-bold text-white text-sm">${member.displayName}</h3>
+                    <p class="text-xs text-gray-500">${notes.length} ticket${notes.length !== 1 ? 's' : ''} today</p>
+                </div>
+                <button type="button" class="add-ticket-btn bg-blue-600/80 hover:bg-blue-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition flex items-center gap-1.5"
+                    data-member-id="${String(safeId).replace(/"/g, '&quot;')}"
+                    data-member-name="${String(member.displayName || '').replace(/"/g, '&quot;')}">
+                    <span class="text-base leading-none">+</span> Add Ticket
+                </button>
+            </div>
+            <!-- Ticket table -->
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-gray-500 text-[11px] uppercase tracking-wider">
+                            <th class="px-4 py-2 text-left">Ticket</th>
+                            <th class="px-4 py-2 text-left">Summary</th>
+                            <th class="px-4 py-2 text-left">Status</th>
+                            <th class="px-4 py-2 text-left">Priority</th>
+                            <th class="px-4 py-2 text-left">Deadline</th>
+                            <th class="px-4 py-2 text-left">Comment</th>
+                            <th class="px-4 py-2 text-left">Note</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-800/60">${rows}</tbody>
+                </table>
+            </div>
+        </div>`;
+            }).join('');
+        }
+
+        // ─── "Add Ticket" Modal ───────────────────────────────────────────
+        document.addEventListener('click', function(e) {
+            const btn = e.target.closest('.add-ticket-btn');
+            if (!btn) return;
+            const id = (btn.getAttribute('data-member-id') || '').trim();
+            const name = (btn.getAttribute('data-member-name') || '').trim();
+            openAddModal(id, name);
+        });
+        function openAddModal(memberId, memberName) {
+            var s = typeof memberId === 'string' ? memberId.trim() : '';
+            if (s === '' || s === 'undefined') s = '';
+            currentModalMemberId = s;
+            currentModalMemberName = (memberName != null && String(memberName) !== 'undefined') ? String(memberName).trim() : '';
+            document.getElementById('modalMemberId').value = currentModalMemberId;
+            document.getElementById('modalMemberName').value = currentModalMemberName;
+            document.getElementById('ticketKeyInput').value = '';
+            document.getElementById('ticketComment').value = '';
+            document.getElementById('ticketDeadline').value = '';
+            document.getElementById('ticketPreview').classList.add('hidden');
+            document.getElementById('ticketError').classList.add('hidden');
+            document.getElementById('addTicketModal').classList.remove('hidden');
+            setTimeout(() => document.getElementById('ticketKeyInput').focus(), 50);
+        }
+
+        function closeModal() {
+            document.getElementById('addTicketModal').classList.add('hidden');
+        }
+
+        async function fetchTicket() {
+            let keyValue = document.getElementById('ticketKeyInput').value.trim().toUpperCase();
+            if (!keyValue) return;
+
+            // Auto-prepend TIM- if purely numeric
+            if (/^\d+$/.test(keyValue)) {
+                keyValue = 'TIM-' + keyValue;
+                document.getElementById('ticketKeyInput').value = keyValue;
+            }
+
+            const key = keyValue; // use the updated key for the fetch call
+
+            const btn = document.getElementById('fetchBtn');
+            btn.innerHTML = '<span class="spinner"></span>';
+            btn.disabled = true;
+
+            document.getElementById('ticketPreview').classList.add('hidden');
+            document.getElementById('ticketError').classList.add('hidden');
+
+            try {
+                // Use getApiHeaders() if available, otherwise manually construct
+                const headers = window.getApiHeaders ? window.getApiHeaders() : {
+                    'X-Project-Key': (localStorage.getItem("project_key") || "").trim().toUpperCase()
+                };
+
+                const res = await fetch(`/api/jira/ticket/${key}`, {
+                    headers: headers
+                });
+                const data = await res.json();
+
+                if (!res.ok || data.error) {
+                    document.getElementById('ticketError').textContent = data.error || 'Ticket not found.';
+                    document.getElementById('ticketError').classList.remove('hidden');
+                } else {
+                    jiraCache[data.key] = data;
+                    document.getElementById('previewKey').textContent = data.key;
+                    document.getElementById('previewType').textContent = data.type || '';
+                    document.getElementById('previewSummary').textContent = data.summary || '—';
+                    document.getElementById('previewStatus').textContent = data.status || '—';
+                    const pEl = document.getElementById('previewPriority');
+                    pEl.textContent = data.priority || '—';
+                    pEl.className = `font-medium priority-${(data.priority || '').toLowerCase()}`;
+                    document.getElementById('previewAssignee').textContent = data.assignee || 'Unassigned';
+                    document.getElementById('ticketPreview').classList.remove('hidden');
+                }
+            } catch (e) {
+                document.getElementById('ticketError').textContent = 'Network error. Please try again.';
+                document.getElementById('ticketError').classList.remove('hidden');
+            }
+
+            btn.innerHTML = 'Fetch';
+            btn.disabled = false;
+        }
+
+        function clearTicketPreview() {
+            document.getElementById('ticketKeyInput').value = '';
+            document.getElementById('ticketPreview').classList.add('hidden');
+            document.getElementById('ticketError').classList.add('hidden');
+            document.getElementById('ticketKeyInput').focus();
+        }
+
+        async function saveTicketNote() {
+            let key = document.getElementById('ticketKeyInput').value.trim().toUpperCase();
+            if (!key) { alert('Please enter a ticket key.'); return; }
+
+            // Auto-prepend TIM- if purely numeric
+            if (/^\d+$/.test(key)) {
+                key = 'TIM-' + key;
+                document.getElementById('ticketKeyInput').value = key;
+            }
+            if (document.getElementById('ticketPreview').classList.contains('hidden')) {
+                alert('Please fetch the ticket first to validate it.');
+                return;
+            }
+
+            const date = document.getElementById('scrumDate').value;
+            const teamId = document.getElementById('teamSelect').value;
+            const memberName = (currentModalMemberName || (document.getElementById('modalMemberName').value || '')).trim();
+            const comment = document.getElementById('ticketComment').value.trim();
+            const deadline = document.getElementById('ticketDeadline').value || null;
+
+            // Always resolve member_id from currentMembers by name — never use hidden input (avoids "undefined" from cache)
+            var memberId = '';
+            if (memberName && Array.isArray(currentMembers)) {
+                var m = currentMembers.find(function(mem) { return (mem.displayName || '').trim().toLowerCase() === memberName.toLowerCase(); });
+                if (m) memberId = String(m.accountId || m.account_id || '');
+            }
+            
+            // Ensure memberId is not "undefined" string
+            if (memberId === 'undefined') memberId = '';
+
+            if (!memberId) {
+                alert('Could not determine team member. Please select the team again, then click "Add Ticket" for that person.');
+                return;
+            }
+
+            const btn = document.getElementById('saveBtn');
+            btn.textContent = 'Saving…'; btn.disabled = true;
+
+            var payload = { date: date, team_id: teamId, member_id: memberId, member_name: memberName, ticket_key: key, comment: comment, deadline: deadline };
+
+            const projectKey = (localStorage.getItem("project_key") || "").trim().toUpperCase();
+            const res = await fetch('/api/scrum_notes', {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'X-Project-Key': projectKey
+                },
+                body: JSON.stringify(payload)
+            });
+
+            btn.textContent = 'Save Note'; btn.disabled = false;
+
+            if (res.ok) {
+                closeModal();
+                await loadNotes();
+            } else {
+                const e = await res.json();
+                alert(e.error || 'Failed to save note.');
+            }
+        }
+
+        // ─── Edit Modal ───────────────────────────────────────────────────
+        function openEditModal(noteId, ticketKey, comment, deadline) {
+            document.getElementById('editNoteId').value = noteId;
+            document.getElementById('editKey').textContent = ticketKey;
+            document.getElementById('editComment').value = comment;
+            document.getElementById('editDeadline').value = deadline || '';
+            document.getElementById('editModal').classList.remove('hidden');
+            setTimeout(() => document.getElementById('editComment').focus(), 50);
+        }
+        function closeEditModal() { document.getElementById('editModal').classList.add('hidden'); }
+
+        async function saveEdit() {
+            const noteId = document.getElementById('editNoteId').value;
+            const comment = document.getElementById('editComment').value.trim();
+            const deadline = document.getElementById('editDeadline').value || null;
+            const projectKey = (localStorage.getItem("project_key") || "").trim().toUpperCase();
+            const res = await fetch(`/api/scrum_notes/${noteId}`, {
+                method: 'PUT',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'X-Project-Key': projectKey
+                },
+                body: JSON.stringify({ comment, deadline })
+            });
+            if (res.ok) { closeEditModal(); await loadNotes(); }
+            else alert('Failed to save.');
+        }
+
+        // ─── Toggle status / Delete ───────────────────────────────────────
+        async function toggleStatus(noteId, currentStatus) {
+            const newStatus = currentStatus === 'Done' ? 'Pending' : 'Done';
+            await fetch(`/api/scrum_notes/${noteId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: newStatus })
+            });
+            await loadNotes();
+        }
+
+        async function deleteNote(noteId) {
+            if (!confirm('Delete this note?')) return;
+            const projectKey = (localStorage.getItem("project_key") || "").trim().toUpperCase();
+            await fetch(`/api/scrum_notes/${noteId}`, { 
+                method: 'DELETE',
+                headers: { 'X-Project-Key': projectKey }
+            });
+            await loadNotes();
+        }
+
+        // ─── Report ───────────────────────────────────────────────────────
+        async function loadReportMembers() {
+            const teamId = document.getElementById('reportTeam').value;
+            const sel = document.getElementById('reportMember');
+            sel.innerHTML = '<option value="">All Members</option>';
+            if (!teamId) return;
+            const projectKey = (localStorage.getItem("project_key") || "").trim().toUpperCase();
+            const res = await fetch(`/api/teams/${teamId}/members`, {
+                headers: { 'X-Project-Key': projectKey }
+            });
+            const members = await res.json();
+            members.forEach(m => sel.add(new Option(m.displayName, m.accountId)));
+        }
+
+        async function generateReport() {
+            const start = document.getElementById('reportStart').value;
+            const end = document.getElementById('reportEnd').value;
+            const teamId = document.getElementById('reportTeam').value;
+            const memberId = document.getElementById('reportMember').value;
+
+            if (!start || !end) { alert('Please select a date range.'); return; }
+
+            let url = `/api/scrum_notes/report?start=${start}&end=${end}`;
+            if (teamId) url += `&team_id=${teamId}`;
+            if (memberId) url += `&member_id=${memberId}`;
+
+            const res = await fetch(url);
+            reportData = await res.json();
+
+            // Fetch Jira details for tickets not cached
+            const keys = [...new Set(reportData.map(n => n.ticket_key).filter(k => !jiraCache[k]))];
+            await Promise.all(keys.map(k => fetchJiraAndCache(k)));
+
+            renderReport();
+        }
+
+        function renderReport() {
+            const wrap = document.getElementById('reportTableWrap');
+            const empty = document.getElementById('reportEmpty');
+            const summary = document.getElementById('reportSummary');
+
+            if (reportData.length === 0) {
+                wrap.classList.add('hidden'); empty.classList.remove('hidden');
+                summary.classList.add('hidden');
+                return;
+            }
+
+            empty.classList.add('hidden');
+            wrap.classList.remove('hidden');
+
+            // Summary cards
+            const totalTickets = reportData.length;
+            const done = reportData.filter(n => n.status === 'Done').length;
+            const members = new Set(reportData.map(n => n.member_id)).size;
+            const days = new Set(reportData.map(n => n.date)).size;
+
+            summary.className = 'grid grid-cols-2 md:grid-cols-4 gap-4 mb-6';
+            summary.innerHTML = [
+                { label: 'Total Notes', value: totalTickets, color: 'text-blue-400' },
+                { label: 'Completed', value: done, color: 'text-green-400' },
+                { label: 'Members', value: members, color: 'text-purple-400' },
+                { label: 'Days', value: days, color: 'text-yellow-400' }
+            ].map(s => `
+        <div class="glass rounded-xl p-4 text-center">
+            <div class="text-3xl font-black ${s.color}">${s.value}</div>
+            <div class="text-xs text-gray-400 mt-1 uppercase tracking-wider">${s.label}</div>
+        </div>`).join('');
+
+            document.getElementById('reportCount').textContent = `${totalTickets} note${totalTickets !== 1 ? 's' : ''} found`;
+
+            const tbody = document.getElementById('reportBody');
+            tbody.innerHTML = reportData.map(n => {
+                const jira = jiraCache[n.ticket_key] || {};
+                const statusBadge = n.status === 'Done'
+                    ? '<span class="status-badge-done text-xs px-2 py-0.5 rounded-full font-semibold">Done</span>'
+                    : '<span class="status-badge-pending text-xs px-2 py-0.5 rounded-full font-semibold">Pending</span>';
+                return `
+        <tr class="hover:bg-gray-800/40 transition">
+            <td class="px-4 py-3 text-xs text-gray-400 font-mono whitespace-nowrap">${n.date}</td>
+            <td class="px-4 py-3 text-sm font-semibold">${n.member_name}</td>
+            <td class="px-4 py-3">
+                <a href="https://lumberfi.atlassian.net/browse/${n.ticket_key}" target="_blank"
+                   class="font-mono text-blue-400 hover:text-blue-300 font-bold text-xs transition">${n.ticket_key}</a>
+            </td>
+            <td class="px-4 py-3 text-xs text-gray-300 max-w-xs truncate" title="${jira.summary || ''}">${jira.summary || '—'}</td>
+            <td class="px-4 py-3"><span class="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">${jira.status || '—'}</span></td>
+            <td class="px-4 py-3 text-xs priority-${(jira.priority || '').toLowerCase()}">${jira.priority || '—'}</td>
+            <td class="px-4 py-3 text-xs text-gray-400">${n.deadline || '—'}</td>
+            <td class="px-4 py-3 text-xs text-gray-300 max-w-[160px] truncate" title="${n.comment || ''}">${n.comment || '—'}</td>
+            <td class="px-4 py-3">${statusBadge}</td>
+        </tr>`;
+            }).join('');
+        }
+
+        function exportReport() {
+            if (!reportData.length) return;
+            const headers = ['Date', 'Member', 'Ticket', 'Summary', 'Jira Status', 'Priority', 'Deadline', 'Comment', 'Note Status'];
+            const rows = reportData.map(n => {
+                const jira = jiraCache[n.ticket_key] || {};
+                return [n.date, n.member_name, n.ticket_key, jira.summary || '', jira.status || '', jira.priority || '', n.deadline || '', n.comment || '', n.status];
+            });
+            const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+            const a = document.createElement('a');
+            a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+            a.download = `scrum_notes_${document.getElementById('reportStart').value}_to_${document.getElementById('reportEnd').value}.csv`;
+            a.click();
+        }
+
+        // ─── Helpers ─────────────────────────────────────────────────────
+        function getInitials(name) {
+            return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+        }
+        function getAvatarColor(name) {
+            const colors = ['bg-blue-600', 'bg-purple-600', 'bg-emerald-600', 'bg-pink-600', 'bg-amber-600', 'bg-indigo-600', 'bg-cyan-600', 'bg-rose-600'];
+            let h = 0;
+            for (let i = 0; i < name.length; i++) h = name.charCodeAt(i) + ((h << 5) - h);
+            return colors[Math.abs(h) % colors.length];
+        }
+    </script>
+</body>
+
+</html>

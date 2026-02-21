@@ -1,0 +1,32 @@
+# Environments
+venv/
+env/
+.env
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Databases
+*.db
+*.sqlite3
+reports.db
+jira_analytics.db
+tracker.db
+
+# Logs and debug files
+*.log
+debug_output.txt
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# IDEs and Editors
+.vscode/
+.idea/
+
+# Custom data files
+*.json
+TIM-22374.json

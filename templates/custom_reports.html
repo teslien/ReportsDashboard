@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Custom Reports - {{ project }}</title>
+    <!-- Tailwind -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .glass {
+            background: rgba(255, 255, 255, 0.05);
+            /* Matching index.html glass for consistency? actually keeping existing subtle glass if fine, but index used rgba(31, 41, 55, 0.7). I'll stick to dark glass */
+            background: rgba(31, 41, 55, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+    </style>
+    <link rel="stylesheet" href="/static/theme.css">
+    <script src="/static/theme.js"></script>
+</head>
+
+<body class="bg-gray-900 min-h-screen text-white font-sans">
+
+    <!-- Navigation -->
+    {% include 'navbar.html' %}
+
+    <!-- Main Content -->
+    <main class="pt-24 pb-12 px-6 max-w-7xl mx-auto">
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-8">
+            <h1 class="text-3xl font-bold text-white">Custom Reports</h1>
+            <button onclick="toggleModal()"
+                class="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-lg font-bold shadow-lg transition">
+                + New Report
+            </button>
+        </div>
+
+        <!-- Reports Grid -->
+        <div id="reportsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <!-- Cards injected via JS -->
+            <div class="glass p-6 rounded-xl text-center text-gray-500 italic">
+                No reports found. Create one to get started!
+            </div>
+        </div>
+    </main>
+
+    <div id="modal" class="fixed inset-0 bg-black/80 hidden flex items-center justify-center z-50">
+        <div class="bg-gray-800 p-8 rounded-xl w-full max-w-lg shadow-2xl border border-gray-700">
+            <h2 id="modalTitle" class="text-2xl font-bold mb-6">Create New Filter</h2>
+            <input type="hidden" id="editReportId">
+
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Report Name</label>
+                    <input id="reportName" type="text"
+                        class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white outline-none focus:border-blue-500"
+                        placeholder="e.g. High Priority bugs">
+                </div>
+
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">JQL Query</label>
+                    <textarea id="reportJql" rows="4"
+                        class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white font-mono text-sm outline-none focus:border-blue-500"
+                        placeholder="project = ABC AND status = Done..."></textarea>
+                    <p class="text-xs text-gray-500 mt-1">Accepts standard Jira Query Language</p>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 mt-8">
+                <button onclick="toggleModal()" class="text-gray-400 hover:text-white px-4 py-2">Cancel</button>
+                <button onclick="saveReport()"
+                    class="bg-green-600 hover:bg-green-500 px-6 py-2 rounded font-bold transition">Save Report</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+    <script>
+        // Load reports on start
+        window.onload = renderReports;
+
+        function getReports() {
+            const stored = localStorage.getItem('reports_v1');
+            return stored ? JSON.parse(stored) : [];
+        }
+
+        function saveReport() {
+            const name = document.getElementById('reportName').value.trim();
+            const jql = document.getElementById('reportJql').value.trim();
+            const editId = document.getElementById('editReportId').value;
+
+            if (!name || !jql) return alert("Please fill all fields");
+
+            let reports = getReports();
+
+            if (editId) {
+                // Update existing
+                reports = reports.map(r => r.id === editId ? { ...r, name, jql } : r);
+            } else {
+                // Create new
+                const id = 'rep_' + Date.now();
+                reports.push({ id, name, jql, created: Date.now() });
+            }
+
+            localStorage.setItem('reports_v1', JSON.stringify(reports));
+
+            // Clear inputs
+            document.getElementById('reportName').value = "";
+            document.getElementById('reportJql').value = "";
+            document.getElementById('editReportId').value = "";
+
+            toggleModal();
+            renderReports();
+        }
+
+        function deleteReport(id) {
+            if (!confirm("Delete this report?")) return;
+            const reports = getReports().filter(r => r.id !== id);
+            localStorage.setItem('reports_v1', JSON.stringify(reports));
+
+            // Also clean up cache if it exists
+            localStorage.removeItem(`cache_${id}`);
+
+            renderReports();
+        }
+
+        function editReport(id) {
+            const reports = getReports();
+            const report = reports.find(r => r.id === id);
+            if (!report) return;
+
+            document.getElementById('modalTitle').innerText = "Edit Report";
+            document.getElementById('editReportId').value = report.id;
+            document.getElementById('reportName').value = report.name;
+            document.getElementById('reportJql').value = report.jql;
+
+            toggleModal();
+        }
+
+        function renderReports() {
+            const reports = getReports();
+            const grid = document.getElementById("reportsGrid");
+
+            if (reports.length === 0) {
+                grid.innerHTML = `<div class="col-span-1 md:col-span-3 text-center text-gray-500 py-12">No reports yet. Click "New Report" to add one.</div>`;
+                return;
+            }
+
+            grid.innerHTML = "";
+            reports.forEach(r => {
+                const date = new Date(r.created).toLocaleDateString();
+                const card = document.createElement("div");
+                card.className = "glass p-6 rounded-xl hover:bg-gray-800 transition group relative cursor-pointer border-l-4 border-blue-500";
+
+                // Clicking card goes to view
+                card.onclick = (e) => {
+                    if (e.target.tagName !== "BUTTON") window.location.href = `/report_view?id=${r.id}`;
+                };
+
+                card.innerHTML = `
+                    <div class="flex justify-between items-start mb-4">
+                        <div class="p-3 bg-blue-500/20 rounded-lg">
+                            <svg class="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="event.stopPropagation(); editReport('${r.id}')" class="text-gray-500 hover:text-blue-400 p-1 rounded z-10 transition">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                            </button>
+                            <button onclick="event.stopPropagation(); deleteReport('${r.id}')" class="text-gray-500 hover:text-red-400 p-1 rounded z-10 transition">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <h3 class="text-xl font-bold text-white mb-2 group-hover:text-blue-300 transition">${r.name}</h3>
+                    
+                    <div class="text-xs text-gray-400 flex justify-between items-end mt-4">
+                        <span>Created: ${date}</span>
+                        <span class="text-xs bg-gray-800 px-2 py-1 rounded text-gray-500 group-hover:bg-blue-900/50 group-hover:text-blue-300 transition">JQL Configured</span>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        function toggleModal() {
+            const m = document.getElementById("modal");
+            const isHidden = m.classList.contains("hidden");
+
+            if (isHidden) {
+                // Opening modal - if not editing, reset to "Create"
+                if (!document.getElementById('editReportId').value) {
+                    document.getElementById('modalTitle').innerText = "Create New Filter";
+                    document.getElementById('reportName').value = "";
+                    document.getElementById('reportJql').value = "";
+                }
+            } else {
+                // Closing modal - reset edit ID
+                document.getElementById('editReportId').value = "";
+            }
+
+            m.classList.toggle("hidden");
+        }
+    </script>
+</body>
+
+</html>
