@@ -1,13 +1,22 @@
-from flask import Flask, render_template, request, jsonify, make_response, has_request_context, redirect, url_for
+from flask import Flask, render_template, request, jsonify, make_response, has_request_context, redirect, url_for, send_file
 from werkzeug.local import LocalProxy
-import requests
-import base64
-import sqlite3
-import os
-from datetime import datetime, timedelta, timezone
+import io
 import re
 import json
+import sqlite3
+import os
+import requests
+import base64
+from datetime import datetime, timedelta, timezone
 from urllib.parse import unquote
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+from docx import Document
+from docx.shared import Inches, Pt, RGBColor
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from xhtml2pdf import pisa
+from pypdf import PdfWriter
 
 app = Flask(__name__)
 
@@ -1743,7 +1752,7 @@ def fetch_jira_ticket(key):
         res = requests.get(
             f"{JIRA_DOMAIN}/rest/api/3/issue/{key.upper()}",
             headers=headers_dict,
-            params={"fields": "summary,status,priority,assignee,issuetype"}
+            params={"fields": "summary,status,priority,assignee,issuetype,description,reporter,created,updated,customfield_10016,customfield_10077,customfield_10020,labels,components,comment"}
         )
         print(f"DEBUG fetch_jira_ticket: Jira returned {res.status_code} {res.text}")
         if res.status_code == 404:
@@ -1752,13 +1761,57 @@ def fetch_jira_ticket(key):
             return jsonify({"error": res.text}), res.status_code
         data = res.json()
         f = data["fields"]
+        
+        # Extract Customer
+        customer = "N/A"
+        cust_val = f.get("customfield_10077")
+        if cust_val:
+            if isinstance(cust_val, list) and len(cust_val) > 0:
+                v = cust_val[0]
+                customer = v.get("value") or v if isinstance(v, dict) else str(v)
+            elif isinstance(cust_val, dict):
+                customer = cust_val.get("value") or str(cust_val)
+            else:
+                customer = str(cust_val)
+
+        # Extract Sprint
+        sprint = "N/A"
+        sprint_val = f.get("customfield_10020")
+        if sprint_val and isinstance(sprint_val, list) and len(sprint_val) > 0:
+            sp = sprint_val[-1]
+            sprint = sp.get("name") or str(sp)
+
+        # Extract Story Points
+        story_points = f.get("customfield_10016")
+
+        # Extract Description (Jira v3 uses Doc format)
+        description = f.get("description")
+
         return jsonify({
             "key": data["key"],
             "summary": f.get("summary"),
             "status": f.get("status", {}).get("name"),
             "priority": f.get("priority", {}).get("name"),
-            "assignee": f.get("assignee", {}).get("displayName") if f.get("assignee") else None,
-            "type": f.get("issuetype", {}).get("name")
+            "assignee": f.get("assignee", {}).get("displayName") if f.get("assignee") else "Unassigned",
+            "assignee_avatar": f.get("assignee", {}).get("avatarUrls", {}).get("48x48") if f.get("assignee") else None,
+            "type": f.get("issuetype", {}).get("name"),
+            "type_icon": f.get("issuetype", {}).get("iconUrl"),
+            "reporter": f.get("reporter", {}).get("displayName") if f.get("reporter") else "Unknown",
+            "created": f.get("created"),
+            "updated": f.get("updated"),
+            "customer": customer,
+            "sprint": sprint,
+            "story_points": story_points,
+            "description": description,
+            "labels": f.get("labels", []),
+            "components": [c.get("name") for c in f.get("components", [])],
+            "comments": [
+                {
+                    "author": c.get("author", {}).get("displayName"),
+                    "body": c.get("body"),
+                    "created": c.get("created")
+                } for c in f.get("comment", {}).get("comments", [])
+            ] if f.get("comment") else []
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -1906,6 +1959,353 @@ def scrum_notes_report():
     } for r in cursor.fetchall()]
     conn.close()
     return jsonify(rows)
+
+
+@app.route("/work_report")
+def work_report():
+    return render_template("work_report.html", project=PROJECT_KEY)
+
+
+@app.route("/api/reports/generate", methods=["POST"])
+def generate_report_api():
+    data = request.json
+    team_name = data.get("team_name")
+    sprint_name = data.get("sprint_name") or "N/A"
+    from_date = data.get("from_date")
+    to_date = data.get("to_date")
+    team_members = data.get("team_members", "")
+    ticket_text = data.get("tickets", "")
+    report_format = data.get("format", "word")
+    selected_cols = data.get("columns", ["key", "type", "summary", "status", "priority"])
+    exclude_open = data.get("exclude_open", False)
+
+    # Column Mapping for name and base widths
+    col_config = {
+        "key": {"name": "Key", "width": 0.8},
+        "type": {"name": "Type", "width": 0.8},
+        "summary": {"name": "Summary", "width": 2.0}, # Base/Min width
+        "status": {"name": "Status", "width": 1.1},
+        "priority": {"name": "Priority", "width": 0.8},
+        "assignee": {"name": "Assignee", "width": 1.1},
+        "customer": {"name": "Customer", "width": 1.2},
+        "sprint": {"name": "Sprint", "width": 1.5}
+    }
+
+    # Filter config to only selected ones
+    active_cols = [c for c in ["key", "type", "summary", "status", "priority", "assignee", "customer", "sprint"] if c in selected_cols]
+
+    # Status priority for ordering
+    top_statuses = [
+        "DEPLOYED", "DONE", "NOT A BUG", "READY FOR STAGING", 
+        "RESOLVED", "STAGED", "UNABLE TO REPRODUCE", 
+        "READY FOR QA", "READY FOR INTERNAL DEMO"
+    ]
+
+    def get_status_rank(status_name):
+        if not status_name: return 1
+        name = status_name.upper()
+        if name in top_statuses:
+            return 0 # Higher priority (on top)
+        return 1 # Lower priority (bottom)
+
+    # Parse tickets
+    raw_keys = re.findall(r'[A-Z]+-\d+', ticket_text.upper())
+    ticket_keys = list(dict.fromkeys(raw_keys)) # Remove duplicates, preserve order
+    if not ticket_keys:
+        return jsonify({"error": "No valid ticket keys found"}), 400
+
+    # Fetch Ticket Details from Jira
+    bugs = []
+    others = []
+    
+    bug_count = 0
+    task_count = 0
+    story_count = 0
+    epic_count = 0
+    other_count = 0
+
+    headers_dict = dict(HEADERS)
+    
+    # Use JQL Search for efficiency and to filter by Team
+    keys_str = ", ".join([f'"{k}"' for k in ticket_keys])
+    # Matching user example: "team[team]" = UUID (no quotes)
+    jql = f'key in ({keys_str}) AND "team[team]" = 4da67a24-33ef-42a2-b940-840dd6e450bc'
+    
+    try:
+        # Jira Cloud v3 migration: use /search/jql endpoint
+        params = {
+            "jql": jql,
+            "maxResults": len(ticket_keys),
+            "fields": "issuetype,summary,priority,status,assignee,customfield_10077,customfield_10020"
+        }
+        search_res = requests.get(
+            f"{JIRA_DOMAIN}/rest/api/3/search/jql",
+            headers=headers_dict,
+            params=params
+        )
+        
+        if search_res.status_code == 200:
+            found_issues = search_res.json().get("issues", [])
+            for issue in found_issues:
+                key = issue.get("key")
+                fields = issue.get("fields", {})
+                itype = fields.get("issuetype", {}).get("name", "Task")
+                summary = fields.get("summary", "No Summary")
+                priority = fields.get("priority", {}).get("name", "Medium")
+                status = fields.get("status", {}).get("name", "Unknown")
+                assignee_field = fields.get("assignee")
+                assignee = assignee_field.get("displayName", "Unassigned") if assignee_field else "Unassigned"
+
+                # Extract Customer
+                customer = "N/A"
+                cust_val = fields.get("customfield_10077")
+                if cust_val:
+                    if isinstance(cust_val, list) and len(cust_val) > 0:
+                        v = cust_val[0]
+                        customer = v.get("value") or v if isinstance(v, dict) else str(v)
+                    elif isinstance(cust_val, dict):
+                        customer = cust_val.get("value") or str(cust_val)
+                    else:
+                        customer = str(cust_val)
+
+                # Extract Sprint
+                sprint = "N/A"
+                sprint_val = fields.get("customfield_10020")
+                if sprint_val and isinstance(sprint_val, list) and len(sprint_val) > 0:
+                    # Sprints are often returned as list of objects
+                    sp = sprint_val[-1] # Take the latest one
+                    sprint = sp.get("name") or str(sp)
+
+                if exclude_open and status.lower() == "open":
+                    continue
+
+                ticket_obj = {
+                    "key": key,
+                    "type": itype,
+                    "summary": summary,
+                    "priority": priority,
+                    "status": status,
+                    "assignee": assignee,
+                    "customer": customer,
+                    "sprint": sprint,
+                    "rank": get_status_rank(status) 
+                }
+
+                if itype.lower() == "bug":
+                    bugs.append(ticket_obj)
+                    bug_count += 1
+                else:
+                    others.append(ticket_obj)
+                    if itype.lower() == "task": task_count += 1
+                    elif itype.lower() == "story": story_count += 1
+                    elif itype.lower() == "epic": epic_count += 1
+                    else: other_count += 1
+        else:
+            print(f"Jira Search Error: {search_res.status_code} - {search_res.text}")
+    except Exception as e:
+        print(f"Error fetching issues via JQL: {e}")
+
+    # Sort: Status rank (0 first), then by Key
+    bugs.sort(key=lambda x: (x['rank'], x['key']))
+    others.sort(key=lambda x: (x['rank'], x['key']))
+
+    # Generate Chart
+    plt.figure(figsize=(6, 4))
+    labels = []
+    sizes = []
+    colors = []
+    if bug_count: labels.append('Bugs'); sizes.append(bug_count); colors.append('#ef4444')
+    if task_count: labels.append('Tasks'); sizes.append(task_count); colors.append('#3b82f6')
+    if story_count: labels.append('Stories'); sizes.append(story_count); colors.append('#10b981')
+    if epic_count: labels.append('Epics'); sizes.append(epic_count); colors.append('#8b5cf6')
+    if other_count: labels.append('Others'); sizes.append(other_count); colors.append('#6b7280')
+
+    chart_b64 = ""
+    chart_stream = io.BytesIO()
+    if sizes:
+        plt.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=140, colors=colors)
+        plt.axis('equal')
+        plt.title("Issue Distribution")
+        plt.savefig(chart_stream, format='png', bbox_inches='tight')
+        chart_b64 = base64.b64encode(chart_stream.getvalue()).decode()
+    else:
+        # Create a small blank white pixel so the PDF img tag doesn't break
+        chart_b64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII="
+    
+    plt.close()
+
+    if report_format == "word":
+        doc = Document()
+        
+        # Header
+        title = doc.add_heading(f"Executive Work Report: {team_name}", 0)
+        title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        
+        p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = p.add_run(f"Sprint: {sprint_name} | Period: {from_date} to {to_date}")
+        run.italic = True
+        
+        doc.add_heading("Team Members", level=1)
+        doc.add_paragraph(team_members)
+
+        if sizes:
+            doc.add_heading("Issue Distribution", level=1)
+            doc.add_picture(chart_stream, width=Inches(4.5))
+            last_p = doc.paragraphs[-1]
+            last_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        # Function to add a table to doc
+        def add_styled_table(data_list, title_text, cols):
+            if not data_list:
+                return
+            doc.add_heading(title_text, level=1)
+            table = doc.add_table(rows=1, cols=len(cols))
+            table.style = 'Table Grid'
+            
+            # Header
+            hdr_cells = table.rows[0].cells
+            total_fixed_width = 0
+            summary_idx = -1
+            
+            for i, col_id in enumerate(cols):
+                hdr_cells[i].text = col_config[col_id]["name"]
+                if col_id != "summary":
+                    total_fixed_width += col_config[col_id]["width"]
+                else:
+                    summary_idx = i
+            
+            # Total width for standard Portrait is ~6.5 inches
+            available_width = 6.4
+            summary_width = max(2.0, available_width - total_fixed_width)
+            
+            for i, col_id in enumerate(cols):
+                if col_id == "summary":
+                    table.columns[i].width = Inches(summary_width)
+                else:
+                    table.columns[i].width = Inches(col_config[col_id]["width"])
+
+            # Data
+            for t in data_list:
+                row_cells = table.add_row().cells
+                for i, col_id in enumerate(cols):
+                    row_cells[i].text = str(t.get(col_id, ""))
+
+        # Tasks First
+        add_styled_table(others, "Tasks, Stories & Epics", active_cols)
+        # Bugs Second
+        add_styled_table(bugs, "Bugs Summary", active_cols)
+
+        output = io.BytesIO()
+        doc.save(output)
+        output.seek(0)
+        return send_file(output, as_attachment=True, download_name=f"Work_Report_{team_name.replace(' ', '_')}.docx")
+
+    else: # PDF
+        def g_html(data_list, cols):
+            if not data_list: return f"<tr><td colspan='{len(cols)}' style='text-align:center'>No items.</td></tr>"
+            html_rows = ""
+            for t in data_list:
+                html_rows += "<tr>"
+                for c in cols:
+                    val = t.get(c, "")
+                    extra = " class='summary-col'" if c == "summary" else ""
+                    html_rows += f"<td{extra}>{val}</td>"
+                html_rows += "</tr>"
+            return html_rows
+
+        others_html = g_html(others, active_cols)
+        bugs_html = g_html(bugs, active_cols)
+        
+        table_headers = "".join([f"<th>{col_config[c]['name']}</th>" for c in active_cols])
+        
+        # Calculate summary width purely for CSS
+        fixed_count = len(active_cols) - (1 if "summary" in active_cols else 0)
+        s_width = "40%" if fixed_count <= 4 else "30%"
+
+        html_content = f"""
+        <html>
+        <head>
+            <style>
+                body {{ font-family: Helvetica, Arial, sans-serif; color: #333; }}
+                .header {{ text-align: center; border-bottom: 2px solid #3b82f6; padding-bottom: 10px; }}
+                h1 {{ color: #1e3a8a; }}
+                .meta {{ color: #666; font-style: italic; }}
+                .section-title {{ background: #f3f4f6; padding: 5px 10px; border-left: 4px solid #3b82f6; margin-top: 20px; }}
+                table {{ width: 100%; border-collapse: collapse; margin-top: 10px; table-layout: fixed; }}
+                th, td {{ border: 1px solid #ddd; padding: 6px; text-align: left; font-size: 8pt; word-wrap: break-word; }}
+                th {{ background-color: #f9fafb; font-weight: bold; }}
+                .summary-col {{ width: {s_width}; }}
+                td {{ width: auto; }}
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h1>Work Report: {team_name}</h1>
+                <p class="meta">Sprint: {sprint_name} | {from_date} to {to_date}</p>
+            </div>
+            
+            <div class="section-title">Team Members</div>
+            <p>{team_members.replace('\\n', '<br>')}</p>
+            
+            <div class="section-title">Issue Distribution</div>
+            <div style="text-align: center;">
+                <img src="data:image/png;base64,{chart_b64}" width="400" />
+            </div>
+            
+            <div class="section-title">Tasks, Stories & Epics</div>
+            <table>
+                <tr>{table_headers}</tr>
+                {others_html}
+            </table>
+            
+            <div class="section-title">Bugs Summary</div>
+            <table>
+                <tr>{table_headers}</tr>
+                {bugs_html}
+            </table>
+        </body>
+        </html>
+        """
+        
+        output = io.BytesIO()
+        pisa.CreatePDF(io.BytesIO(html_content.encode("utf-8")), dest=output)
+        output.seek(0)
+        return send_file(output, as_attachment=True, download_name=f"Work_Report_{team_name.replace(' ', '_')}.pdf")
+
+@app.route("/merge_pdf")
+def merge_pdf_page():
+    return render_template("merge_pdf.html")
+
+@app.route("/api/pdf/merge", methods=["POST"])
+def pdf_merge_api():
+    if 'files' not in request.files:
+        return jsonify({"error": "No files provided"}), 400
+    
+    files = request.files.getlist('files')
+    output_name = request.form.get('output_name', 'merged_document')
+    
+    if len(files) < 2:
+        return jsonify({"error": "At least 2 PDF files are required to merge"}), 400
+    
+    try:
+        merger = PdfWriter()
+        for pdf in files:
+            merger.append(pdf)
+        
+        output = io.BytesIO()
+        merger.write(output)
+        merger.close()
+        output.seek(0)
+        
+        return send_file(
+            output, 
+            as_attachment=True, 
+            download_name=f"{output_name}.pdf",
+            mimetype='application/pdf'
+        )
+    except Exception as e:
+        return jsonify({"error": f"Merge failed: {str(e)}"}), 500
 
 if __name__ == "__main__":
     app.run(debug=True)

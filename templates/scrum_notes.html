@@ -89,6 +89,34 @@
         .report-table-wrap {
             overflow-x: auto;
         }
+
+        /* Offcanvas */
+        .offcanvas {
+            position: fixed;
+            top: 0;
+            right: 0;
+            width: 100%;
+            height: 100%;
+            background: #111827;
+            z-index: 80;
+            transform: translateX(100%);
+            transition: transform 0.3s ease-in-out;
+        }
+
+        .offcanvas.show {
+            transform: translateX(0);
+        }
+
+        .offcanvas-backdrop {
+            display: none;
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(4px);
+            z-index: 70;
+        }
+
+        .offcanvas-backdrop.show {
+            display: block;
+        }
     </style>
     <link rel="stylesheet" href="/static/theme.css">
     <script src="/static/theme.js"></script>
@@ -110,7 +138,8 @@
                     class="text-2xl sm:text-3xl font-black bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-400">
                     📋 Scrum Notes
                 </h1>
-                <p class="text-gray-400 text-xs sm:text-sm">Your daily standup tracker — log tickets per teammate, per day.</p>
+                <p class="text-gray-400 text-xs sm:text-sm">Your daily standup tracker — log tickets per teammate, per
+                    day.</p>
             </div>
             <div class="w-full sm:w-auto">
                 <div class="grid grid-cols-2 gap-2 bg-gray-800 p-1 rounded-xl w-full sm:w-[300px]">
@@ -378,6 +407,115 @@
     </div>
 
     <!-- ============================================================ -->
+    <!--  TICKET DETAILS OFFCANVAS                                    -->
+    <!-- ============================================================ -->
+    <div id="offcanvasBackdrop" class="offcanvas-backdrop fixed inset-0" onclick="closeOffcanvas()"></div>
+    <div id="ticketOffcanvas"
+        class="offcanvas fixed top-0 right-0 h-full w-full max-w-2xl bg-gray-900 border-l border-gray-800 z-[80] shadow-2xl overflow-y-auto">
+        <div
+            class="sticky top-0 bg-gray-900/90 backdrop-blur-md border-b border-gray-800 p-6 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <img id="offcanvasTypeIcon" src="" alt="" class="w-5 h-5 hidden">
+                <h2 id="offcanvasKey" class="text-xl font-black text-blue-400 font-mono"></h2>
+                <a id="offcanvasJiraLink" href="#" target="_blank" class="text-gray-500 hover:text-white transition"
+                    title="View on Jira">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                    </svg>
+                </a>
+            </div>
+            <button onclick="closeOffcanvas()"
+                class="text-gray-500 hover:text-white transition text-3xl leading-none">&times;</button>
+        </div>
+
+        <div id="offcanvasLoading" class="p-12 text-center hidden">
+            <div class="spinner mx-auto mb-3"></div>
+            <p class="text-gray-500">Fetching ticket details…</p>
+        </div>
+
+        <div id="offcanvasContent" class="p-8 space-y-8 hidden">
+            <!-- Header section -->
+            <div>
+                <h1 id="offcanvasSummary" class="text-2xl font-bold text-white leading-tight mb-4"></h1>
+                <div class="flex flex-wrap gap-3">
+                    <span id="offcanvasStatus"
+                        class="px-3 py-1 rounded-full bg-blue-900/40 text-blue-300 text-xs font-bold border border-blue-700/50 uppercase tracking-wider"></span>
+                    <span id="offcanvasPriority"
+                        class="px-3 py-1 rounded-full bg-gray-800 text-gray-300 text-xs font-bold border border-gray-700 uppercase tracking-wider"></span>
+                    <span id="offcanvasStoryPoints"
+                        class="px-3 py-1 rounded-full bg-purple-900/40 text-purple-300 text-xs font-bold border border-purple-700/50 hidden"></span>
+                </div>
+            </div>
+
+            <!-- Main fields grid -->
+            <div class="grid grid-cols-2 gap-y-6 gap-x-8 border-y border-gray-800 py-8">
+                <div>
+                    <label
+                        class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Assignee</label>
+                    <div class="flex items-center gap-3">
+                        <div id="offcanvasAssigneeCircle"
+                            class="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-black text-white shadow-sm">
+                        </div>
+                        <span id="offcanvasAssignee" class="text-sm font-semibold text-gray-200"></span>
+                    </div>
+                </div>
+                <div>
+                    <label
+                        class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Reporter</label>
+                    <span id="offcanvasReporter" class="text-sm font-semibold text-gray-200"></span>
+                </div>
+                <div>
+                    <label
+                        class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Customer</label>
+                    <span id="offcanvasCustomer" class="text-sm font-semibold text-gray-200"></span>
+                </div>
+                <div>
+                    <label
+                        class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Sprint</label>
+                    <span id="offcanvasSprint" class="text-sm font-semibold text-gray-200"></span>
+                </div>
+                <div>
+                    <label
+                        class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Created</label>
+                    <span id="offcanvasCreated" class="text-xs text-gray-400"></span>
+                </div>
+                <div>
+                    <label
+                        class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Updated</label>
+                    <span id="offcanvasUpdated" class="text-xs text-gray-400"></span>
+                </div>
+                <div class="col-span-2">
+                    <label
+                        class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Components</label>
+                    <div id="offcanvasComponents" class="flex flex-wrap gap-2 mt-1"></div>
+                </div>
+                <div class="col-span-2">
+                    <label
+                        class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Labels</label>
+                    <div id="offcanvasLabels" class="flex flex-wrap gap-2 mt-1"></div>
+                </div>
+            </div>
+
+            <!-- Description -->
+            <div>
+                <label
+                    class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-3">Description</label>
+                <div id="offcanvasDescription"
+                    class="text-sm text-gray-300 leading-relaxed bg-gray-800/30 rounded-xl p-5 border border-gray-800 min-h-[100px] whitespace-pre-wrap">
+                </div>
+            </div>
+
+            <!-- Comments -->
+            <div>
+                <label
+                    class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-4">Comments</label>
+                <div id="offcanvasComments" class="space-y-4"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
     <!--  SCRIPT                                                       -->
     <!-- ============================================================ -->
     <script>
@@ -542,7 +680,7 @@
                         return `
                 <tr class="ticket-row transition" data-note-id="${n.id}">
                     <td class="px-4 py-3">
-                        <a href="https://lumberfi.atlassian.net/browse/${n.ticket_key}" target="_blank"
+                        <a href="javascript:void(0)" onclick="viewTicketDetails('${n.ticket_key}')"
                            class="font-mono text-blue-400 hover:text-blue-300 font-bold text-xs transition">${n.ticket_key}</a>
                     </td>
                     <td class="px-4 py-3 text-gray-200 text-xs max-w-xs truncate" title="${jira.summary || ''}">${summary}</td>
@@ -609,7 +747,7 @@
         }
 
         // ─── "Add Ticket" Modal ───────────────────────────────────────────
-        document.addEventListener('click', function(e) {
+        document.addEventListener('click', function (e) {
             const btn = e.target.closest('.add-ticket-btn');
             if (!btn) return;
             const id = (btn.getAttribute('data-member-id') || '').trim();
@@ -720,10 +858,10 @@
             // Always resolve member_id from currentMembers by name — never use hidden input (avoids "undefined" from cache)
             var memberId = '';
             if (memberName && Array.isArray(currentMembers)) {
-                var m = currentMembers.find(function(mem) { return (mem.displayName || '').trim().toLowerCase() === memberName.toLowerCase(); });
+                var m = currentMembers.find(function (mem) { return (mem.displayName || '').trim().toLowerCase() === memberName.toLowerCase(); });
                 if (m) memberId = String(m.accountId || m.account_id || '');
             }
-            
+
             // Ensure memberId is not "undefined" string
             if (memberId === 'undefined') memberId = '';
 
@@ -740,7 +878,7 @@
             const projectKey = (localStorage.getItem("project_key") || "").trim().toUpperCase();
             const res = await fetch('/api/scrum_notes', {
                 method: 'POST',
-                headers: { 
+                headers: {
                     'Content-Type': 'application/json',
                     'X-Project-Key': projectKey
                 },
@@ -776,7 +914,7 @@
             const projectKey = (localStorage.getItem("project_key") || "").trim().toUpperCase();
             const res = await fetch(`/api/scrum_notes/${noteId}`, {
                 method: 'PUT',
-                headers: { 
+                headers: {
                     'Content-Type': 'application/json',
                     'X-Project-Key': projectKey
                 },
@@ -800,7 +938,7 @@
         async function deleteNote(noteId) {
             if (!confirm('Delete this note?')) return;
             const projectKey = (localStorage.getItem("project_key") || "").trim().toUpperCase();
-            await fetch(`/api/scrum_notes/${noteId}`, { 
+            await fetch(`/api/scrum_notes/${noteId}`, {
                 method: 'DELETE',
                 headers: { 'X-Project-Key': projectKey }
             });
@@ -888,7 +1026,7 @@
             <td class="px-4 py-3 text-xs text-gray-400 font-mono whitespace-nowrap">${n.date}</td>
             <td class="px-4 py-3 text-sm font-semibold">${n.member_name}</td>
             <td class="px-4 py-3">
-                <a href="https://lumberfi.atlassian.net/browse/${n.ticket_key}" target="_blank"
+                <a href="javascript:void(0)" onclick="viewTicketDetails('${n.ticket_key}')"
                    class="font-mono text-blue-400 hover:text-blue-300 font-bold text-xs transition">${n.ticket_key}</a>
             </td>
             <td class="px-4 py-3 text-xs text-gray-300 max-w-xs truncate" title="${jira.summary || ''}">${jira.summary || '—'}</td>
@@ -924,6 +1062,156 @@
             let h = 0;
             for (let i = 0; i < name.length; i++) h = name.charCodeAt(i) + ((h << 5) - h);
             return colors[Math.abs(h) % colors.length];
+        }
+
+        // ─── Offcanvas Logic ─────────────────────────────────────────────
+        async function viewTicketDetails(key) {
+            document.getElementById('ticketOffcanvas').classList.add('show');
+            document.getElementById('offcanvasBackdrop').classList.add('show');
+            document.body.style.overflow = 'hidden';
+
+            document.getElementById('offcanvasKey').textContent = key;
+            document.getElementById('offcanvasJiraLink').href = `https://lumberfi.atlassian.net/browse/${key}`;
+
+            document.getElementById('offcanvasLoading').classList.remove('hidden');
+            document.getElementById('offcanvasContent').classList.add('hidden');
+
+            try {
+                const headers = window.getApiHeaders ? window.getApiHeaders() : {
+                    'X-Project-Key': (localStorage.getItem("project_key") || "").trim().toUpperCase()
+                };
+                const res = await fetch(`/api/jira/ticket/${key}`, { headers });
+                if (!res.ok) throw new Error('Ticket not found');
+                const data = await res.json();
+
+                // Update Cache
+                jiraCache[key] = data;
+
+                // Populate fields
+                document.getElementById('offcanvasSummary').textContent = data.summary;
+                document.getElementById('offcanvasStatus').textContent = data.status;
+                document.getElementById('offcanvasPriority').textContent = data.priority;
+                document.getElementById('offcanvasPriority').className = `px-3 py-1 rounded-full bg-gray-800 text-xs font-bold border border-gray-700 uppercase tracking-wider priority-${(data.priority || '').toLowerCase()}`;
+
+                if (data.story_points) {
+                    document.getElementById('offcanvasStoryPoints').textContent = `${data.story_points} points`;
+                    document.getElementById('offcanvasStoryPoints').classList.remove('hidden');
+                } else {
+                    document.getElementById('offcanvasStoryPoints').classList.add('hidden');
+                }
+
+                if (data.type_icon) {
+                    document.getElementById('offcanvasTypeIcon').src = data.type_icon;
+                    document.getElementById('offcanvasTypeIcon').classList.remove('hidden');
+                } else {
+                    document.getElementById('offcanvasTypeIcon').classList.add('hidden');
+                }
+
+                const assigneeName = data.assignee || 'Unassigned';
+                document.getElementById('offcanvasAssignee').textContent = assigneeName;
+                const circle = document.getElementById('offcanvasAssigneeCircle');
+                circle.className = `w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-black text-white shadow-sm ${getAvatarColor(assigneeName)}`;
+                circle.textContent = getInitials(assigneeName);
+
+                document.getElementById('offcanvasReporter').textContent = data.reporter || 'Unknown';
+                document.getElementById('offcanvasCustomer').textContent = data.customer || 'N/A';
+                document.getElementById('offcanvasSprint').textContent = data.sprint || 'N/A';
+                document.getElementById('offcanvasCreated').textContent = new Date(data.created).toLocaleString();
+                document.getElementById('offcanvasUpdated').textContent = new Date(data.updated).toLocaleString();
+
+                // Components & Labels
+                const compWrap = document.getElementById('offcanvasComponents');
+                compWrap.innerHTML = data.components.length ? data.components.map(c => `<span class="px-2 py-0.5 rounded bg-gray-800 text-gray-400 text-xs">${c}</span>`).join('') : '<span class="text-xs text-gray-600 italic">None</span>';
+
+                const labelWrap = document.getElementById('offcanvasLabels');
+                labelWrap.innerHTML = data.labels.length ? data.labels.map(l => `<span class="px-2 py-0.5 rounded bg-blue-900/20 text-blue-400 text-xs border border-blue-800/30">${l}</span>`).join('') : '<span class="text-xs text-gray-600 italic">None</span>';
+
+                // Description
+                const descWrap = document.getElementById('offcanvasDescription');
+                descWrap.innerHTML = renderJiraDoc(data.description);
+
+                // Comments
+                const commWrap = document.getElementById('offcanvasComments');
+                commWrap.innerHTML = data.comments.length ? data.comments.map(c => `
+                    <div class="bg-gray-800/40 rounded-xl p-4 border border-gray-800">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-bold text-blue-400">${c.author}</span>
+                            <span class="text-[10px] text-gray-500">${new Date(c.created).toLocaleString()}</span>
+                        </div>
+                        <div class="text-xs text-gray-300 leading-normal">${renderJiraDoc(c.body)}</div>
+                    </div>
+                `).join('') : '<p class="text-xs text-gray-600 italic px-2">No comments yet.</p>';
+
+                document.getElementById('offcanvasLoading').classList.add('hidden');
+                document.getElementById('offcanvasContent').classList.remove('hidden');
+
+            } catch (err) {
+                console.error(err);
+                alert('Failed to load ticket details.');
+                closeOffcanvas();
+            }
+        }
+
+        function closeOffcanvas() {
+            document.getElementById('ticketOffcanvas').classList.remove('show');
+            document.getElementById('offcanvasBackdrop').classList.remove('show');
+            document.body.style.overflow = '';
+        }
+
+        function renderJiraDoc(doc) {
+            if (!doc) return '<span class="text-gray-600 italic">No description provided.</span>';
+            if (typeof doc === 'string') return doc;
+
+            // Simple ADF to Text/HTML helper
+            let text = "";
+            if (doc.content) {
+                doc.content.forEach(node => {
+                    if (node.type === 'paragraph') {
+                        if (node.content) {
+                            node.content.forEach(inline => {
+                                if (inline.type === 'text') {
+                                    let content = inline.text;
+                                    if (inline.marks) {
+                                        inline.marks.forEach(mark => {
+                                            if (mark.type === 'strong') content = `<b>${content}</b>`;
+                                            if (mark.type === 'em') content = `<i>${content}</i>`;
+                                            if (mark.type === 'code') content = `<code class="bg-gray-800 px-1 rounded">${content}</code>`;
+                                            if (mark.type === 'link') content = `<a href="${mark.attrs.href}" target="_blank" class="text-blue-400 underline">${content}</a>`;
+                                        });
+                                    }
+                                    text += content;
+                                }
+                                if (inline.type === 'emoji') {
+                                    text += inline.attrs.text || "";
+                                }
+                                if (inline.type === 'hardBreak') {
+                                    text += "<br>";
+                                }
+                            });
+                        }
+                        text += "<br><br>";
+                    } else if (node.type === 'bulletList') {
+                        text += '<ul class="list-disc pl-5 space-y-1 mb-4">';
+                        node.content.forEach(li => {
+                            text += '<li>' + renderJiraDoc(li) + '</li>';
+                        });
+                        text += '</ul>';
+                    } else if (node.type === 'listItem') {
+                        text += renderJiraDoc({ content: node.content });
+                    } else if (node.type === 'codeBlock') {
+                        const code = node.content ? node.content[0].text : '';
+                        text += `<pre class="bg-black/40 p-4 rounded-lg font-mono text-xs overflow-x-auto mb-4 border border-gray-800 text-blue-300 relative"><code>${code}</code></pre>`;
+                    } else if (node.type === 'heading') {
+                        const level = node.attrs.level;
+                        text += `<h${level} class="font-bold text-gray-200 mt-4 mb-2">`;
+                        if (node.content) {
+                            node.content.forEach(inline => { if (inline.text) text += inline.text; });
+                        }
+                        text += `</h${level}>`;
+                    }
+                });
+            }
+            return text;
         }
     </script>
 </body>

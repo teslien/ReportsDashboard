@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8">
+    <title>Executive Work Report - Jira Analytics</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- jQuery -->
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #0b0f1a;
+            color: white;
+            overflow-x: hidden;
+        }
+
+        /* Custom Scrollbar for Textareas */
+        textarea::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        textarea::-webkit-scrollbar-track {
+            background: rgba(31, 41, 55, 0.5);
+            border-radius: 10px;
+        }
+
+        textarea::-webkit-scrollbar-thumb {
+            background: rgba(75, 85, 99, 0.5);
+            border-radius: 10px;
+        }
+
+        textarea::-webkit-scrollbar-thumb:hover {
+            background: rgba(107, 114, 128, 0.5);
+        }
+    </style>
+    <link rel="stylesheet" href="/static/theme.css">
+    <script src="/static/theme.js"></script>
+</head>
+
+<body class="bg-gray-900 min-h-screen">
+    <!-- Navigation -->
+    {% include 'navbar.html' %}
+
+    <main class="min-h-screen pt-24 pb-12 px-4 sm:px-6 lg:px-8">
+        <div class="max-w-4xl mx-auto">
+            <!-- Header Section -->
+            <div class="mb-8 text-center">
+                <h1
+                    class="text-4xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-indigo-400 to-purple-500 mb-2">
+                    Executive Work Report
+                </h1>
+                <p class="text-gray-400 text-lg">Generate professional Word and PDF reports for your team's sprint
+                    progress.</p>
+            </div>
+
+            <!-- Main Form Card -->
+            <div
+                class="bg-gray-800/50 backdrop-blur-xl border border-gray-700/50 rounded-3xl p-8 shadow-2xl relative overflow-hidden group">
+                <!-- Decorative gradient blur -->
+                <div
+                    class="absolute -top-24 -right-24 w-48 h-48 bg-blue-500/10 rounded-full blur-3xl group-hover:bg-blue-500/20 transition-all duration-700">
+                </div>
+                <div
+                    class="absolute -bottom-24 -left-24 w-48 h-48 bg-purple-500/10 rounded-full blur-3xl group-hover:bg-purple-500/20 transition-all duration-700">
+                </div>
+
+                <form id="reportForm" class="space-y-6 relative z-10">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Team Name -->
+                        <div class="space-y-2">
+                            <label class="block text-sm font-semibold text-gray-300 ml-1">Team Name</label>
+                            <input type="text" name="team_name" placeholder="e.g., Alpha Squad" required
+                                class="w-full bg-gray-900/50 border border-gray-700 rounded-2xl px-4 py-3 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none placeholder:text-gray-600">
+                        </div>
+
+                        <!-- Sprint Name -->
+                        <div class="space-y-2">
+                            <label class="block text-sm font-semibold text-gray-300 ml-1">Sprint Name <span
+                                    class="text-gray-500 font-normal">(Optional)</span></label>
+                            <input type="text" name="sprint_name" placeholder="e.g., Sprint 42"
+                                class="w-full bg-gray-900/50 border border-gray-700 rounded-2xl px-4 py-3 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none placeholder:text-gray-600">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Date Range -->
+                        <div class="space-y-2">
+                            <label class="block text-sm font-semibold text-gray-300 ml-1">From Date</label>
+                            <input type="date" name="from_date" required
+                                class="w-full bg-gray-900/50 border border-gray-700 rounded-2xl px-4 py-3 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none">
+                        </div>
+                        <div class="space-y-2">
+                            <label class="block text-sm font-semibold text-gray-300 ml-1">To Date</label>
+                            <input type="date" name="to_date" required
+                                class="w-full bg-gray-900/50 border border-gray-700 rounded-2xl px-4 py-3 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none">
+                        </div>
+                    </div>
+
+                    <!-- Team Members -->
+                    <div class="space-y-2">
+                        <label class="block text-sm font-semibold text-gray-300 ml-1">Team Members</label>
+                        <textarea name="team_members"
+                            placeholder="Enter member names, one per line or separated by commas..." rows="2" required
+                            class="w-full bg-gray-900/50 border border-gray-700 rounded-2xl px-4 py-3 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none placeholder:text-gray-600 resize-none"></textarea>
+                    </div>
+
+                    <!-- Ticket Numbers -->
+                    <div class="space-y-2">
+                        <label class="block text-sm font-semibold text-gray-300 ml-1">Ticket Numbers</label>
+                        <textarea name="tickets"
+                            placeholder="Paste ticket numbers (e.g., PROJ-101, PROJ-102 or PROJ-101 PROJ-102)..."
+                            rows="4" required
+                            class="w-full bg-gray-900/50 border border-gray-700 rounded-2xl px-4 py-3 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none placeholder:text-gray-600 resize-none font-mono text-sm"></textarea>
+                        <p class="text-xs text-gray-500 ml-1">Supports space, comma, or newline separation.</p>
+                    </div>
+
+                    <!-- Column Customization -->
+                    <div class="space-y-3">
+                        <label class="block text-sm font-semibold text-gray-300 ml-1">Report Columns</label>
+                        <div class="flex flex-wrap gap-3">
+                            <label
+                                class="flex items-center gap-2 bg-gray-900/40 border border-gray-700/50 rounded-xl px-4 py-2 cursor-pointer hover:bg-gray-800/60 transition group">
+                                <input type="checkbox" name="column" value="key" checked class="peer hidden" />
+                                <div
+                                    class="w-5 h-5 border border-gray-600 rounded flex items-center justify-center peer-checked:bg-blue-600 peer-checked:border-blue-500 transition">
+                                    <svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor"
+                                        viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="4"
+                                            d="M5 13l4 4L19 7"></path>
+                                    </svg>
+                                </div>
+                                <span class="text-sm text-gray-400 group-hover:text-gray-200 transition">Key</span>
+                            </label>
+
+                            <label
+                                class="flex items-center gap-2 bg-gray-900/40 border border-gray-700/50 rounded-xl px-4 py-2 cursor-pointer hover:bg-gray-800/60 transition group">
+                                <input type="checkbox" name="column" value="type" checked class="peer hidden" />
+                                <div
+                                    class="w-5 h-5 border border-gray-600 rounded flex items-center justify-center peer-checked:bg-blue-600 peer-checked:border-blue-500 transition">
+                                    <svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor"
+                                        viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="4"
+                                            d="M5 13l4 4L19 7"></path>
+                                    </svg>
+                                </div>
+                                <span class="text-sm text-gray-400 group-hover:text-gray-200 transition">Type</span>
+                            </label>
+
+                            <label
+                                class="flex items-center gap-2 bg-gray-900/40 border border-gray-700/50 rounded-xl px-4 py-2 cursor-pointer hover:bg-gray-800/60 transition group">
+                                <input type="checkbox" name="column" value="summary" checked class="peer hidden" />
+                                <div
+                                    class="w-5 h-5 border border-gray-600 rounded flex items-center justify-center peer-checked:bg-blue-600 peer-checked:border-blue-500 transition">
+                                    <svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor"
+                                        viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="4"
+                                            d="M5 13l4 4L19 7"></path>
+                                    </svg>
+                                </div>
+                                <span class="text-sm text-gray-400 group-hover:text-gray-200 transition">Summary</span>
+                            </label>
+
+                            <label
+                                class="flex items-center gap-2 bg-gray-900/40 border border-gray-700/50 rounded-xl px-4 py-2 cursor-pointer hover:bg-gray-800/60 transition group">
+                                <input type="checkbox" name="column" value="status" checked class="peer hidden" />
+                                <div
+                                    class="w-5 h-5 border border-gray-600 rounded flex items-center justify-center peer-checked:bg-blue-600 peer-checked:border-blue-500 transition">
+                                    <svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor"
+                                        viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="4"
+                                            d="M5 13l4 4L19 7"></path>
+                                    </svg>
+                                </div>
+                                <span class="text-sm text-gray-400 group-hover:text-gray-200 transition">Status</span>
+                            </label>
+
+                            <label
+                                class="flex items-center gap-2 bg-gray-900/40 border border-gray-700/50 rounded-xl px-4 py-2 cursor-pointer hover:bg-gray-800/60 transition group">
+                                <input type="checkbox" name="column" value="priority" checked class="peer hidden" />
+                                <div
+                                    class="w-5 h-5 border border-gray-600 rounded flex items-center justify-center peer-checked:bg-blue-600 peer-checked:border-blue-500 transition">
+                                    <svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor"
+                                        viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="4"
+                                            d="M5 13l4 4L19 7"></path>
+                                    </svg>
+                                </div>
+                                <span class="text-sm text-gray-400 group-hover:text-gray-200 transition">Priority</span>
+                            </label>
+
+                            <label
+                                class="flex items-center gap-2 bg-gray-900/40 border border-gray-700/50 rounded-xl px-4 py-2 cursor-pointer hover:bg-gray-800/60 transition group">
+                                <input type="checkbox" name="column" value="assignee" checked class="peer hidden" />
+                                <div
+                                    class="w-5 h-5 border border-gray-600 rounded flex items-center justify-center peer-checked:bg-blue-600 peer-checked:border-blue-500 transition">
+                                    <svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor"
+                                        viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="4"
+                                            d="M5 13l4 4L19 7"></path>
+                                    </svg>
+                                </div>
+                                <span class="text-sm text-gray-400 group-hover:text-gray-200 transition">Assignee</span>
+                            </label>
+
+                            <label
+                                class="flex items-center gap-2 bg-gray-900/40 border border-gray-700/50 rounded-xl px-4 py-2 cursor-pointer hover:bg-gray-800/60 transition group">
+                                <input type="checkbox" name="column" value="customer" class="peer hidden" />
+                                <div
+                                    class="w-5 h-5 border border-gray-600 rounded flex items-center justify-center peer-checked:bg-blue-600 peer-checked:border-blue-500 transition">
+                                    <svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor"
+                                        viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="4"
+                                            d="M5 13l4 4L19 7"></path>
+                                    </svg>
+                                </div>
+                                <span class="text-sm text-gray-400 group-hover:text-gray-200 transition">Customer</span>
+                            </label>
+
+                            <label
+                                class="flex items-center gap-2 bg-gray-900/40 border border-gray-700/50 rounded-xl px-4 py-2 cursor-pointer hover:bg-gray-800/60 transition group">
+                                <input type="checkbox" name="column" value="sprint" class="peer hidden" />
+                                <div
+                                    class="w-5 h-5 border border-gray-600 rounded flex items-center justify-center peer-checked:bg-blue-600 peer-checked:border-blue-500 transition">
+                                    <svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor"
+                                        viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="4"
+                                            d="M5 13l4 4L19 7"></path>
+                                    </svg>
+                                </div>
+                                <span class="text-sm text-gray-400 group-hover:text-gray-200 transition">Sprint</span>
+                            </label>
+
+                            <label
+                                class="flex items-center gap-2 bg-gray-900/40 border border-gray-700/50 rounded-xl px-4 py-2 cursor-pointer hover:bg-red-900/40 transition group">
+                                <input type="checkbox" id="excludeOpen" class="peer hidden" />
+                                <div
+                                    class="w-5 h-5 border border-gray-600 rounded flex items-center justify-center peer-checked:bg-red-600 peer-checked:border-red-500 transition">
+                                    <svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor"
+                                        viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="4"
+                                            d="M5 13l4 4L19 7"></path>
+                                    </svg>
+                                </div>
+                                <span class="text-sm text-gray-400 group-hover:text-gray-200 transition">Exclude Open
+                                    Issues</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="flex flex-col sm:flex-row gap-4 pt-4">
+                        <button type="button" onclick="generateReport('word')"
+                            class="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold py-4 px-6 rounded-2xl shadow-lg shadow-blue-900/20 transform transition active:scale-95 flex items-center justify-center gap-3">
+                            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                                <path
+                                    d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M13,9V3.5L18.5,9H13Z" />
+                            </svg>
+                            Generate Word Report
+                        </button>
+                        <button type="button" onclick="generateReport('pdf')"
+                            class="flex-1 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold py-4 px-6 rounded-2xl shadow-lg shadow-purple-900/20 transform transition active:scale-95 flex items-center justify-center gap-3">
+                            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                                <path
+                                    d="M19,3H5C3.89,3 3,3.89 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5C21,3.89 20.1,3 19,3M9,7H11V15H9V7M13,7H15V11H13V7M11,13H13V15H11V13Z" />
+                            </svg>
+                            Generate PDF Report
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Progress Indicator (Hidden by default) -->
+            <div id="loadingOverlay"
+                class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center">
+                <div
+                    class="bg-gray-800 border border-gray-700 rounded-3xl p-8 flex flex-col items-center max-w-sm mx-4 text-center">
+                    <div class="w-16 h-16 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin mb-4">
+                    </div>
+                    <h3 class="text-xl font-bold text-white mb-2">Generating Report</h3>
+                    <p class="text-gray-400">Fetching ticket details from Jira and crafting your document...</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="/static/app.js"></script>
+    <script>
+        async function generateReport(format) {
+            const form = document.getElementById('reportForm');
+            const formData = new FormData(form);
+
+            // Validate required fields
+            if (!form.checkValidity()) {
+                form.reportValidity();
+                return;
+            }
+
+            const selectedColumns = Array.from(document.querySelectorAll('input[name="column"]:checked')).map(cb => cb.value);
+
+            const payload = {
+                team_name: formData.get('team_name'),
+                sprint_name: formData.get('sprint_name'),
+                from_date: formData.get('from_date'),
+                to_date: formData.get('to_date'),
+                team_members: formData.get('team_members'),
+                tickets: formData.get('tickets'),
+                columns: selectedColumns,
+                exclude_open: document.getElementById('excludeOpen').checked,
+                format: format
+            };
+
+            const overlay = document.getElementById('loadingOverlay');
+            overlay.classList.remove('hidden');
+
+            try {
+                const response = await fetch('/api/reports/generate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Failed to generate report');
+                }
+
+                // Get filename from header if possible
+                const contentDisposition = response.headers.get('Content-Disposition');
+                let filename = `Report_${format.toUpperCase()}_${new Date().getTime()}.${format === 'word' ? 'docx' : 'pdf'}`;
+                if (contentDisposition && contentDisposition.indexOf('attachment') !== -1) {
+                    const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+                    const matches = filenameRegex.exec(contentDisposition);
+                    if (matches != null && matches[1]) {
+                        filename = matches[1].replace(/[ '"]/g, '');
+                    }
+                }
+
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+
+            } catch (err) {
+                alert('Error: ' + err.message);
+            } finally {
+                overlay.classList.add('hidden');
+            }
+        }
+    </script>
+</body>
+
+</html>
