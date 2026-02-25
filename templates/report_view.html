@@ -158,7 +158,8 @@
     </style>
     <link rel="stylesheet" href="/static/theme.css">
     <script src="/static/theme.js"></script>
-    <script src="/static/app.js"></script></head>
+    <script src="/static/app.js"></script>
+</head>
 
 <body class="bg-gray-900 min-h-screen text-white font-sans">
 
@@ -302,36 +303,56 @@
             document.getElementById("reportJql").classList.toggle("hidden");
         }
 
-        function openEditModal() {
+        async function openEditModal() {
             const id = getReportId();
-            const reports = JSON.parse(localStorage.getItem('reports_v1') || '[]');
-            const report = reports.find(r => r.id === id);
-            if (!report) return;
+            try {
+                const res = await fetch(`/api/reports/${id}`);
+                const report = await res.json();
+                if (report.error) return alert(report.error);
 
-            document.getElementById("editJqlInput").value = report.jql;
-            document.getElementById("editModal").classList.remove("hidden");
+                document.getElementById("editJqlInput").value = report.jql;
+                document.getElementById("editModal").classList.remove("hidden");
+            } catch (e) {
+                console.error("Failed to load report for edit", e);
+            }
         }
 
         function closeEditModal() {
             document.getElementById("editModal").classList.add("hidden");
         }
 
-        function saveUpdatedJql() {
+        async function saveUpdatedJql() {
             const id = getReportId();
             const newJql = document.getElementById("editJqlInput").value.trim();
             if (!newJql) return alert("JQL cannot be empty");
 
             console.log("Saving updated JQL for ID:", id, "JQL:", newJql);
 
-            let reports = JSON.parse(localStorage.getItem('reports_v1') || '[]');
-            reports = reports.map(r => r.id === id ? { ...r, jql: newJql } : r);
-            localStorage.setItem('reports_v1', JSON.stringify(reports));
+            try {
+                // We need the name too for PUT. Let's fetch the report first or just pass the current name.
+                // To be safe, let's fetch current name first.
+                const currentRes = await fetch(`/api/reports/${id}`);
+                const currentReport = await currentRes.json();
 
-            // Update UI
-            document.getElementById("reportJql").innerText = newJql;
+                const res = await fetch(`/api/reports/${id}`, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ name: currentReport.name, jql: newJql })
+                });
 
-            closeEditModal();
-            fetchData(true); // Force refresh with new JQL
+                if (res.ok) {
+                    // Update UI
+                    document.getElementById("reportJql").innerText = newJql;
+                    closeEditModal();
+                    fetchData(true); // Force refresh with new JQL
+                } else {
+                    const err = await res.json();
+                    alert("Update failed: " + (err.error || "Unknown error"));
+                }
+            } catch (e) {
+                console.error("Update failed", e);
+                alert("Network error");
+            }
         }
 
         function toggleSelectAll(e) {
@@ -490,33 +511,36 @@
             return new URLSearchParams(window.location.search).get('id');
         }
 
-        function init() {
+        async function init() {
             const id = getReportId();
             if (!id) {
                 window.location.href = '/reports';
                 return;
             }
 
-            const reports = JSON.parse(localStorage.getItem('reports_v1') || '[]');
-            const report = reports.find(r => r.id === id);
+            try {
+                const res = await fetch(`/api/reports/${id}`);
+                const report = await res.json();
 
-            if (!report) {
-                alert("Report configuration not found!");
+                if (report.error) {
+                    alert("Report configuration not found!");
+                    window.location.href = '/reports';
+                    return;
+                }
+
+                document.getElementById("reportName").innerText = report.name;
+                document.getElementById("reportJql").innerText = report.jql;
+
+                // Load logic
+                fetchData(false);
+            } catch (e) {
+                console.error("Init failed", e);
                 window.location.href = '/reports';
-                return;
             }
-
-            document.getElementById("reportName").innerText = report.name;
-            document.getElementById("reportJql").innerText = report.jql;
-
-            // Load logic
-            fetchData(false);
         }
 
         async function fetchData(forceRefresh) {
             const id = getReportId();
-            const reports = JSON.parse(localStorage.getItem('reports_v1') || '[]');
-            const report = reports.find(r => r.id === id);
             const cacheKey = `cache_${id}`;
 
             document.getElementById("tableWrapper").innerHTML = '<div class="text-center p-20 text-gray-500 animate-pulse">Loading data from Jira...</div>';
@@ -538,9 +562,17 @@
 
             // Fetch from API
             try {
-                const report = reports.find(r => r.id === id); // Ensure report is defined in scope or use from above
+                // Fetch report config again to get JQL
+                const repRes = await fetch(`/api/reports/${id}`);
+                const report = await repRes.json();
+
+                if (report.error) {
+                    document.getElementById("tableWrapper").innerHTML = '<div class="text-red-400 text-center">Report config not found</div>';
+                    return;
+                }
+
                 console.log("Fetching data with JQL:", report.jql);
-                
+
                 const res = await fetch("/api/execute_jql", {
                     method: "POST",
                     headers: getApiHeaders(),
@@ -576,7 +608,11 @@
 
         function showCacheTime(ts) {
             const date = new Date(ts).toLocaleTimeString();
-            document.getElementById("cacheInfo").innerText = `Last updated: ${date}`;
+            const cacheInfo = document.getElementById("cacheInfo");
+            if (cacheInfo) {
+                cacheInfo.innerText = `Last updated: ${date}`;
+                cacheInfo.classList.remove("hidden");
+            }
         }
 
         function renderTable(rawData) {

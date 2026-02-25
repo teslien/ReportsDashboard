@@ -78,69 +78,116 @@
     <script src="/static/app.js"></script>
     <script>
         // Load reports on start
-        window.onload = renderReports;
+        window.onload = async () => {
+            await migrateOldReports();
+            renderReports();
+        };
 
-        function getReports() {
+        async function migrateOldReports() {
             const stored = localStorage.getItem('reports_v1');
-            return stored ? JSON.parse(stored) : [];
+            if (!stored) return;
+
+            console.log("Found old reports in localStorage, migrating to DB...");
+            const oldReports = JSON.parse(stored);
+
+            for (const r of oldReports) {
+                try {
+                    await fetch("/api/reports", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ name: r.name, jql: r.jql })
+                    });
+                } catch (e) {
+                    console.error("Migration failed for", r.name, e);
+                }
+            }
+
+            localStorage.removeItem('reports_v1');
+            console.log("Migration complete.");
+        }
+        async function getReports() {
+            try {
+                const res = await fetch("/api/reports");
+                return await res.json();
+            } catch (e) {
+                console.error("Failed to fetch reports", e);
+                return [];
+            }
         }
 
-        function saveReport() {
+        async function saveReport() {
             const name = document.getElementById('reportName').value.trim();
             const jql = document.getElementById('reportJql').value.trim();
             const editId = document.getElementById('editReportId').value;
 
             if (!name || !jql) return alert("Please fill all fields");
 
-            let reports = getReports();
+            const payload = { name, jql };
+            const url = editId ? `/api/reports/${editId}` : "/api/reports";
+            const method = editId ? "PUT" : "POST";
 
-            if (editId) {
-                // Update existing
-                reports = reports.map(r => r.id === editId ? { ...r, name, jql } : r);
-            } else {
-                // Create new
-                const id = 'rep_' + Date.now();
-                reports.push({ id, name, jql, created: Date.now() });
+            try {
+                const res = await fetch(url, {
+                    method: method,
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
+                });
+
+                if (res.ok) {
+                    // Clear inputs
+                    document.getElementById('reportName').value = "";
+                    document.getElementById('reportJql').value = "";
+                    document.getElementById('editReportId').value = "";
+
+                    toggleModal();
+                    renderReports();
+                } else {
+                    const err = await res.json();
+                    alert("Error: " + (err.error || "Failed to save report"));
+                }
+            } catch (e) {
+                console.error("Save failed", e);
+                alert("Network error occurred");
             }
-
-            localStorage.setItem('reports_v1', JSON.stringify(reports));
-
-            // Clear inputs
-            document.getElementById('reportName').value = "";
-            document.getElementById('reportJql').value = "";
-            document.getElementById('editReportId').value = "";
-
-            toggleModal();
-            renderReports();
         }
 
-        function deleteReport(id) {
+        async function deleteReport(id) {
             if (!confirm("Delete this report?")) return;
-            const reports = getReports().filter(r => r.id !== id);
-            localStorage.setItem('reports_v1', JSON.stringify(reports));
-
-            // Also clean up cache if it exists
-            localStorage.removeItem(`cache_${id}`);
-
-            renderReports();
+            try {
+                const res = await fetch(`/api/reports/${id}`, { method: "DELETE" });
+                if (res.ok) {
+                    // Also clean up cache if it exists
+                    localStorage.removeItem(`cache_${id}`);
+                    renderReports();
+                }
+            } catch (e) {
+                console.error("Delete failed", e);
+            }
         }
 
-        function editReport(id) {
-            const reports = getReports();
-            const report = reports.find(r => r.id === id);
-            if (!report) return;
+        async function editReport(id) {
+            try {
+                const res = await fetch(`/api/reports/${id}`);
+                const report = await res.json();
 
-            document.getElementById('modalTitle').innerText = "Edit Report";
-            document.getElementById('editReportId').value = report.id;
-            document.getElementById('reportName').value = report.name;
-            document.getElementById('reportJql').value = report.jql;
+                if (report.error) return alert(report.error);
 
-            toggleModal();
+                document.getElementById('modalTitle').innerText = "Edit Report";
+                document.getElementById('editReportId').value = report.id;
+                document.getElementById('reportName').value = report.name;
+                document.getElementById('reportJql').value = report.jql;
+
+                toggleModal();
+            } catch (e) {
+                console.error("Edit fetch failed", e);
+            }
         }
 
-        function renderReports() {
-            const reports = getReports();
+        async function renderReports() {
             const grid = document.getElementById("reportsGrid");
+            grid.innerHTML = `<div class="col-span-1 md:col-span-3 text-center text-gray-500 py-12">Loading reports...</div>`;
+
+            const reports = await getReports();
 
             if (reports.length === 0) {
                 grid.innerHTML = `<div class="col-span-1 md:col-span-3 text-center text-gray-500 py-12">No reports yet. Click "New Report" to add one.</div>`;
@@ -155,7 +202,8 @@
 
                 // Clicking card goes to view
                 card.onclick = (e) => {
-                    if (e.target.tagName !== "BUTTON") window.location.href = `/report_view?id=${r.id}`;
+                    if (e.target.closest("button")) return; // Don't navigate if button clicked
+                    window.location.href = `/report_view?id=${r.id}`;
                 };
 
                 card.innerHTML = `
@@ -164,10 +212,10 @@
                             <svg class="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
                         </div>
                         <div class="flex gap-2">
-                            <button onclick="event.stopPropagation(); editReport('${r.id}')" class="text-gray-500 hover:text-blue-400 p-1 rounded z-10 transition">
+                            <button onclick="editReport('${r.id}')" class="text-gray-500 hover:text-blue-400 p-1 rounded z-10 transition">
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
                             </button>
-                            <button onclick="event.stopPropagation(); deleteReport('${r.id}')" class="text-gray-500 hover:text-red-400 p-1 rounded z-10 transition">
+                            <button onclick="deleteReport('${r.id}')" class="text-gray-500 hover:text-red-400 p-1 rounded z-10 transition">
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                             </button>
                         </div>

@@ -142,14 +142,19 @@
                     day.</p>
             </div>
             <div class="w-full sm:w-auto">
-                <div class="grid grid-cols-2 gap-2 bg-gray-800 p-1 rounded-xl w-full sm:w-[300px]">
+                <div
+                    class="grid grid-cols-3 gap-2 bg-gray-900/50 p-1.5 rounded-xl w-full sm:w-[420px] border border-gray-800">
                     <button id="tabNotes" onclick="switchTab('notes')"
-                        class="tab-active w-full px-3 sm:px-5 py-2 rounded-lg text-xs sm:text-sm font-semibold transition">
-                        📅 Daily Notes
+                        class="tab-active w-full px-4 py-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-2">
+                        <span>📅</span> Daily Notes
                     </button>
                     <button id="tabReport" onclick="switchTab('report')"
-                        class="w-full px-3 sm:px-5 py-2 rounded-lg text-xs sm:text-sm font-semibold text-gray-400 hover:text-white transition">
-                        📊 Report
+                        class="w-full px-4 py-2 rounded-lg text-xs font-bold text-gray-400 hover:text-white transition flex items-center justify-center gap-2">
+                        <span>📊</span> Report
+                    </button>
+                    <button id="tabTracker" onclick="switchTab('tracker')"
+                        class="w-full px-4 py-2 rounded-lg text-xs font-bold text-gray-400 hover:text-white transition flex items-center justify-center gap-2 whitespace-nowrap">
+                        <span>🔍</span> Tracker
                     </button>
                 </div>
             </div>
@@ -282,6 +287,86 @@
             </div>
         </div>
 
+        <!-- ============================================================ -->
+        <!--  TAB: STATUS TRACKER                                          -->
+        <!-- ============================================================ -->
+        <div id="trackerTab" class="hidden">
+            <div class="glass rounded-2xl p-5 mb-6">
+                <div class="flex flex-wrap gap-4 items-end">
+                    <div>
+                        <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">From</label>
+                        <input type="date" id="trackerStart"
+                            class="bg-gray-800 border border-gray-700 text-white rounded-lg px-3 h-9 outline-none focus:border-blue-500 transition text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">To</label>
+                        <input type="date" id="trackerEnd"
+                            class="bg-gray-800 border border-gray-700 text-white rounded-lg px-3 h-9 outline-none focus:border-blue-500 transition text-sm">
+                    </div>
+                    <div class="min-w-[180px]">
+                        <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Team</label>
+                        <select id="trackerTeam"
+                            class="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 h-9 outline-none focus:border-blue-500 transition text-sm">
+                            <option value="">All Teams</option>
+                        </select>
+                    </div>
+                    <button onclick="loadTrackerSummary()"
+                        class="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-bold px-6 h-9 rounded-lg shadow-lg transition">
+                        Search Tickets
+                    </button>
+                    <div class="flex-1 min-w-[200px]">
+                        <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Filter
+                            Tickets</label>
+                        <input type="text" id="trackerSearch" oninput="filterTrackerTable()"
+                            placeholder="Search key or summary..."
+                            class="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 h-9 outline-none focus:border-blue-500 transition text-sm">
+                    </div>
+                    <div class="flex-1 min-w-[200px] ml-auto">
+                        <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Add ticket to
+                            this range</label>
+                        <div class="flex gap-2">
+                            <input type="text" id="quickAddTicket" placeholder="e.g. TIM-1234"
+                                class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 h-9 outline-none focus:border-blue-500 transition text-sm uppercase">
+                            <button onclick="quickAddTicketToTracker()"
+                                class="bg-gray-700 hover:bg-gray-600 text-white px-3 h-9 rounded-lg text-xs font-bold transition">Add</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tracker Table -->
+            <div id="trackerTableWrap" class="hidden glass rounded-2xl overflow-hidden">
+                <div class="p-4 border-b border-gray-700 flex items-center justify-between">
+                    <span class="font-bold text-sm" id="trackerCount">0 tickets tracked</span>
+                    <button onclick="exportTracker()"
+                        class="text-xs text-blue-400 hover:text-blue-300 transition font-semibold">↓ Export CSV</button>
+                </div>
+                <div class="report-table-wrap">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="text-gray-500 text-[10px] uppercase font-black tracking-widest bg-gray-900/40">
+                                <th class="px-4 py-4 text-left">Ticket</th>
+                                <th class="px-4 py-4 text-left">Details</th>
+                                <th class="px-4 py-4 text-left">Responsible</th>
+                                <th class="px-4 py-4 text-left">Pipeline Status</th>
+                                <th class="px-4 py-4 text-left">Commentary</th>
+                                <th class="px-4 py-4 text-right"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="trackerBody" class="divide-y divide-gray-800"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div id="trackerEmpty" class="glass rounded-2xl p-12 text-center text-gray-500">
+                <div class="text-5xl mb-4">🔍</div>
+                <p>Search by date range to see tickets worked on.</p>
+            </div>
+            <div id="trackerLoading" class="hidden text-center py-16 text-gray-500">
+                <div class="spinner mx-auto mb-3"></div>
+                <p class="text-sm">Fetching summary…</p>
+            </div>
+        </div>
+
     </main>
 
     <!-- ============================================================ -->
@@ -397,11 +482,47 @@
                 <input type="date" id="editDeadline"
                     class="bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 outline-none focus:border-blue-500 transition text-sm">
             </div>
+            <div class="mb-6">
+                <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Tags / Pipeline
+                    Status</label>
+                <div id="editTagsContainer" class="flex flex-wrap gap-2 pt-1">
+                    <!-- Loaded dynamically via JS -->
+                </div>
+            </div>
             <div class="flex justify-end gap-3">
                 <button onclick="closeEditModal()"
                     class="text-gray-400 hover:text-white font-medium px-4 py-2 transition">Cancel</button>
                 <button onclick="saveEdit()"
                     class="bg-blue-600 hover:bg-blue-500 text-white font-bold px-6 py-2 rounded-lg transition">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!--  TRACKER COMMENT MODAL                                       -->
+    <!-- ============================================================ -->
+    <div id="trackerCommentModal" class="fixed inset-0 z-[60] hidden text-white">
+        <div class="modal-backdrop absolute inset-0" onclick="closeTrackerCommentModal()"></div>
+        <div
+            class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md glass rounded-2xl p-8 shadow-2xl">
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-xl font-bold">Update Comment — <span id="trackerEditKey"
+                        class="text-blue-400 font-mono"></span></h3>
+                <button onclick="closeTrackerCommentModal()"
+                    class="text-gray-500 hover:text-white transition text-2xl leading-none">&times;</button>
+            </div>
+            <div class="mb-6">
+                <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Comment /
+                    Commentary</label>
+                <textarea id="trackerEditComment" rows="5" placeholder="Enter status update details..."
+                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 outline-none focus:border-blue-500 transition text-sm resize-none leading-relaxed text-gray-200"></textarea>
+            </div>
+            <div class="flex justify-end gap-3">
+                <button onclick="closeTrackerCommentModal()"
+                    class="text-gray-400 hover:text-white font-medium px-4 py-2 transition">Cancel</button>
+                <button onclick="saveTrackerComment()"
+                    class="bg-blue-600 hover:bg-blue-500 text-white font-bold px-6 py-2 rounded-lg transition shadow-lg shadow-blue-900/20">Update
+                    Comment</button>
             </div>
         </div>
     </div>
@@ -538,23 +659,29 @@
             // Load teams
             await loadTeams();
 
-            // Default report dates (last 7 days)
+            // Default report/tracker dates (last 7 days)
             const d = new Date();
             document.getElementById('reportEnd').value = today;
+            document.getElementById('trackerEnd').value = today;
             d.setDate(d.getDate() - 7);
-            document.getElementById('reportStart').value = d.toISOString().split('T')[0];
+            const start = d.toISOString().split('T')[0];
+            document.getElementById('reportStart').value = start;
+            document.getElementById('trackerStart').value = start;
         })();
 
         // ─── Tabs ─────────────────────────────────────────────────────────
         function switchTab(tab) {
             document.getElementById('notesTab').classList.toggle('hidden', tab !== 'notes');
             document.getElementById('reportTab').classList.toggle('hidden', tab !== 'report');
-            document.getElementById('tabNotes').className = tab === 'notes'
-                ? 'tab-active px-5 py-2 rounded-lg text-sm font-semibold transition'
-                : 'px-5 py-2 rounded-lg text-sm font-semibold text-gray-400 hover:text-white transition';
-            document.getElementById('tabReport').className = tab === 'report'
-                ? 'tab-active px-5 py-2 rounded-lg text-sm font-semibold transition'
-                : 'px-5 py-2 rounded-lg text-sm font-semibold text-gray-400 hover:text-white transition';
+            document.getElementById('trackerTab').classList.toggle('hidden', tab !== 'tracker');
+
+            const baseClass = 'w-full px-4 py-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-2';
+            const inactiveClass = ' text-gray-400 hover:text-white';
+            const activeClass = ' tab-active text-white';
+
+            document.getElementById('tabNotes').className = baseClass + (tab === 'notes' ? activeClass : inactiveClass);
+            document.getElementById('tabReport').className = baseClass + (tab === 'report' ? activeClass : inactiveClass);
+            document.getElementById('tabTracker').className = baseClass + (tab === 'tracker' ? activeClass : inactiveClass);
         }
 
         // ─── Date helpers ─────────────────────────────────────────────────
@@ -590,9 +717,11 @@
 
             const sel = document.getElementById('teamSelect');
             const rSel = document.getElementById('reportTeam');
+            const tSel = document.getElementById('trackerTeam');
             allTeams.forEach(t => {
-                sel.add(new Option(t.name, t.id));
-                rSel.add(new Option(t.name, t.id));
+                if (sel) sel.add(new Option(t.name, t.id));
+                if (rSel) rSel.add(new Option(t.name, t.id));
+                if (tSel) tSel.add(new Option(t.name, t.id));
             });
         }
 
@@ -697,7 +826,7 @@
                             </span>
                             <button onclick="toggleStatus(${n.id}, '${noteStatus}')" title="Toggle status"
                                 class="text-gray-500 hover:text-green-400 transition text-base leading-none">✓</button>
-                            <button onclick="openEditModal(${n.id}, '${n.ticket_key}', \`${(n.comment || '').replace(/`/g, '\\`')}\`, '${n.deadline || ''}')" title="Edit"
+                             <button onclick="openEditModal(${n.id}, '${n.ticket_key}', \`${(n.comment || '').replace(/`/g, '\\`')}\`, '${n.deadline || ''}', '${(n.tags || '').replace(/'/g, "\\'")}')" title="Edit"
                                 class="text-gray-500 hover:text-yellow-400 transition">✎</button>
                             <button onclick="deleteNote(${n.id})" title="Delete"
                                 class="text-gray-600 hover:text-red-400 transition ml-0.5">✕</button>
@@ -897,13 +1026,45 @@
         }
 
         // ─── Edit Modal ───────────────────────────────────────────────────
-        function openEditModal(noteId, ticketKey, comment, deadline) {
+        let currentEditTags = [];
+
+        function openEditModal(noteId, ticketKey, comment, deadline, tags) {
             document.getElementById('editNoteId').value = noteId;
             document.getElementById('editKey').textContent = ticketKey;
             document.getElementById('editComment').value = comment;
             document.getElementById('editDeadline').value = deadline || '';
+
+            // Initialize tags
+            currentEditTags = (tags || "").split(",").filter(t => t.trim());
+            renderEditTags();
+
             document.getElementById('editModal').classList.remove('hidden');
             setTimeout(() => document.getElementById('editComment').focus(), 50);
+        }
+
+        function renderEditTags() {
+            const container = document.getElementById('editTagsContainer');
+            if (!container) return;
+
+            container.innerHTML = TRACKER_TAGS.map(tag => {
+                const isActive = currentEditTags.includes(tag);
+                const colorClass = isActive
+                    ? 'bg-blue-600 text-white border-blue-500 shadow-sm'
+                    : 'bg-gray-800 text-gray-500 border-gray-700 hover:border-gray-500';
+
+                return `<button onclick="toggleEditTag('${tag.replace(/'/g, "\\'")}')" 
+                    type="button"
+                    class="px-2 py-1 rounded text-[10px] font-bold border transition ${colorClass}">${tag}</button>`;
+            }).join('');
+        }
+
+        function toggleEditTag(tag) {
+            if (currentEditTags.includes(tag)) {
+                currentEditTags = currentEditTags.filter(t => t !== tag);
+            } else {
+                currentEditTags.push(tag);
+            }
+            renderEditTags();
         }
         function closeEditModal() { document.getElementById('editModal').classList.add('hidden'); }
 
@@ -911,14 +1072,16 @@
             const noteId = document.getElementById('editNoteId').value;
             const comment = document.getElementById('editComment').value.trim();
             const deadline = document.getElementById('editDeadline').value || null;
+            const tags = currentEditTags.join(",");
             const projectKey = (localStorage.getItem("project_key") || "").trim().toUpperCase();
+
             const res = await fetch(`/api/scrum_notes/${noteId}`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-Project-Key': projectKey
                 },
-                body: JSON.stringify({ comment, deadline })
+                body: JSON.stringify({ comment, deadline, tags })
             });
             if (res.ok) { closeEditModal(); await loadNotes(); }
             else alert('Failed to save.');
@@ -1212,6 +1375,310 @@
                 });
             }
             return text;
+        }
+        // ─── Status Tracker Logic ──────────────────────────────────────────
+        let trackerData = [];
+        const TRACKER_TAGS = ["PR Raised", "PR Merged", "PR Delayed", "Demo Done", "Blocked", "Staged", "Production", "Hot Fix"];
+
+        async function loadTrackerSummary() {
+            const start = document.getElementById('trackerStart').value;
+            const end = document.getElementById('trackerEnd').value;
+            const teamId = document.getElementById('trackerTeam').value;
+
+            if (!start || !end) { alert('Please select a date range.'); return; }
+
+            const wrap = document.getElementById('trackerTableWrap');
+            const empty = document.getElementById('trackerEmpty');
+            const loading = document.getElementById('trackerLoading');
+
+            wrap.classList.add('hidden');
+            empty.classList.add('hidden');
+            loading.classList.remove('hidden');
+
+            try {
+                let url = `/api/scrum_notes/summary?start=${start}&end=${end}`;
+                if (teamId) url += `&team_id=${teamId}`;
+                const res = await fetch(url);
+                trackerData = await res.json();
+
+                // Fetch Jira details for tickets not cached
+                const keys = [...new Set(trackerData.map(n => n.ticket_key).filter(k => !jiraCache[k]))];
+                if (keys.length > 0) {
+                    await Promise.all(keys.map(k => fetchJiraAndCache(k)));
+                }
+
+                renderTrackerTable();
+            } catch (err) {
+                console.error(err);
+                alert('Failed to load tracker summary.');
+            } finally {
+                loading.classList.add('hidden');
+            }
+        }
+
+        function renderTrackerTable() {
+            const wrap = document.getElementById('trackerTableWrap');
+            const empty = document.getElementById('trackerEmpty');
+            const tbody = document.getElementById('trackerBody');
+
+            if (trackerData.length === 0) {
+                wrap.classList.add('hidden');
+                empty.classList.remove('hidden');
+                return;
+            }
+
+            empty.classList.add('hidden');
+            wrap.classList.remove('hidden');
+            document.getElementById('trackerCount').textContent = `${trackerData.length} ticket${trackerData.length !== 1 ? 's' : ''} tracked`;
+
+            tbody.innerHTML = trackerData.map(n => {
+                const jira = jiraCache[n.ticket_key] || {};
+                const currentTags = (n.tags || "").split(",").filter(t => t.trim());
+
+                const tagHtml = TRACKER_TAGS.map(tag => {
+                    const isActive = currentTags.includes(tag);
+                    const tagSlug = tag.toLowerCase().replace(/ /g, '-');
+                    let colorClass = 'bg-gray-800/50 text-gray-500 border-gray-700 hover:border-gray-500';
+                    if (isActive) {
+                        if (tag === 'Blocked') colorClass = 'bg-red-500/20 text-red-400 border-red-500/40 shadow-sm';
+                        else if (tag === 'Production') colorClass = 'bg-green-500/20 text-green-400 border-green-500/40 shadow-sm';
+                        else if (tag === 'PR Raised') colorClass = 'bg-blue-500/20 text-blue-400 border-blue-500/40 shadow-sm';
+                        else if (tag === 'PR Merged') colorClass = 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 shadow-sm';
+                        else if (tag === 'PR Delayed') colorClass = 'bg-rose-500/20 text-rose-400 border-rose-500/40 shadow-sm';
+                        else if (tag === 'Demo Done') colorClass = 'bg-purple-500/20 text-purple-400 border-purple-500/40 shadow-sm';
+                        else if (tag === 'Hot Fix') colorClass = 'bg-orange-500/20 text-orange-400 border-orange-500/40 shadow-sm';
+                        else colorClass = 'bg-indigo-500/20 text-indigo-400 border-indigo-500/40 shadow-sm';
+                    }
+
+                    return `<button onclick="toggleTag('${n.ticket_key}', '${tag}')" 
+                        class="px-2.5 py-1 rounded-md text-[10px] font-black border transition-all duration-200 uppercase tracking-tighter ${colorClass}">${tag}</button>`;
+                }).join('');
+
+                return `
+                <tr class="hover:bg-blue-500/5 transition-colors group">
+                    <td class="px-4 py-4 align-top">
+                        <div class="flex flex-col gap-1">
+                            <a href="javascript:void(0)" onclick="viewTicketDetails('${n.ticket_key}')"
+                               class="font-black text-blue-400 hover:text-blue-300 text-sm tracking-tight transition">${n.ticket_key}</a>
+                            <span class="text-[10px] px-2 py-0.5 rounded-full bg-gray-800 text-gray-400 border border-gray-700 w-fit font-bold">${jira.status || '—'}</span>
+                        </div>
+                    </td>
+                    <td class="px-4 py-4 align-top">
+                        <div class="text-xs text-gray-200 font-medium leading-relaxed max-w-sm line-clamp-2" title="${jira.summary || ''}">${jira.summary || '—'}</div>
+                    </td>
+                    <td class="px-4 py-4 align-top">
+                        <div class="flex flex-wrap gap-1.5 max-w-[140px]">
+                            ${n.members.map(m => `
+                                <div class="flex items-center gap-1.5 bg-gray-900/80 px-2 py-1 rounded-lg border border-gray-800 text-[10px] font-bold text-gray-400 shadow-sm">
+                                    <div class="w-2 h-2 rounded-full ${getAvatarColor(m)}"></div>
+                                    ${m}
+                                </div>
+                            `).join('')}
+                        </div>
+                    </td>
+                    <td class="px-4 py-4 align-top">
+                        <div class="flex flex-wrap gap-1.5">${tagHtml}</div>
+                    </td>
+                    <td class="px-4 py-4 align-top">
+                        <div class="flex flex-col gap-2">
+                            <div class="group/note relative">
+                                <div class="text-[11px] leading-relaxed p-3 rounded-lg border border-gray-800/60 transition-all duration-300 ${n.comment ? 'bg-amber-500/[0.03] border-l-amber-500/50 text-gray-300' : 'bg-gray-900/20 text-gray-500 italic'}">
+                                    ${n.comment ? `
+                                        <div class="flex items-start gap-2">
+                                            <svg class="w-3 h-3 text-amber-500/50 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path d="M18 13V5a2 2 0 00-2-2H4a2 2 0 00-2 2v8a2 2 0 002 2h3l3 3 3-3h3a2 2 0 002-2zM5 7a1 1 0 011-1h8a1 1 0 110 2H6a1 1 0 01-1-1zm1 3a1 1 0 100 2h3a1 1 0 100-2H6z"></path></svg>
+                                            <span>${n.comment}</span>
+                                        </div>
+                                    ` : 'No commentary logged.'}
+                                </div>
+                            </div>
+                            <button onclick="openTrackerCommentModal('${n.ticket_key}', \`${(n.comment || '').replace(/`/g, '\\`').replace(/\n/g, '\\n')}\`)"
+                                class="flex items-center gap-1.5 text-xs font-bold text-blue-400 hover:text-blue-300 transition w-fit">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                                Add / Edit Comment
+                            </button>
+                        </div>
+                    </td>
+                    <td class="px-4 py-4 align-top text-right">
+                        <button onclick="removeTicketFromView('${n.ticket_key}')" 
+                                class="p-2 text-gray-600 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all opacity-0 group-hover:opacity-100">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                        </button>
+                    </td>
+                </tr>`;
+            }).join('');
+        }
+
+        async function toggleTag(key, tag) {
+            const ticket = trackerData.find(n => n.ticket_key === key);
+            if (!ticket) return;
+
+            let tags = (ticket.tags || "").split(",").filter(t => t.trim());
+            if (tags.includes(tag)) {
+                tags = tags.filter(t => t !== tag);
+            } else {
+                tags.push(tag);
+            }
+            const newTags = tags.join(",");
+
+            // To update locally, we need to find ANY note ID for this ticket in the range or just the latest one.
+            // But since our API expects note_id, we should probably add a bulk update or ticket-key based update.
+            // For now, let's find the latest note ID for this ticket to "attach" the tag to.
+            // Actually, better to add a new API for ticket-based updates if we want it to be clean.
+            // But I'll stick to updating all notes for this ticket in the DB for simplicity and consistency.
+
+            try {
+                // Fetch ALL notes for this ticket to update them (or just the latest one as per our summary logic)
+                // Let's implement a simple "update latest note for ticket" approach in backend if needed, 
+                // but since I already have scrum_note_item(note_id), I'll search for one.
+
+                // Optimized: The backend /api/scrum_notes/summary picks the latest tags. 
+                // So updating the latest note is sufficient.
+                const projectKey = (localStorage.getItem("project_key") || "").trim().toUpperCase();
+
+                // We don't have the note ID here directly. Let's fetch it or adjust the summary API to provide one ID.
+                // Or better, let's just make a new endpoint /api/scrum_notes/ticket/<key> (PUT)
+                // Let's add that to app.py shortly.
+
+                const res = await fetch(`/api/scrum_notes/ticket/${key}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'X-Project-Key': projectKey },
+                    body: JSON.stringify({ tags: newTags })
+                });
+
+                if (res.ok) {
+                    ticket.tags = newTags;
+                    renderTrackerTable();
+                }
+            } catch (err) { console.error(err); }
+        }
+
+
+        async function quickAddTicketToTracker() {
+            const input = document.getElementById('quickAddTicket');
+            let key = input.value.trim().toUpperCase();
+            if (!key) return;
+
+            if (/^\d+$/.test(key)) key = 'TIM-' + key;
+
+            // To add a ticket "to the range", we actually need to add a note for SOME member and SOME date.
+            // Usually, if a user is "adding" it here, it's for today.
+            const date = new Date().toISOString().split('T')[0];
+            const teamId = document.getElementById('trackerTeam').value;
+            if (!teamId) { alert('Please select a team first.'); return; }
+
+            // Find first available member to assign it to (or just pick one)
+            if (currentMembers.length === 0) {
+                const resM = await fetch(`/api/teams/${teamId}/members`);
+                currentMembers = await resM.json();
+            }
+            if (currentMembers.length === 0) { alert('No members found for this team.'); return; }
+
+            const member = currentMembers[0];
+            const memberId = member.accountId || member.account_id;
+            const memberName = member.displayName;
+
+            // Fetch Jira first to validate
+            await fetchJiraAndCache(key);
+            if (!jiraCache[key]) { alert('Ticket not found in Jira.'); return; }
+
+            const payload = {
+                date: date,
+                team_id: teamId,
+                member_id: memberId,
+                member_name: memberName,
+                ticket_key: key,
+                comment: '',
+                tags: ''
+            };
+
+            const projectKey = (localStorage.getItem("project_key") || "").trim().toUpperCase();
+            const res = await fetch('/api/scrum_notes', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Project-Key': projectKey },
+                body: JSON.stringify(payload)
+            });
+
+            if (res.ok) {
+                input.value = '';
+                loadTrackerSummary(); // Refresh
+            } else {
+                alert('Failed to add ticket.');
+            }
+        }
+
+        function removeTicketFromView(key) {
+            trackerData = trackerData.filter(n => n.ticket_key !== key);
+            renderTrackerTable();
+        }
+
+        function filterTrackerTable() {
+            const query = document.getElementById('trackerSearch').value.toLowerCase();
+            const rows = document.querySelectorAll('#trackerBody tr');
+
+            rows.forEach(row => {
+                const text = row.innerText.toLowerCase();
+                row.style.display = text.includes(query) ? '' : 'none';
+            });
+        }
+
+        function openTrackerCommentModal(key, comment) {
+            document.getElementById('trackerEditKey').textContent = key;
+            document.getElementById('trackerEditComment').value = comment;
+            document.getElementById('trackerCommentModal').classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeTrackerCommentModal() {
+            document.getElementById('trackerCommentModal').classList.add('hidden');
+            document.body.style.overflow = '';
+        }
+
+        async function saveTrackerComment() {
+            const key = document.getElementById('trackerEditKey').textContent;
+            const comment = document.getElementById('trackerEditComment').value;
+
+            try {
+                const projectKey = (localStorage.getItem("project_key") || "").trim().toUpperCase();
+                const res = await fetch(`/api/scrum_notes/ticket/${key}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'X-Project-Key': projectKey },
+                    body: JSON.stringify({ comment: comment })
+                });
+
+                if (res.ok) {
+                    const ticket = trackerData.find(n => n.ticket_key === key);
+                    if (ticket) ticket.comment = comment;
+                    renderTrackerTable();
+                    closeTrackerCommentModal();
+                    if (document.getElementById('trackerSearch').value) filterTrackerTable();
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Failed to save comment');
+            }
+        }
+
+        function exportTracker() {
+            if (!trackerData.length) return;
+            const headers = ['Ticket', 'Summary', 'Status', 'Worked By', 'Tags', 'Comments'];
+            const rows = trackerData.map(n => {
+                const jira = jiraCache[n.ticket_key] || {};
+                return [
+                    n.ticket_key,
+                    jira.summary || '',
+                    jira.status || '',
+                    n.members.join(', '),
+                    n.tags || '',
+                    n.comment || ''
+                ];
+            });
+            const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+            const a = document.createElement('a');
+            a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+            const start = document.getElementById('trackerStart').value;
+            const end = document.getElementById('trackerEnd').value;
+            a.download = `scrum_status_tracker_${start}_to_${end}.csv`;
+            a.click();
         }
     </script>
 </body>

@@ -214,6 +214,7 @@ def init_db():
             comment     TEXT    DEFAULT \'\',
             deadline    DATE,
             status      TEXT    DEFAULT \'Pending\',
+            tags        TEXT    DEFAULT \'\',
             created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE
         )
@@ -243,6 +244,22 @@ def init_db():
     columns = [row[1] for row in cursor.fetchall()]
     if 'tags' not in columns:
         cursor.execute("ALTER TABLE todos ADD COLUMN tags TEXT DEFAULT '[]'")
+
+    # Migration: Add tags column to scrum_notes if it doesn't exist
+    cursor.execute("PRAGMA table_info(scrum_notes)")
+    columns = [row[1] for row in cursor.fetchall()]
+    if 'tags' not in columns:
+        cursor.execute("ALTER TABLE scrum_notes ADD COLUMN tags TEXT DEFAULT ''")
+
+    # Custom Reports Table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS custom_reports (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            jql TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
 
     conn.commit()
     conn.close()
@@ -811,6 +828,67 @@ def assignee_full_profile():
 @app.route("/reports")
 def reports_page():
     return render_template("custom_reports.html", project=PROJECT_KEY)
+
+# =========================
+# CUSTOM REPORTS API
+# =========================
+
+@app.route("/api/reports", methods=["GET", "POST"])
+def manage_reports():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    if request.method == "POST":
+        data = request.json
+        name = data.get("name")
+        jql = data.get("jql")
+        
+        if not name or not jql:
+            return jsonify({"error": "Name and JQL are required"}), 400
+            
+        cursor.execute("INSERT INTO custom_reports (name, jql) VALUES (?, ?)", (name, jql))
+        conn.commit()
+        report_id = cursor.lastrowid
+        conn.close()
+        return jsonify({"id": report_id, "name": name, "jql": jql})
+    
+    else:  # GET
+        cursor.execute("SELECT id, name, jql, created_at FROM custom_reports ORDER BY created_at DESC")
+        reports = [{"id": r[0], "name": r[1], "jql": r[2], "created": r[3]} for r in cursor.fetchall()]
+        conn.close()
+        return jsonify(reports)
+
+@app.route("/api/reports/<int:report_id>", methods=["GET", "PUT", "DELETE"])
+def report_detail(report_id):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    if request.method == "GET":
+        cursor.execute("SELECT id, name, jql, created_at FROM custom_reports WHERE id = ?", (report_id,))
+        row = cursor.fetchone()
+        conn.close()
+        if row:
+            return jsonify({"id": row[0], "name": row[1], "jql": row[2], "created": row[3]})
+        return jsonify({"error": "Report not found"}), 404
+        
+    elif request.method == "PUT":
+        data = request.json
+        name = data.get("name")
+        jql = data.get("jql")
+        
+        if not name or not jql:
+            return jsonify({"error": "Name and JQL are required"}), 400
+            
+        cursor.execute("UPDATE custom_reports SET name = ?, jql = ? WHERE id = ?", (name, jql, report_id))
+        conn.commit()
+        conn.close()
+        return jsonify({"success": True})
+        
+    elif request.method == "DELETE":
+        cursor.execute("DELETE FROM custom_reports WHERE id = ?", (report_id,))
+        conn.commit()
+        conn.close()
+        return jsonify({"success": True})
 
 @app.route("/tracker")
 def tracker():
@@ -1861,9 +1939,9 @@ def scrum_notes():
             return jsonify({"error": "Missing required fields (member_id)"}), 400
 
         cursor.execute("""
-            INSERT INTO scrum_notes (date, team_id, member_id, member_name, ticket_key, comment, deadline)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (date, team_id, member_id, member_name, ticket_key, comment, deadline))
+            INSERT INTO scrum_notes (date, team_id, member_id, member_name, ticket_key, comment, deadline, tags)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (date, team_id, member_id, member_name, ticket_key, comment, deadline, data.get("tags", "")))
         conn.commit()
         new_id = cursor.lastrowid
         conn.close()
@@ -1876,7 +1954,7 @@ def scrum_notes():
             conn.close()
             return jsonify({"error": "date and team_id are required"}), 400
         cursor.execute("""
-            SELECT id, date, team_id, member_id, member_name, ticket_key, comment, deadline, status
+            SELECT id, date, team_id, member_id, member_name, ticket_key, comment, deadline, status, tags
             FROM scrum_notes
             WHERE date = ? AND team_id = ?
             ORDER BY member_name, created_at
@@ -1885,7 +1963,7 @@ def scrum_notes():
             "id": r[0], "date": r[1], "team_id": r[2],
             "member_id": r[3], "member_name": r[4],
             "ticket_key": r[5], "comment": r[6],
-            "deadline": r[7], "status": r[8]
+            "deadline": r[7], "status": r[8], "tags": r[9]
         } for r in cursor.fetchall()]
         conn.close()
         return jsonify(rows)
@@ -1913,6 +1991,9 @@ def scrum_note_item(note_id):
         if "status" in data:
             fields.append("status = ?")
             params.append(data["status"])
+        if "tags" in data:
+            fields.append("tags = ?")
+            params.append(data["tags"])
         if not fields:
             conn.close()
             return jsonify({"error": "No fields to update"}), 400
@@ -1921,6 +2002,94 @@ def scrum_note_item(note_id):
         conn.commit()
         conn.close()
         return jsonify({"success": True})
+
+@app.route("/api/scrum_notes/summary", methods=["GET"])
+def scrum_notes_summary():
+    """Fetch unique ticket keys worked on by a team/project in a date range."""
+    start_date = request.args.get("start")
+    end_date = request.args.get("end")
+    team_id = request.args.get("team_id")
+    
+    if not start_date or not end_date:
+        return jsonify({"error": "start and end dates are required"}), 400
+        
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    # Logic: Get unique tickets from scrum_notes for the range, 
+    # Aggregate member names, and pick the latest non-empty comment/tags
+    # Note: Using subqueries to get the latest comment/tags for that specific key
+    query = """
+        SELECT ticket_key, 
+               GROUP_CONCAT(DISTINCT member_name) as members,
+               GROUP_CONCAT(DISTINCT member_id) as member_ids,
+               (SELECT comment FROM scrum_notes sn2 WHERE sn2.ticket_key = sn1.ticket_key AND sn2.comment != '' ORDER BY date DESC, created_at DESC LIMIT 1) as latest_comment,
+               (SELECT tags FROM scrum_notes sn2 WHERE sn2.ticket_key = sn1.ticket_key AND sn2.tags != '' ORDER BY date DESC, created_at DESC LIMIT 1) as latest_tags
+        FROM scrum_notes sn1
+        WHERE date >= ? AND date <= ?
+    """
+    params = [start_date, end_date]
+    
+    if team_id:
+        query += " AND team_id = ?"
+        params.append(team_id)
+        
+    query += " GROUP BY ticket_key"
+    
+    try:
+        cursor.execute(query, tuple(params))
+        rows = cursor.fetchall()
+        
+        results = []
+        for r in rows:
+            results.append({
+                "ticket_key": r[0],
+                "members": (r[1].split(",") if r[1] else []),
+                "member_ids": (r[2].split(",") if r[2] else []),
+                "comment": r[3] or "",
+                "tags": r[4] or ""
+            })
+            
+        conn.close()
+        return jsonify(results)
+    except Exception as e:
+        conn.close()
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/scrum_notes/ticket/<key>", methods=["PUT"])
+def scrum_note_by_ticket(key):
+    """Update tags or comment for all notes of a specific ticket."""
+    data = request.json
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    fields, params = [], []
+    if "comment" in data:
+        fields.append("comment = ?")
+        params.append(data["comment"])
+    if "tags" in data:
+        fields.append("tags = ?")
+        params.append(data["tags"])
+        
+    if not fields:
+        conn.close()
+        return jsonify({"error": "No fields to update"}), 400
+        
+    params.append(key)
+    try:
+        # Update the LATEST note for this ticket to preserve history but update the tracker view
+        # The summary API picks the latest comment/tags, so we update the latest entry.
+        cursor.execute(f"""
+            UPDATE scrum_notes 
+            SET {', '.join(fields)} 
+            WHERE id = (SELECT id FROM scrum_notes WHERE ticket_key = ? ORDER BY date DESC, created_at DESC LIMIT 1)
+        """, params)
+        conn.commit()
+        conn.close()
+        return jsonify({"success": True})
+    except Exception as e:
+        conn.close()
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/api/scrum_notes/report", methods=["GET"])
 def scrum_notes_report():
