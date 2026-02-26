@@ -648,6 +648,24 @@
         let reportData = [];
         let currentModalMemberId = '';  // set when opening Add Ticket modal, never from DOM
         let currentModalMemberName = '';
+        const TRACKER_TAGS = ["PR Raised", "PR Merged", "PR Delayed", "Demo Done", "Blocked", "Staged", "Production", "Hot Fix", "Previous Sprint"];
+
+        function getTagColorClass(tag, isActive) {
+            if (!isActive) return 'bg-gray-800/50 text-gray-500 border-gray-700 hover:border-gray-500';
+
+            const colors = {
+                'Blocked': 'bg-red-500/20 text-red-400 border-red-500/40 shadow-sm',
+                'Production': 'bg-green-500/20 text-green-400 border-green-500/40 shadow-sm',
+                'PR Raised': 'bg-blue-500/20 text-blue-400 border-blue-500/40 shadow-sm',
+                'PR Merged': 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 shadow-sm',
+                'PR Delayed': 'bg-rose-500/20 text-rose-400 border-rose-500/40 shadow-sm',
+                'Demo Done': 'bg-purple-500/20 text-purple-400 border-purple-500/40 shadow-sm',
+                'Hot Fix': 'bg-orange-500/20 text-orange-400 border-orange-500/40 shadow-sm',
+                'Staged': 'bg-indigo-500/20 text-indigo-400 border-indigo-500/40 shadow-sm'
+            };
+
+            return colors[tag] || 'bg-indigo-500/20 text-indigo-400 border-indigo-500/40 shadow-sm';
+        }
 
         // ─── Init ────────────────────────────────────────────────────────
         (async function init() {
@@ -1048,13 +1066,11 @@
 
             container.innerHTML = TRACKER_TAGS.map(tag => {
                 const isActive = currentEditTags.includes(tag);
-                const colorClass = isActive
-                    ? 'bg-blue-600 text-white border-blue-500 shadow-sm'
-                    : 'bg-gray-800 text-gray-500 border-gray-700 hover:border-gray-500';
+                const colorClass = getTagColorClass(tag, isActive);
 
                 return `<button onclick="toggleEditTag('${tag.replace(/'/g, "\\'")}')" 
                     type="button"
-                    class="px-2 py-1 rounded text-[10px] font-bold border transition ${colorClass}">${tag}</button>`;
+                    class="px-2.5 py-1 rounded-md text-[10px] font-black border transition-all duration-200 uppercase tracking-tighter ${colorClass}">${tag}</button>`;
             }).join('');
         }
 
@@ -1378,7 +1394,6 @@
         }
         // ─── Status Tracker Logic ──────────────────────────────────────────
         let trackerData = [];
-        const TRACKER_TAGS = ["PR Raised", "PR Merged", "PR Delayed", "Demo Done", "Blocked", "Staged", "Production", "Hot Fix"];
 
         async function loadTrackerSummary() {
             const start = document.getElementById('trackerStart').value;
@@ -1437,20 +1452,9 @@
 
                 const tagHtml = TRACKER_TAGS.map(tag => {
                     const isActive = currentTags.includes(tag);
-                    const tagSlug = tag.toLowerCase().replace(/ /g, '-');
-                    let colorClass = 'bg-gray-800/50 text-gray-500 border-gray-700 hover:border-gray-500';
-                    if (isActive) {
-                        if (tag === 'Blocked') colorClass = 'bg-red-500/20 text-red-400 border-red-500/40 shadow-sm';
-                        else if (tag === 'Production') colorClass = 'bg-green-500/20 text-green-400 border-green-500/40 shadow-sm';
-                        else if (tag === 'PR Raised') colorClass = 'bg-blue-500/20 text-blue-400 border-blue-500/40 shadow-sm';
-                        else if (tag === 'PR Merged') colorClass = 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 shadow-sm';
-                        else if (tag === 'PR Delayed') colorClass = 'bg-rose-500/20 text-rose-400 border-rose-500/40 shadow-sm';
-                        else if (tag === 'Demo Done') colorClass = 'bg-purple-500/20 text-purple-400 border-purple-500/40 shadow-sm';
-                        else if (tag === 'Hot Fix') colorClass = 'bg-orange-500/20 text-orange-400 border-orange-500/40 shadow-sm';
-                        else colorClass = 'bg-indigo-500/20 text-indigo-400 border-indigo-500/40 shadow-sm';
-                    }
+                    const colorClass = getTagColorClass(tag, isActive);
 
-                    return `<button onclick="toggleTag('${n.ticket_key}', '${tag}')" 
+                    return `<button onclick="toggleTag('${n.ticket_key}', '${tag.replace(/'/g, "\\'")}')" 
                         class="px-2.5 py-1 rounded-md text-[10px] font-black border transition-all duration-200 uppercase tracking-tighter ${colorClass}">${tag}</button>`;
                 }).join('');
 
