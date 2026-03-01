@@ -1652,14 +1652,22 @@ def sprint_weeks(sprint_id):
         conn.close()
         return jsonify(weeks)
 
-@app.route("/api/sprint_weeks/<int:week_id>", methods=["DELETE"])
-def delete_sprint_week(week_id):
+@app.route("/api/sprint_weeks/<int:week_id>", methods=["PUT", "DELETE"])
+def manage_sprint_week(week_id):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute("DELETE FROM sprint_weeks WHERE id = ?", (week_id,))
-    conn.commit()
-    conn.close()
-    return jsonify({"success": True})
+    if request.method == "DELETE":
+        cursor.execute("DELETE FROM sprint_weeks WHERE id = ?", (week_id,))
+        conn.commit()
+        conn.close()
+        return jsonify({"success": True})
+    elif request.method == "PUT":
+        data = request.json
+        goal = data.get("goal")
+        cursor.execute("UPDATE sprint_weeks SET goal = ? WHERE id = ?", (goal, week_id))
+        conn.commit()
+        conn.close()
+        return jsonify({"success": True})
 
 @app.route("/api/sprints/<int:sprint_id>/tickets", methods=["GET", "POST"])
 def sprint_tickets_api(sprint_id):
