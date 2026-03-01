@@ -617,7 +617,134 @@ def scoreboard_data():
                 stats[aid] = {"id": aid, "name": name, "count": 0, "avatar": assignee["avatarUrls"]["48x48"]}
             stats[aid]["count"] += 1
             
+            
     return jsonify(list(stats.values()))
+
+# =========================
+# SPRINT DASHBOARD API
+# =========================
+@app.route("/api/dashboard/sprint_stats", methods=["POST"])
+def sprint_stats():
+    data = request.json
+    team_id = data.get("team_id")
+    sprint_id = data.get("sprint_id") # Optional Jira Sprint ID
+    production_only = data.get("production_only", False)
+    
+    if not team_id:
+        return jsonify({"error": "Team is required"}), 400
+        
+    # 1. Get Team Members
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT account_id, display_name, avatar_url FROM team_members WHERE team_id = ?", (team_id,))
+    members = [{"id": r[0], "name": r[1], "avatar": r[2]} for r in cursor.fetchall()]
+    conn.close()
+    
+    if not members:
+        return jsonify({"error": "No members found for this team"}), 400
+        
+    member_ids = [m["id"] for m in members]
+    member_ids_str = ", ".join([f'"{mid}"' for mid in member_ids])
+    
+    headers_dict = dict(HEADERS)
+    project_key_str = str(PROJECT_KEY)
+
+    # 2. Build JQL
+    # We must have project key
+    jql = f'project = "{project_key_str}"'
+    
+    # Optional Sprint filter
+    if sprint_id:
+        jql += f' AND sprint = {sprint_id}'
+    
+    # Required Assignee filter (for this dashboard, we only track the team members)
+    jql += f' AND assignee IN ({member_ids_str})'
+    
+    # Optional Production filter
+    if production_only:
+        jql += ' AND "platform[checkboxes]" = PRODUCTION'
+    
+    try:
+        res = requests.get(
+            f"{JIRA_DOMAIN}/rest/api/3/search/jql",
+            headers=headers_dict,
+            params={
+                "jql": jql, 
+                "maxResults": 1000, 
+                "fields": "summary,status,priority,assignee,issuetype"
+            }
+        ).json()
+        
+        if "errorMessages" in res:
+            return jsonify({"error": res["errorMessages"]}), 400
+            
+        all_issues = res.get("issues", [])
+        
+        # 3. Calculate Stats
+        done_issues = [i for i in all_issues if i["fields"]["status"]["statusCategory"]["key"] == "done"]
+        active_issues = [i for i in all_issues if i["fields"]["status"]["statusCategory"]["key"] != "done"]
+        
+        total_solved = len(done_issues)
+        bugs_solved = len([i for i in done_issues if i["fields"]["issuetype"]["name"].lower() == "bug"])
+        
+        # User Performance
+        performance = {}
+        for m in members:
+            performance[m["id"]] = {"name": m["name"], "avatar": m["avatar"], "solved": 0, "active": 0}
+            
+        for i in all_issues:
+            assignee = i["fields"].get("assignee")
+            if assignee:
+                aid = assignee["accountId"]
+                if aid in performance:
+                    if i["fields"]["status"]["statusCategory"]["key"] == "done":
+                        performance[aid]["solved"] += 1
+                    else:
+                        performance[aid]["active"] += 1
+                        
+        # Today's Work: Active tickets with their current status
+        today_work = []
+        for i in active_issues:
+            today_work.append({
+                "key": i["key"],
+                "summary": i["fields"]["summary"],
+                "assignee": i["fields"].get("assignee", {}).get("displayName", "Unassigned"),
+                "status": i["fields"]["status"]["name"],
+                "type_icon": i["fields"]["issuetype"].get("iconUrl")
+            })
+            
+        # Group status distribution for chart
+        status_dist = {}
+        for i in all_issues:
+            s = i["fields"]["status"]["name"]
+            status_dist[s] = status_dist.get(s, 0) + 1
+            
+        # Group type distribution
+        type_dist = {}
+        for i in all_issues:
+            t = i["fields"]["issuetype"]["name"]
+            type_dist[t] = type_dist.get(t, 0) + 1
+            
+        # Group priority distribution
+        pri_dist = {}
+        for i in all_issues:
+            p = i["fields"]["priority"]["name"]
+            pri_dist[p] = pri_dist.get(p, 0) + 1
+            
+        return jsonify({
+            "total_solved": total_solved,
+            "bugs_solved": bugs_solved,
+            "active_load": len(active_issues),
+            "performance": list(performance.values()),
+            "today_work": today_work,
+            "charts": {
+                "status": status_dist,
+                "type": type_dist,
+                "priority": pri_dist
+            }
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # =========================
 # VELOCITY DATA (TRENDS)
@@ -1487,6 +1614,8 @@ def get_sprints():
     # 1. Get all boards associated with project TIM
     boards_url = f"{JIRA_DOMAIN}/rest/agile/1.0/board"
     try:
+        query = request.args.get("q", "").lower()
+        
         boards_res = requests.get(boards_url, headers=headers_dict, params={"projectKeyOrId": project_key_str})
         if boards_res.status_code != 200:
             return jsonify({"error": f"Failed to fetch boards: {boards_res.text}"}), 500
@@ -1496,6 +1625,8 @@ def get_sprints():
         
         for b in boards:
             board_id = b["id"]
+            # To keep it fast, we only fetch the most recent sprints if no query is provided,
+            # or we fetch more if searching.
             start_at = 0
             max_results = 50
             
@@ -1516,15 +1647,25 @@ def get_sprints():
                     break
                     
                 for s in values:
-                    # Keep newest state/info if duplicate (though shouldn't happen much)
+                    sname = s.get("name", "")
+                    # Local filter by query
+                    if query and query not in sname.lower():
+                        continue
+                        
                     all_sprints_map[s["id"]] = {
                         "id": s["id"],
-                        "name": s["name"],
+                        "name": sname,
                         "state": s["state"]
                     }
                 
                 if data.get("isLast", True):
                     break
+                
+                # If we have a query and found some, or if we have enough recent ones, maybe stop?
+                # Actually, Jira doesn't support server-side name filtering well for sprints.
+                # So we have to fetch and filter. To keep it responsive, we'll limit the search depth.
+                if start_at >= 150: break # Don't go too deep to avoid timeout
+                
                 start_at += len(values)
         
         final_sprints = list(all_sprints_map.values())

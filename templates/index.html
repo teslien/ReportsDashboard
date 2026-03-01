@@ -32,6 +32,10 @@
             align-items: center;
         }
 
+        .select2-container--default.select2-container--disabled .select2-selection--single {
+            background-color: #374151 !important;
+        }
+
         .select2-container--default .select2-selection--single .select2-selection__rendered {
             color: #d1d5db;
             /* Gray 300 */
@@ -85,7 +89,8 @@
         }
     </style>
     <link rel="stylesheet" href="/static/theme.css">
-    <script src="/static/theme.js"></script></head>
+    <script src="/static/theme.js"></script>
+</head>
 
 <body class="bg-gray-900 min-h-screen text-white font-sans">
 
@@ -99,60 +104,66 @@
         <div
             class="bg-gray-800 p-6 rounded-2xl shadow-xl border border-gray-700 mb-8 flex flex-col md:flex-row gap-6 items-end">
             <div class="flex-1 w-full">
-                <label class="block text-sm font-bold text-gray-400 mb-2">Select Assignee</label>
-                <select id="assigneeSelect" class="w-full">
-                    <option></option> <!-- Placeholder -->
-                </select>
-            </div>
-
-            <div id="rangeSelectWrapper" class="w-full md:w-48">
-                <label class="block text-sm font-bold text-gray-400 mb-2">Time Range</label>
-                <select id="timeRange"
+                <label class="block text-sm font-bold text-gray-400 mb-2">Select Team</label>
+                <select id="teamSelect"
                     class="w-full bg-gray-700 text-white h-[42px] rounded px-3 border border-gray-600 focus:border-blue-500 outline-none"
-                    onchange="handleRangeChange()">
-                    <option value="day">Today</option>
-                    <option value="yesterday">Yesterday</option>
-                    <option value="week">This Week</option>
-                    <option value="month" selected>This Month</option>
-                    <option value="year">This Year</option>
-                    <option value="date">Specific Date</option>
+                    onchange="handleTeamChange()">
+                    <option value="">Select a team...</option>
                 </select>
             </div>
 
-            <div id="specificDateWrapper" class="w-full md:w-48 hidden">
-                <label class="block text-sm font-bold text-gray-400 mb-2">Select Date</label>
-                <div class="flex gap-2">
-                    <input type="date" id="specificDate"
-                        class="flex-1 bg-gray-700 text-white h-[42px] rounded px-3 border border-gray-600 focus:border-blue-500 outline-none">
-                    <button onclick="resetRange()" class="text-gray-500 hover:text-white transition px-2">
-                        &times;
-                    </button>
+            <div class="flex-1 w-full">
+                <label class="block text-sm font-bold text-gray-400 mb-2">Select Sprint (Optional)</label>
+                <div class="relative">
+                    <select id="sprintSelect"
+                        class="w-full bg-gray-700 text-white h-[42px] rounded px-3 border border-gray-600 focus:border-blue-500 outline-none">
+                        <option value="">No sprint (Team work only)</option>
+                    </select>
+                    <div id="sprintLoader" class="absolute right-10 top-1/2 -translate-y-1/2 hidden">
+                        <svg class="animate-spin h-5 w-5 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none"
+                            viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
+                            </circle>
+                            <path class="opacity-75" fill="currentColor"
+                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                            </path>
+                        </svg>
+                    </div>
                 </div>
             </div>
 
-            <button onclick="loadDashboardData()"
+            <div class="w-full md:w-auto pb-2">
+                <label class="flex items-center gap-2 cursor-pointer group">
+                    <input type="checkbox" id="productionOnly"
+                        class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-blue-600 focus:ring-0 cursor-pointer">
+                    <span class="text-sm font-bold text-gray-400 group-hover:text-white transition">Production
+                        Only</span>
+                </label>
+            </div>
+
+            <button onclick="loadSprintDashboardData()"
                 class="bg-blue-600 hover:bg-blue-500 text-white font-bold h-[42px] px-6 rounded shadow-lg transition w-full md:w-auto">
-                Analyze
+                Run Analysis
             </button>
         </div>
 
         <!-- KPI Grid -->
         <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-            <!-- Velocity -->
-            <a id="kpiDoneLink" href="#"
-                class="glass p-6 rounded-2xl relative overflow-hidden group hover:-translate-y-1 transition duration-300 block cursor-pointer">
+            <!-- Total Solved -->
+            <div
+                class="glass p-6 rounded-2xl relative overflow-hidden group hover:-translate-y-1 transition duration-300">
                 <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition">
                     <svg class="w-24 h-24 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
                         <path
                             d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z" />
                     </svg>
                 </div>
-                <h3 class="text-gray-400 text-sm font-bold uppercase tracking-wider">Tickets Done</h3>
-                <div class="text-4xl font-black text-white mt-2" id="kpiDone">-</div>
-                <div class="text-green-400 text-xs mt-1 font-mono" id="kpiDoneTrend">Closed in range</div>
-            </a>
+                <h3 class="text-gray-400 text-sm font-bold uppercase tracking-wider">Total Tickets Solved</h3>
+                <div class="text-4xl font-black text-white mt-2" id="kpiTotalSolved">0</div>
+                <div class="text-green-400 text-xs mt-1 font-mono">In selected sprint</div>
+            </div>
 
-            <!-- High Impact -->
+            <!-- Bugs Solved -->
             <div
                 class="glass p-6 rounded-2xl relative overflow-hidden group hover:-translate-y-1 transition duration-300">
                 <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition">
@@ -161,12 +172,12 @@
                             d="M12.316 3.051a1 1 0 01.633 1.265l-4 12a1 1 0 11-1.898-.632l4-12a1 1 0 011.265-.633zM5.707 6.293a1 1 0 010 1.414L3.414 10l2.293 2.293a1 1 0 11-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0zm8.586 0a1 1 0 011.414 0l3 3a1 1 0 010 1.414l-3 3a1 1 0 11-1.414-1.414L16.586 10l-2.293-2.293a1 1 0 010-1.414z" />
                     </svg>
                 </div>
-                <h3 class="text-gray-400 text-sm font-bold uppercase tracking-wider">High Priority Done</h3>
-                <div class="text-4xl font-black text-white mt-2" id="kpiHigh">-</div>
-                <div class="text-red-400 text-xs mt-1 font-mono">Critical impact</div>
+                <h3 class="text-gray-400 text-sm font-bold uppercase tracking-wider">Bugs Solved</h3>
+                <div class="text-4xl font-black text-white mt-2" id="kpiBugsSolved">0</div>
+                <div class="text-red-400 text-xs mt-1 font-mono">Defects closed</div>
             </div>
 
-            <!-- Current Load -->
+            <!-- Focus Factor (Ratio) -->
             <div
                 class="glass p-6 rounded-2xl relative overflow-hidden group hover:-translate-y-1 transition duration-300">
                 <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition">
@@ -175,17 +186,58 @@
                             d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
                     </svg>
                 </div>
-                <h3 class="text-gray-400 text-sm font-bold uppercase tracking-wider">Current Load</h3>
-                <div class="text-4xl font-black text-white mt-2" id="kpiOpen">-</div>
-                <div class="text-yellow-400 text-xs mt-1 font-mono">Active (Not Done)</div>
+                <h3 class="text-gray-400 text-sm font-bold uppercase tracking-wider">Active Load</h3>
+                <div class="text-4xl font-black text-white mt-2" id="kpiActiveLoad">0</div>
+                <div class="text-yellow-400 text-xs mt-1 font-mono">Still in progress</div>
             </div>
 
-            <!-- Productivity Score -->
+            <!-- Sprint Health -->
             <div
                 class="glass p-6 rounded-2xl relative overflow-hidden group hover:-translate-y-1 transition duration-300 bg-gradient-to-br from-blue-900/50 to-purple-900/50 border-blue-800">
-                <h3 class="text-gray-100 text-sm font-bold uppercase tracking-wider">Focus Factor</h3>
-                <div class="text-4xl font-black text-white mt-2" id="kpiFocus">-</div>
-                <div class="text-blue-200 text-xs mt-1 font-mono">Ratio High/Total</div>
+                <h3 id="progressLabel" class="text-gray-100 text-sm font-bold uppercase tracking-wider">Sprint Progress
+                </h3>
+                <div class="text-4xl font-black text-white mt-2" id="kpiProgress">0%</div>
+                <div class="text-blue-200 text-xs mt-1 font-mono">Solved / Total</div>
+            </div>
+        </div>
+
+        <!-- Second Row: User Performance & Today's Work -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <!-- User Performance -->
+            <div class="glass p-6 rounded-2xl border border-gray-700">
+                <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
+                    <span class="w-2 h-6 bg-green-500 rounded-full"></span>
+                    User Performance
+                </h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left">
+                        <thead>
+                            <tr class="text-gray-400 text-xs uppercase tracking-wider border-b border-gray-700">
+                                <th class="pb-3">Member</th>
+                                <th class="pb-3 text-center">Solved</th>
+                                <th class="pb-3 text-center">Active</th>
+                                <th class="pb-3 text-right">Success Rate</th>
+                            </tr>
+                        </thead>
+                        <tbody id="performanceBody">
+                            <tr>
+                                <td colspan="4" class="py-4 text-center text-gray-500 italic text-sm">Select team and
+                                    sprint to see data</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Today's Work -->
+            <div class="glass p-6 rounded-2xl border border-gray-700">
+                <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
+                    <span class="w-2 h-6 bg-blue-500 rounded-full"></span>
+                    Today's Work (Who's doing what)
+                </h3>
+                <div class="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar" id="todayWorkList">
+                    <p class="text-center text-gray-500 italic text-sm py-4">No active work data</p>
+                </div>
             </div>
         </div>
 
@@ -196,7 +248,7 @@
             <div class="glass p-6 rounded-2xl border border-gray-700">
                 <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
                     <span class="w-2 h-6 bg-blue-500 rounded-full"></span>
-                    What they worked on
+                    Issue Type Mix
                 </h3>
                 <div class="h-64">
                     <canvas id="typeChart"></canvas>
@@ -218,7 +270,7 @@
             <div class="glass p-6 rounded-2xl border border-gray-700">
                 <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
                     <span class="w-2 h-6 bg-yellow-500 rounded-full"></span>
-                    Current Work Status
+                    Sprint Status Distribution
                 </h3>
                 <div class="h-64">
                     <canvas id="statusChart"></canvas>
@@ -226,137 +278,206 @@
             </div>
         </div>
 
+
     </main>
 
     <script src="/static/app.js"></script>
     <script>
-        // Inline Init Logic for Dashboard specific stuff (mostly Select2)
         $(document).ready(function () {
-            // Init Select2
-            $('#assigneeSelect').select2({
-                placeholder: 'Search for a team member...',
+            // Initialize Select2 for better searchability
+            $('#teamSelect').select2({
+                placeholder: 'Select a team...',
                 allowClear: true,
-                width: '100%' // Fix width issue
+                width: '100%'
             });
 
-            // Populate Select2 from API
-            fetchAssigneesForSelect();
+            $('#sprintSelect').select2({
+                placeholder: 'Search for a sprint (min 2 chars)...',
+                allowClear: true,
+                width: '100%',
+                minimumInputLength: 2,
+                ajax: {
+                    url: '/api/sprints',
+                    dataType: 'json',
+                    delay: 500,
+                    data: function (params) {
+                        return { q: params.term };
+                    },
+                    processResults: function (data) {
+                        return {
+                            results: data.map(s => ({
+                                id: s.id,
+                                text: `${s.name} (${s.state})`
+                            }))
+                        };
+                    },
+                    cache: true
+                }
+            });
+
+            // Re-trigger global sync when Select2 changes
+            $('#teamSelect').on('change', function () {
+                handleTeamChange();
+            });
+
+            // Initial load of teams
+            loadTeams();
         });
 
-        async function fetchAssigneesForSelect() {
+        async function loadTeams() {
             try {
-                // Use GET as the backend is now optimized for it
-                const res = await fetch("/api/assignees", {
-                    method: "GET",
-                    headers: getApiHeaders()
+                const res = await fetch("/api/teams");
+                const teams = await res.json();
+                const sel = $("#teamSelect");
+                sel.empty().append('<option value="">Select a team...</option>');
+                teams.forEach(t => {
+                    const opt = new Option(t.name, t.id, false, false);
+                    sel.append(opt);
                 });
-                const data = await res.json();
-
-                const sel = $('#assigneeSelect');
-                sel.empty().append(new Option('All Team Members', ''));
-
-                // The API now returns a flat list of {id, name} objects
-                data.forEach(u => {
-                    sel.append(new Option(u.name, u.id));
-                });
+                sel.trigger('change');
             } catch (err) {
-                console.error("Error fetching assignees:", err);
+                console.error("Error loading teams:", err);
             }
         }
 
-        function handleRangeChange() {
-            const val = document.getElementById("timeRange").value;
-            if (val === "date") {
-                document.getElementById("rangeSelectWrapper").classList.add("hidden");
-                document.getElementById("specificDateWrapper").classList.remove("hidden");
-                // Default to today
-                if (!document.getElementById("specificDate").value) {
-                    document.getElementById("specificDate").value = new Date().toISOString().split('T')[0];
-                }
-            } else {
-                loadDashboardData();
-            }
+
+        function handleTeamChange() {
+            // We could filter sprints here if they were team-specific in Jira,
+            // but usually they are project-wide. 
+            // For now, Team just filters the members we track in that sprint.
         }
 
-        function resetRange() {
-            document.getElementById("timeRange").value = "month";
-            document.getElementById("rangeSelectWrapper").classList.remove("hidden");
-            document.getElementById("specificDateWrapper").classList.add("hidden");
-            loadDashboardData();
-        }
+        async function loadSprintDashboardData() {
+            const teamId = $("#teamSelect").val();
+            const sprintId = $("#sprintSelect").val();
+            const productionOnly = $("#productionOnly").is(":checked");
 
-        // Define loadDashboardData globally so button can call it
-        window.loadDashboardData = async function () {
-            const accountId = $('#assigneeSelect').val();
-            const range = document.getElementById("timeRange").value;
-            const specificDate = document.getElementById("specificDate").value;
-
-            if (!accountId) {
-                alert("Please select an assignee first.");
+            if (!teamId) {
+                alert("Please select a Team first.");
                 return;
             }
 
-            // Show Loading State
-            document.getElementById("kpiDone").innerText = "...";
-            document.getElementById("kpiHigh").innerText = "...";
-            document.getElementById("kpiOpen").innerText = "...";
+            // Show Loading
+            setKpiLoading(true);
 
-            // Call new API
             try {
-                const res = await fetch("/api/assignee_full_profile", {
+                const res = await fetch("/api/dashboard/sprint_stats", {
                     method: "POST",
                     headers: getApiHeaders(),
-                    body: JSON.stringify({ accountId, range, specificDate })
+                    body: JSON.stringify({
+                        team_id: teamId,
+                        sprint_id: sprintId || null,
+                        production_only: productionOnly
+                    })
                 });
                 const data = await res.json();
 
-                const link = document.getElementById("kpiDoneLink");
-                if (range === "date") {
-                    link.href = `/user/${accountId}?range=date&date=${specificDate}`;
+                // Update Progress Label based on sprint selection
+                const progressLabel = document.getElementById("progressLabel");
+                if (sprintId) {
+                    progressLabel.innerText = "Sprint Progress";
                 } else {
-                    link.href = `/user/${accountId}?range=${range}`;
+                    progressLabel.innerText = "Team Performance";
                 }
 
-                renderDashboard(data);
+                if (data.error) {
+                    alert(data.error);
+                    setKpiLoading(false);
+                    return;
+                }
 
-            } catch (e) {
-                console.error(e);
-                alert("Error fetching data");
+                renderSprintDashboard(data);
+            } catch (err) {
+                console.error(err);
+                alert("Failed to load dashboard data");
+                setKpiLoading(false);
             }
-        };
+        }
+
+        function setKpiLoading(loading) {
+            const ids = ["kpiTotalSolved", "kpiBugsSolved", "kpiActiveLoad", "kpiProgress"];
+            ids.forEach(id => {
+                document.getElementById(id).innerText = loading ? "..." : "0";
+            });
+        }
 
         let typeChart, priorityChart, statusChart;
 
-        function renderDashboard(data) {
-            const done = data.done;
-            const open = data.open;
+        function renderSprintDashboard(data) {
+            // 1. Update KPIs
+            document.getElementById("kpiTotalSolved").innerText = data.total_solved;
+            document.getElementById("kpiBugsSolved").innerText = data.bugs_solved;
+            document.getElementById("kpiActiveLoad").innerText = data.active_load;
 
-            // 1. KPIs
-            document.getElementById("kpiDone").innerText = done.length;
+            const total = data.total_solved + data.active_load;
+            const progress = total > 0 ? Math.round((data.total_solved / total) * 100) : 0;
+            document.getElementById("kpiProgress").innerText = progress + "%";
 
-            const highPri = done.filter(i => i.fields.priority.name === "High" || i.fields.priority.name === "Highest").length;
-            document.getElementById("kpiHigh").innerText = highPri;
+            // 2. Update User Performance Table
+            const perfBody = document.getElementById("performanceBody");
+            perfBody.innerHTML = "";
 
-            document.getElementById("kpiOpen").innerText = open.length;
+            data.performance.sort((a, b) => b.solved - a.solved).forEach(p => {
+                const totalUser = p.solved + p.active;
+                const rate = totalUser > 0 ? Math.round((p.solved / totalUser) * 100) : 0;
 
-            // Focus Factor: (High / Total Done) * 100
-            const focus = done.length > 0 ? Math.round((highPri / done.length) * 100) : 0;
-            document.getElementById("kpiFocus").innerText = focus + "%";
-
-            // 2. Charts
-            renderTypeChart(done);
-            renderPriorityChart(done);
-            renderStatusChart(open);
-        }
-
-        function renderTypeChart(issues) {
-            const ctx = document.getElementById("typeChart").getContext('2d');
-            const counts = {};
-            issues.forEach(i => {
-                const type = i.fields.issuetype.name;
-                counts[type] = (counts[type] || 0) + 1;
+                const tr = document.createElement("tr");
+                tr.className = "border-b border-gray-800 hover:bg-white/5 transition";
+                tr.innerHTML = `
+                    <td class="py-3 flex items-center gap-3">
+                        <img src="${p.avatar || 'https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y'}" class="w-8 h-8 rounded-full border border-gray-700">
+                        <span class="font-medium text-white">${p.name}</span>
+                    </td>
+                    <td class="py-3 text-center text-blue-400 font-bold">${p.solved}</td>
+                    <td class="py-3 text-center text-yellow-500">${p.active}</td>
+                    <td class="py-3 text-right">
+                        <div class="flex items-center justify-end gap-2">
+                            <div class="w-16 h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                                <div class="h-full bg-green-500" style="width: ${rate}%"></div>
+                            </div>
+                            <span class="text-xs font-mono text-gray-400">${rate}%</span>
+                        </div>
+                    </td>
+                `;
+                perfBody.appendChild(tr);
             });
 
+            // 3. Update Today's Work List
+            const workList = document.getElementById("todayWorkList");
+            workList.innerHTML = "";
+
+            if (data.today_work.length === 0) {
+                workList.innerHTML = '<p class="text-center text-gray-500 italic text-sm py-4">No active work found for this team in this sprint.</p>';
+            } else {
+                data.today_work.forEach(w => {
+                    const div = document.createElement("div");
+                    div.className = "bg-gray-700/30 p-3 rounded-xl border border-gray-700/50 flex items-start gap-3 hover:bg-gray-700/50 transition cursor-default";
+                    div.innerHTML = `
+                        <img src="${w.type_icon}" class="w-4 h-4 mt-1">
+                        <div class="flex-1 min-w-0">
+                            <div class="flex justify-between items-start">
+                                <span class="text-xs font-mono text-blue-400 font-bold uppercase">${w.key}</span>
+                                <span class="px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 text-[10px] font-bold uppercase">${w.status}</span>
+                            </div>
+                            <p class="text-sm text-gray-200 truncate font-medium mt-0.5">${w.summary}</p>
+                            <p class="text-[10px] text-gray-500 mt-1 flex items-center gap-1">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                                ${w.assignee}
+                            </p>
+                        </div>
+                    `;
+                    workList.appendChild(div);
+                });
+            }
+
+            // 4. Update Charts
+            renderStatusChart(data.charts.status);
+            renderTypeChart(data.charts.type);
+            renderPriorityChart(data.charts.priority);
+        }
+
+        function renderTypeChart(counts) {
+            const ctx = document.getElementById("typeChart").getContext('2d');
             if (typeChart) typeChart.destroy();
 
             typeChart = new Chart(ctx, {
@@ -382,23 +503,28 @@
             });
         }
 
-        function renderPriorityChart(issues) {
+        function renderPriorityChart(counts) {
             const ctx = document.getElementById("priorityChart").getContext('2d');
-            const counts = {};
-            issues.forEach(i => {
-                const p = i.fields.priority.name;
-                counts[p] = (counts[p] || 0) + 1;
-            });
-
             if (priorityChart) priorityChart.destroy();
+
+            const colors = {
+                'Highest': '#ef4444',
+                'High': '#f97316',
+                'Medium': '#f59e0b',
+                'Low': '#3b82f6',
+                'Lowest': '#10b981'
+            };
+
+            const labels = Object.keys(counts);
+            const backgroundColors = labels.map(l => colors[l] || '#6b7280');
 
             priorityChart = new Chart(ctx, {
                 type: 'doughnut',
                 data: {
-                    labels: Object.keys(counts),
+                    labels: labels,
                     datasets: [{
                         data: Object.values(counts),
-                        backgroundColor: ['#ef4444', '#f59e0b', '#3b82f6', '#10b981', '#6b7280'],
+                        backgroundColor: backgroundColors,
                         borderWidth: 0
                     }]
                 },
@@ -406,21 +532,15 @@
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: {
-                        legend: { position: 'right', labels: { color: '#d1d5db' } }
+                        legend: { position: 'right', labels: { color: '#d1d5db', boxWidth: 12, usePointStyle: true } }
                     },
                     cutout: '70%'
                 }
             });
         }
 
-        function renderStatusChart(issues) {
+        function renderStatusChart(counts) {
             const ctx = document.getElementById("statusChart").getContext('2d');
-            const counts = {};
-            issues.forEach(i => {
-                const s = i.fields.status.name;
-                counts[s] = (counts[s] || 0) + 1;
-            });
-
             if (statusChart) statusChart.destroy();
 
             statusChart = new Chart(ctx, {
@@ -429,7 +549,7 @@
                     labels: Object.keys(counts),
                     datasets: [{
                         data: Object.values(counts),
-                        backgroundColor: ['#8b5cf6', '#ec4899', '#6366f1', '#14b8a6'],
+                        backgroundColor: ['#8b5cf6', '#ec4899', '#6366f1', '#14b8a6', '#f43f5e', '#06b6d4'],
                         borderWidth: 0
                     }]
                 },
@@ -437,11 +557,12 @@
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: {
-                        legend: { position: 'right', labels: { color: '#d1d5db' } }
+                        legend: { position: 'right', labels: { color: '#d1d5db', boxWidth: 12, usePointStyle: true } }
                     }
                 }
             });
         }
+
 
     </script>
 </body>
