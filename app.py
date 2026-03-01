@@ -23,41 +23,42 @@ app = Flask(__name__)
 # =========================
 # 🔴 CONFIG (DYNAMIC)
 # =========================
-JIRA_DOMAIN = "https://lumberfi.atlassian.net"
 
 # Defaults
 DEFAULT_JIRA_EMAIL = ""
 DEFAULT_JIRA_API_TOKEN = ""
 DEFAULT_PROJECT_KEY = ""
+DEFAULT_JIRA_DOMAIN = "https://lumberfi.atlassian.net"
 
 def _decode_value(value):
-    if not value:
+    if not value or value.lower() in ("null", "undefined"):
         return ""
     try:
+        # Some values might be double quoted or URL encoded
         value = unquote(value).strip()
         # Remove surrounding quotes if present (some browsers/servers add them)
         if value.startswith('"') and value.endswith('"'):
             value = value[1:-1]
         return value.strip()
     except Exception:
-        return str(value).strip()
+        return value.strip()
 
 def _get_jira_config():
-    """Fetch Jira config from DB. Returns (email, token, project_key)."""
+    """Fetch Jira config from DB. Returns (email, token, project_key, domain)."""
     try:
         conn = sqlite3.connect("tracker.db")
         cursor = conn.cursor()
-        cursor.execute("SELECT email, api_token, project_key FROM jira_config WHERE id = 1")
+        cursor.execute("SELECT email, api_token, project_key, jira_domain FROM jira_config WHERE id = 1")
         row = cursor.fetchone()
         conn.close()
         if row:
-            return row[0] or "", row[1] or "", row[2] or ""
+            return row[0] or "", row[1] or "", row[2] or "", row[3] or DEFAULT_JIRA_DOMAIN
     except Exception:
         pass
-    return "", "", ""
+    return "", "", "", DEFAULT_JIRA_DOMAIN
 
 def _get_project_key():
-    _, _, db_project = _get_jira_config()
+    _, _, db_project, _ = _get_jira_config()
     project = db_project or DEFAULT_PROJECT_KEY
     if has_request_context():
         req_project = request.headers.get("X-Project-Key") or request.args.get("project_key") or request.cookies.get("project_key")
@@ -66,8 +67,20 @@ def _get_project_key():
     print(f"DEBUG: _get_project_key decoded: {repr(project)}")
     return project.upper() if project else ""
 
+def _get_jira_domain():
+    _, _, _, db_domain = _get_jira_config()
+    domain = db_domain or DEFAULT_JIRA_DOMAIN
+    if has_request_context():
+        req_domain = request.headers.get("X-Jira-Domain") or request.args.get("jira_domain") or request.cookies.get("jira_domain")
+        if req_domain:
+            domain = _decode_value(req_domain)
+    
+    if domain and not domain.startswith("http"):
+        domain = "https://" + domain
+    return domain.rstrip("/")
+
 def _get_jira_headers():
-    db_email, db_token, _ = _get_jira_config()
+    db_email, db_token, _, _ = _get_jira_config()
     email = db_email or DEFAULT_JIRA_EMAIL
     token = db_token or DEFAULT_JIRA_API_TOKEN
     
@@ -92,6 +105,14 @@ def _get_jira_headers():
 # Proxies to allow dynamic access per request while keeping existing code working
 PROJECT_KEY = LocalProxy(_get_project_key)
 HEADERS = LocalProxy(_get_jira_headers)
+JIRA_DOMAIN = LocalProxy(_get_jira_domain)
+
+@app.context_processor
+def inject_config():
+    return dict(
+        JIRA_DOMAIN=str(JIRA_DOMAIN),
+        project=str(PROJECT_KEY)
+    )
 
 # Legacy auth (deprecated but kept for compatibility if used directly)
 AUTH = base64.b64encode(f"{DEFAULT_JIRA_EMAIL}:{DEFAULT_JIRA_API_TOKEN}".encode()).decode()
@@ -226,11 +247,17 @@ def init_db():
             id INTEGER PRIMARY KEY CHECK (id = 1),
             email TEXT,
             api_token TEXT,
-            project_key TEXT
+            project_key TEXT,
+            jira_domain TEXT
         )
     ''')
     
     # Migration: Add new columns if they don't exist
+    cursor.execute("PRAGMA table_info(jira_config)")
+    columns = [row[1] for row in cursor.fetchall()]
+    if 'jira_domain' not in columns:
+        cursor.execute("ALTER TABLE jira_config ADD COLUMN jira_domain TEXT")
+    
     cursor.execute("PRAGMA table_info(sprint_tickets)")
     columns = [row[1] for row in cursor.fetchall()]
     if 'comment' not in columns:
@@ -283,33 +310,36 @@ def jira_settings_api():
         email = data.get("email", "").strip()
         token = data.get("token", "").strip()
         project = data.get("project_key", "").strip().upper()
+        domain = data.get("jira_domain", "").strip()
         
         if not email or not token or not project:
             return jsonify({"error": "All fields are required"}), 400
             
         cursor.execute("""
-            INSERT INTO jira_config (id, email, api_token, project_key)
-            VALUES (1, ?, ?, ?)
+            INSERT INTO jira_config (id, email, api_token, project_key, jira_domain)
+            VALUES (1, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 email=excluded.email,
                 api_token=excluded.api_token,
-                project_key=excluded.project_key
-        """, (email, token, project))
+                project_key=excluded.project_key,
+                jira_domain=excluded.jira_domain
+        """, (email, token, project, domain))
         conn.commit()
         conn.close()
         return jsonify({"success": True})
         
     else:  # GET
-        cursor.execute("SELECT email, api_token, project_key FROM jira_config WHERE id = 1")
+        cursor.execute("SELECT email, api_token, project_key, jira_domain FROM jira_config WHERE id = 1")
         row = cursor.fetchone()
         conn.close()
         if row:
             return jsonify({
                 "email": row[0],
                 "token": row[1],
-                "project_key": row[2]
+                "project_key": row[2],
+                "jira_domain": row[3] or DEFAULT_JIRA_DOMAIN
             })
-        return jsonify({"email": "", "token": "", "project_key": ""})
+        return jsonify({"email": "", "token": "", "project_key": "", "jira_domain": DEFAULT_JIRA_DOMAIN})
 
 @app.route("/api/settings/todo_tags", methods=["GET", "POST"])
 def todo_tags_settings_api():
@@ -348,7 +378,7 @@ def delete_todo_tag(tag_id):
 
 @app.route("/")
 def index():
-    email, token, _ = _get_jira_config()
+    email, token, _, _ = _get_jira_config()
     if not email or not token:
         return redirect(url_for('settings'))
     return render_template("index.html", project=PROJECT_KEY)
@@ -362,7 +392,8 @@ def assignees():
     data = request.get_json(silent=True) or {}
     query = request.args.get('q') or data.get('q')
 
-    if not PROJECT_KEY:
+    project_key_str = str(PROJECT_KEY)
+    if not project_key_str:
         return jsonify({"error": "Missing project key. Save it in Settings first."}), 400
     if "Authorization" not in HEADERS:
         return jsonify({"error": "Missing Jira credentials. Save them in Settings first."}), 401
@@ -919,16 +950,26 @@ def execute_jql():
     max_results = 100
     
     while True:
-        res = requests.get(
-            f"{JIRA_DOMAIN}/rest/api/3/search/jql",
-            headers=headers_dict,
-            params={
-                "jql": jql,
-                "maxResults": max_results,
-                "startAt": start_at,
-                "fields": fields
-            }
-        ).json()
+        try:
+            jira_response = requests.get(
+                f"{str(JIRA_DOMAIN)}/rest/api/3/search/jql",
+                headers=headers_dict,
+                params={
+                    "jql": jql,
+                    "maxResults": max_results,
+                    "startAt": start_at,
+                    "fields": fields
+                }
+            )
+            
+            if jira_response.status_code != 200:
+                print(f"DEBUG: Jira Error {jira_response.status_code}: {jira_response.text}")
+                return jsonify({"error": f"Jira API Error {jira_response.status_code}", "details": jira_response.text}), jira_response.status_code
+
+            res = jira_response.json()
+        except Exception as e:
+            print(f"DEBUG: Exception during Jira Request: {e}")
+            return jsonify({"error": "Failed to connect to Jira or parse response", "details": str(e)}), 500
         
         if "errorMessages" in res:
              return jsonify({"error": res["errorMessages"]}), 400
@@ -1656,12 +1697,23 @@ def manage_sprint_ticket(ticket_id):
         pr_raised = 1 if data.get("prRaised") else 0
         demo_done = 1 if data.get("demoDone") else 0
         pr_merged = 1 if data.get("prMerged") else 0
+        week_id = data.get("weekId") # New field for moving tickets
         
-        cursor.execute("""
+        # Build dynamic query
+        fields = ["comment = ?", "pr_raised = ?", "demo_done = ?", "pr_merged = ?"]
+        params = [comment, pr_raised, demo_done, pr_merged]
+        
+        if week_id is not None:
+            fields.append("week_id = ?")
+            params.append(week_id)
+            
+        params.append(ticket_id)
+        
+        cursor.execute(f"""
             UPDATE sprint_tickets 
-            SET comment = ?, pr_raised = ?, demo_done = ?, pr_merged = ? 
+            SET {', '.join(fields)}
             WHERE id = ?
-        """, (comment, pr_raised, demo_done, pr_merged, ticket_id))
+        """, params)
         
         conn.commit()
         conn.close()

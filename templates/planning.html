@@ -6,202 +6,265 @@
     <meta charset="UTF-8">
     <title>Sprint Planning - {{ project }}</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
     <style>
         :root {
-            --bg-deep: #0f172a;
-            --bg-card: rgba(30, 41, 59, 0.7);
-            --glass-bg: rgba(30, 41, 59, 0.4);
-            --glass-border: rgba(255, 255, 255, 0.1);
-            --accent-blue: #3b82f6;
-            --accent-purple: #818cf8;
-            --accent-emerald: #10b981;
-            --text-main: #f8fafc;
-            --text-muted: #94a3b8;
+            --bg-main: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-card: #334155;
+            --accent-primary: #3b82f6;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
         }
 
-        .glass {
-            background: var(--glass-bg);
-            backdrop-filter: blur(16px);
-            border: 1px solid var(--glass-border);
-            box-shadow: 0 4px 24px -1px rgba(0, 0, 0, 0.2);
-        }
-
-        .glass-hover:hover {
-            border-color: rgba(255, 255, 255, 0.2);
-            background: rgba(30, 41, 59, 0.6);
-            transform: translateY(-2px);
-        }
-
-        .ticket-card {
-            background: var(--bg-card) !important;
-            border: 1px solid rgba(255, 255, 255, 0.08) !important;
-            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        .ticket-card:hover {
-            transform: translateY(-4px) scale(1.01);
-            border-color: rgba(59, 130, 246, 0.4) !important;
-            background: rgba(30, 41, 59, 0.9) !important;
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.4), 0 10px 10px -5px rgba(0, 0, 0, 0.3);
-        }
-
-        @keyframes slideIn {
-            from {
-                opacity: 0;
-                transform: translateY(10px);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .animate-slide-in {
-            animation: slideIn 0.3s ease-out forwards;
+        body {
+            background-color: var(--bg-main);
+            color: var(--text-primary);
         }
 
         /* Custom Scrollbar */
         ::-webkit-scrollbar {
-            width: 6px;
-            height: 6px;
+            width: 8px;
+            height: 8px;
         }
 
         ::-webkit-scrollbar-track {
-            background: rgba(0, 0, 0, 0.1);
+            background: rgba(255, 255, 255, 0.05);
         }
 
         ::-webkit-scrollbar-thumb {
             background: rgba(255, 255, 255, 0.1);
-            border-radius: 10px;
+            border-radius: 4px;
         }
 
         ::-webkit-scrollbar-thumb:hover {
             background: rgba(255, 255, 255, 0.2);
         }
 
-        .week-column {
-            flex: 1 1 340px;
-            min-width: 340px;
-            max-width: 500px;
-            height: fit-content;
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .ticket-card {
+            transition: transform 0.2s, box-shadow 0.2s;
+            cursor: grab;
+        }
+
+        .ticket-card:active {
+            cursor: grabbing;
+        }
+
+        .ticket-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+        }
+
+        .ghost-card {
+            opacity: 0.5;
+            background: #475569;
+            border: 2px dashed #94a3b8;
+        }
+
+        .drag-handle {
+            cursor: grab;
         }
     </style>
     <link rel="stylesheet" href="/static/theme.css">
     <script src="/static/theme.js"></script>
-    <script src="/static/app.js"></script></head>
+    <script src="/static/app.js"></script>
+</head>
 
-<body class="bg-[#0f172a] min-h-screen text-[#f8fafc] font-sans selection:bg-blue-500/30">
+<body class="min-h-screen font-sans selection:bg-blue-500/30 flex flex-col">
     {% include 'navbar.html' %}
 
-    <main class="pt-24 pb-12 px-6 max-w-[1600px] mx-auto">
-        <!-- Team Members & Controls -->
-        <div class="flex flex-wrap justify-between items-end gap-6 mb-8">
+    <main class="flex-grow pt-24 pb-8 px-6 w-full max-w-[1920px] mx-auto flex flex-col h-[calc(100vh-6rem)]">
+        <!-- Header Section -->
+        <div class="flex flex-wrap justify-between items-center gap-6 mb-6 flex-shrink-0">
             <div>
-                <h1
-                    class="text-4xl font-black mb-4 bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">
-                    Sprint Planning</h1>
-                <div class="flex items-center gap-3 glass p-3 rounded-2xl" id="memberList">
+                <div class="flex items-center gap-3 mb-2">
+                    <h1 class="text-3xl font-bold tracking-tight text-white">Sprint Planning</h1>
+                    <span id="teamNameHeader"
+                        class="text-xl text-gray-400 font-medium border-l border-gray-600 pl-3">Loading Team...</span>
+                </div>
+                <div class="flex items-center gap-2" id="memberList">
                     <!-- Members List -->
                 </div>
             </div>
-            <div class="flex gap-4 items-center flex-wrap justify-end">
-                <div class="relative group/search max-w-xs w-full">
-                    <input type="text" id="ticketSearch" oninput="applySearch(this.value)"
-                        class="w-full bg-blue-900/40 border border-white/10 text-blue-100/70 text-xs font-black py-2.5 pl-10 pr-4 rounded-xl outline-none focus:border-blue-500/40 transition-all shadow-xl backdrop-blur-md placeholder-blue-100/20"
-                        placeholder="Search key or summary...">
-                    <div
-                        class="absolute left-3.5 top-1/2 -translate-y-1/2 text-blue-500/30 group-focus-within/search:text-blue-400 transition-colors">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-width="3"></path>
+
+            <div class="flex gap-3 items-center flex-wrap justify-end">
+                <!-- Search -->
+                <div class="relative group w-64">
+                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                         </svg>
                     </div>
+                    <input type="text" id="ticketSearch" oninput="applySearch(this.value)"
+                        class="block w-full pl-10 pr-3 py-2 border border-gray-700 rounded-lg leading-5 bg-gray-800 text-gray-300 placeholder-gray-500 focus:outline-none focus:bg-gray-700 focus:border-blue-500 sm:text-sm transition duration-150 ease-in-out"
+                        placeholder="Search tickets...">
                 </div>
+
+                <!-- Filters -->
                 <select id="assigneeFilter" onchange="filterTickets(this.value)"
-                    class="bg-blue-900/40 border border-white/10 text-blue-100/70 text-xs font-black py-2.5 px-6 rounded-xl outline-none focus:border-blue-500/40 transition-all shadow-xl backdrop-blur-md">
+                    class="bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block py-2 px-3">
                     <option value="All">All Assignees</option>
                 </select>
+
+                <!-- Actions -->
                 <button onclick="openMemberModal()"
-                    class="bg-gray-800 hover:bg-gray-700 text-white font-bold py-2.5 px-6 rounded-lg border border-gray-700 transition">+
-                    Add Member</button>
+                    class="p-2 text-gray-400 hover:text-white bg-gray-800 hover:bg-gray-700 rounded-lg border border-gray-700 transition"
+                    title="Manage Members">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path
+                            d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
+                            stroke-width="2"></path>
+                    </svg>
+                </button>
                 <button onclick="refreshJiraData()"
-                    class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-6 rounded-lg shadow-lg transition">Refresh
-                    Jira Data</button>
+                    class="p-2 text-emerald-400 hover:text-white bg-emerald-500/10 hover:bg-emerald-600 rounded-lg border border-emerald-500/20 transition"
+                    title="Refresh Jira Data">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path
+                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                            stroke-width="2"></path>
+                    </svg>
+                </button>
                 <button onclick="openSprintModal()"
-                    class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 px-6 rounded-lg shadow-lg transition">Create
-                    Sprint</button>
+                    class="bg-blue-600 hover:bg-blue-500 text-white font-medium py-2 px-4 rounded-lg shadow-lg transition flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 6v6m0 0v6m0-6h6m-6 0H6" stroke-width="2"></path>
+                    </svg>
+                    New Sprint
+                </button>
             </div>
         </div>
 
-        <!-- Sprints Navigation -->
-        <div class="flex gap-4 mb-8 overflow-x-auto pb-2" id="sprintsTab">
-            <!-- Sprint Tabs -->
+        <!-- Sprints Tabs -->
+        <div class="flex gap-2 mb-4 overflow-x-auto pb-1 flex-shrink-0 border-b border-gray-800" id="sprintsTab">
+            <!-- Tabs injected here -->
         </div>
 
-        <!-- Sprint Content (Weeks) -->
-        <div id="sprintContent" class="hidden">
-            <div class="flex justify-between items-center mb-6">
-                <h2 class="text-xl font-bold text-blue-400" id="currentSprintTitle">Sprint Name</h2>
-                <button onclick="addWeek()"
-                    class="bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 font-bold py-2 px-4 rounded-lg border border-blue-500/30 transition">+
-                    Add Week</button>
+        <!-- Board Area -->
+        <div id="sprintContent" class="flex-grow flex flex-col hidden min-h-0">
+            <!-- Sprint Header -->
+            <div class="flex justify-between items-center mb-4 flex-shrink-0">
+                <div class="flex items-center gap-4">
+                    <h2 class="text-2xl font-bold text-white" id="currentSprintTitle">Sprint Name</h2>
+                    <span class="text-sm text-gray-500 bg-gray-800 px-2 py-1 rounded-md" id="sprintStatus">Active</span>
+                </div>
+                <div class="flex items-center gap-4">
+                    <!-- Progress Bar -->
+                    <div class="flex items-center gap-2 mr-4">
+                        <div class="text-xs text-gray-400 font-medium">Sprint Progress</div>
+                        <div class="w-32 h-2 bg-gray-700 rounded-full overflow-hidden">
+                            <div id="sprintProgressBar" class="h-full bg-emerald-500 w-0 transition-all duration-500">
+                            </div>
+                        </div>
+                        <div id="sprintProgressText" class="text-xs text-gray-300 font-bold">0%</div>
+                    </div>
+
+                    <button onclick="addWeek()"
+                        class="text-blue-400 hover:text-white text-sm font-medium flex items-center gap-1 bg-blue-500/10 hover:bg-blue-500/20 px-3 py-1.5 rounded-lg border border-blue-500/20 transition">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 6v6m0 0v6m0-6h6m-6 0H6" stroke-width="2"></path>
+                        </svg>
+                        Add Week
+                    </button>
+                </div>
             </div>
 
-            <div id="weeksGrid" class="flex gap-6 overflow-x-auto pb-6 scroll-smooth">
-                <!-- Weekly columns will go here -->
+            <!-- Weeks Board -->
+            <div id="weeksGrid" class="flex gap-6 overflow-x-auto overflow-y-hidden pb-4 h-full items-start pr-4">
+                <!-- Columns injected here -->
             </div>
         </div>
 
-        <div id="emptySprintState" class="glass rounded-2xl p-20 text-center text-gray-500 mt-12">
-            No sprints found for this team. Click "Create Sprint" to begin planning.
+        <!-- Empty State -->
+        <div id="emptySprintState"
+            class="hidden flex-grow flex flex-col items-center justify-center text-center p-12 glass-panel rounded-3xl mx-auto w-full max-w-2xl mt-10">
+            <div class="w-20 h-20 bg-gray-800 rounded-full flex items-center justify-center mb-6">
+                <svg class="w-10 h-10 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                        d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+                        stroke-width="2"></path>
+                </svg>
+            </div>
+            <h3 class="text-xl font-bold text-white mb-2">No Sprints Found</h3>
+            <p class="text-gray-400 mb-8 max-w-md">Get started by creating your first sprint cycle for this team.</p>
+            <button onclick="openSprintModal()"
+                class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-8 rounded-xl shadow-lg transition transform hover:scale-105">
+                Create First Sprint
+            </button>
         </div>
     </main>
 
     <!-- Modals -->
     <!-- Member Modal -->
-    <div id="memberModal" class="fixed inset-0 z-[60] hidden">
-        <div class="absolute inset-0 bg-black/80 backdrop-blur-md" onclick="closeMemberModal()"></div>
-        <div
-            class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md glass rounded-3xl p-8 border-white/10 shadow-2xl">
-            <h3 class="text-2xl font-black mb-1 capitalize">Add Team Member</h3>
-            <p class="text-gray-500 text-xs mb-8">Search and add Jira users to your team.</p>
-            <div class="mb-6">
-                <div class="relative group/search">
-                    <input type="text" id="memberSearchInput"
-                        class="w-full bg-gray-900/50 border border-gray-800 rounded-2xl p-4 pl-12 outline-none focus:border-blue-500/50 focus:bg-gray-900 transition text-sm shadow-inner"
-                        placeholder="Type name or email..." oninput="searchUsers()">
-                    <div
-                        class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600 group-focus-within/search:text-blue-500 transition-colors">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-width="2.5"></path>
-                        </svg>
+    <div id="memberModal" class="fixed inset-0 z-50 hidden" aria-labelledby="modal-title" role="dialog"
+        aria-modal="true">
+        <div class="fixed inset-0 bg-gray-900 bg-opacity-75 transition-opacity backdrop-blur-sm"
+            onclick="closeMemberModal()"></div>
+        <div class="fixed inset-0 z-10 overflow-y-auto">
+            <div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+                <div
+                    class="relative transform overflow-hidden rounded-2xl bg-gray-800 border border-gray-700 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg">
+                    <div class="bg-gray-800 px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                        <div class="sm:flex sm:items-start">
+                            <div
+                                class="mx-auto flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-blue-900 sm:mx-0 sm:h-10 sm:w-10">
+                                <svg class="h-6 w-6 text-blue-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                                    stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                        d="M19 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM3.75 15h2.25M4.5 15v2.25m0-2.25v-2.25m6 2.25h2.25m-6 0h-2.25m0 0v2.25m0-2.25v-2.25M10.5 19.5v-2.25m0 0v-2.25" />
+                                </svg>
+                            </div>
+                            <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
+                                <h3 class="text-lg font-medium leading-6 text-white" id="modal-title">Add Team Member
+                                </h3>
+                                <div class="mt-4">
+                                    <input type="text" id="memberSearchInput"
+                                        class="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-sm text-white placeholder-gray-500 focus:ring-2 focus:ring-blue-500 outline-none"
+                                        placeholder="Search Jira users..." oninput="searchUsers()">
+                                    <div id="userResults"
+                                        class="mt-2 max-h-60 overflow-y-auto space-y-1 hidden custom-scrollbar bg-gray-900 rounded-lg p-2 border border-gray-700">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-gray-800/50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6 border-t border-gray-700">
+                        <button type="button"
+                            class="mt-3 inline-flex w-full justify-center rounded-md border border-gray-600 bg-gray-800 px-4 py-2 text-base font-medium text-gray-300 shadow-sm hover:bg-gray-700 focus:outline-none sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
+                            onclick="closeMemberModal()">Close</button>
                     </div>
                 </div>
-                <div id="userResults" class="mt-4 max-h-60 overflow-y-auto space-y-2 hidden custom-scrollbar"></div>
             </div>
-            <button onclick="closeMemberModal()"
-                class="w-full py-4 text-xs font-black uppercase tracking-widest text-gray-500 hover:text-white transition">Cancel</button>
         </div>
     </div>
 
     <!-- Sprint Modal -->
-    <div id="sprintModal" class="fixed inset-0 z-[60] hidden">
-        <div class="absolute inset-0 bg-black/80 backdrop-blur-md" onclick="closeSprintModal()"></div>
-        <div
-            class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md glass rounded-3xl p-8 border-white/10 shadow-2xl">
-            <h3 class="text-2xl font-black mb-1 capitalize">New Sprint</h3>
-            <p class="text-gray-500 text-xs mb-8">Set up a new development cycle.</p>
-            <div class="mb-8">
-                <input type="text" id="sprintNameInput"
-                    class="w-full bg-gray-900/50 border border-gray-800 rounded-2xl p-4 outline-none focus:border-blue-500/50 focus:bg-gray-900 transition text-sm shadow-inner"
-                    placeholder="e.g. Sprint 1 - Project X">
+    <div id="sprintModal" class="fixed inset-0 z-50 hidden">
+        <div class="fixed inset-0 bg-gray-900 bg-opacity-75 transition-opacity backdrop-blur-sm"
+            onclick="closeSprintModal()"></div>
+        <div class="fixed inset-0 z-10 overflow-y-auto">
+            <div class="flex min-h-full items-center justify-center p-4">
+                <div
+                    class="relative transform overflow-hidden rounded-2xl bg-gray-800 border border-gray-700 shadow-xl transition-all w-full max-w-md p-6">
+                    <h3 class="text-xl font-bold text-white mb-4">Create New Sprint</h3>
+                    <input type="text" id="sprintNameInput"
+                        class="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-white focus:ring-2 focus:ring-blue-500 outline-none mb-6"
+                        placeholder="Sprint Name (e.g. Sprint 24)">
+                    <div class="flex justify-end gap-3">
+                        <button onclick="closeSprintModal()"
+                            class="px-4 py-2 text-gray-400 hover:text-white text-sm font-medium">Cancel</button>
+                        <button onclick="createSprint()"
+                            class="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium shadow-lg transition">Create</button>
+                    </div>
+                </div>
             </div>
-            <button onclick="createSprint()"
-                class="w-full bg-blue-600 hover:bg-blue-500 text-white py-4 rounded-2xl font-black uppercase tracking-widest text-xs shadow-lg shadow-blue-500/20 transition-all transform hover:scale-[1.02] active:scale-[0.98]">
-                Create Cycle
-            </button>
-            <button onclick="closeSprintModal()"
-                class="w-full mt-4 py-2 text-xs font-black uppercase tracking-widest text-gray-500 hover:text-white transition">Cancel</button>
         </div>
     </div>
 
@@ -211,29 +274,23 @@
         let selectedAssignee = 'All';
         let searchQuery = '';
         let allTickets = [];
+        let sortables = [];
 
+        // --- Init ---
         async function init() {
-            loadTeam();
-            loadSprints();
+            await loadTeam();
+            await loadSprints();
         }
 
+        // --- Data Loading ---
         async function loadTeam() {
-            const res = await fetch('/api/teams');
-            const teams = await res.json();
-            const curr = teams.find(t => t.id === teamId);
-            if (curr) document.getElementById('teamNameHeader').innerText = curr.name;
-            loadMembers();
-        }
-
-        function getInitials(name) {
-            return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-        }
-
-        function getAvatarColor(name) {
-            const colors = ['bg-blue-500', 'bg-purple-500', 'bg-emerald-500', 'bg-pink-500', 'bg-amber-500', 'bg-indigo-500', 'bg-cyan-500'];
-            let hash = 0;
-            for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
-            return colors[Math.abs(hash) % colors.length];
+            try {
+                const res = await fetch('/api/teams');
+                const teams = await res.json();
+                const curr = teams.find(t => t.id === teamId);
+                if (curr) document.getElementById('teamNameHeader').innerText = curr.name;
+                await loadMembers();
+            } catch (e) { console.error(e); }
         }
 
         async function loadMembers() {
@@ -243,51 +300,21 @@
             const filter = document.getElementById('assigneeFilter');
 
             list.innerHTML = members.map(m => `
-                <div class="relative group">
-                    <div class="w-10 h-10 rounded-full border border-gray-700 flex items-center justify-center text-xs font-bold text-white shadow-xl ${getAvatarColor(m.displayName)}" title="${m.displayName}">
+                <div class="group relative">
+                    <div class="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow-md ring-2 ring-gray-800 cursor-help ${getAvatarColor(m.displayName)}" title="${m.displayName}">
                         ${getInitials(m.displayName)}
                     </div>
-                    <button onclick="removeMember(${m.id})" class="absolute -top-1 -right-1 bg-red-500 rounded-full p-1 opacity-0 group-hover:opacity-100 transition z-10">
-                        <svg class="w-2 h-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-width="3"></path></svg>
+                     <button onclick="removeMember(${m.id})" class="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition shadow-sm z-10" title="Remove">
+                        <svg class="w-2 h-2 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="4" d="M6 18L18 6M6 6l12 12"/></svg>
                     </button>
                 </div>
-            `).join('') + (members.length === 0 ? '<span class="px-4 text-sm text-gray-500">No members yet</span>' : '');
+            `).join('');
 
             // Update filter dropdown
             const prev = filter.value;
             filter.innerHTML = '<option value="All">All Assignees</option>' +
                 members.map(m => `<option value="${m.displayName}">${m.displayName}</option>`).join('');
             filter.value = prev;
-        }
-
-        async function searchUsers() {
-            const query = document.getElementById('memberSearchInput').value;
-            if (query.length < 3) return;
-            const res = await fetch(`/api/assignees?q=${query}`, { headers: getApiHeaders() });
-            const users = await res.json();
-            const list = document.getElementById('userResults');
-            list.classList.remove('hidden');
-            list.innerHTML = users.map(u => `
-                <div onclick="addMember('${u.id}', '${u.name}')" class="p-3 hover:bg-blue-600/20 cursor-pointer rounded-lg mb-1 flex items-center justify-between">
-                    <span>${u.name}</span>
-                    <span class="text-blue-400 text-xs">+ Add</span>
-                </div>
-            `).join('');
-        }
-
-        async function addMember(accountId, displayName) {
-            await fetch(`/api/teams/${teamId}/members`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ accountId, displayName, avatarUrl: '' })
-            });
-            closeMemberModal();
-            loadMembers();
-        }
-
-        async function removeMember(id) {
-            await fetch(`/api/teams/${teamId}/members/${id}`, { method: 'DELETE' });
-            loadMembers();
         }
 
         async function loadSprints() {
@@ -306,17 +333,21 @@
 
             empty.classList.add('hidden');
             content.classList.remove('hidden');
+
             tab.innerHTML = sprints.map(s => `
-                <button onclick='switchSprint(${s.id}, ${JSON.stringify(s.name).replace(/'/g, "&#39;")})' class="px-8 py-3 rounded-2xl border ${currentSprintId === s.id ? 'bg-blue-600 border-blue-500 font-bold shadow-lg shadow-blue-500/20' : 'glass border-gray-700 text-gray-400 hover:text-white'} whitespace-nowrap transition text-base">${s.name}</button>
+                <button onclick='switchSprint(${s.id}, ${JSON.stringify(s.name).replace(/'/g, "&#39;")})' 
+                    class="px-5 py-2.5 rounded-t-lg border-b-2 whitespace-nowrap transition text-sm font-medium ${currentSprintId === s.id ? 'border-blue-500 text-white bg-gray-800' : 'border-transparent text-gray-400 hover:text-gray-200 hover:bg-gray-800/50'}">
+                    ${s.name}
+                </button>
             `).join('');
 
-            if (!currentSprintId) switchSprint(sprints[0].id, sprints[0].name);
+            if (!currentSprintId && sprints.length > 0) switchSprint(sprints[0].id, sprints[0].name);
         }
 
         function switchSprint(id, name) {
             currentSprintId = id;
             document.getElementById('currentSprintTitle').innerText = name;
-            loadSprints();
+            loadSprints(); // Re-render tabs to update active state
             loadWeeks();
         }
 
@@ -325,54 +356,361 @@
             const weeks = await res.json();
             const grid = document.getElementById('weeksGrid');
 
+            // Cleanup old sortables
+            sortables.forEach(s => s.destroy());
+            sortables = [];
+
             grid.innerHTML = weeks.map(w => `
-                <div class="week-column flex-shrink-0 animate-slide-in">
-                    <div class="glass rounded-2xl flex flex-col h-full overflow-hidden border-gray-800/50">
-                        <!-- Column Header -->
-                        <div class="p-5 border-b border-white/5 bg-blue-500/5">
-                            <div class="flex justify-between items-center mb-3">
-                                <div class="flex items-center gap-3">
-                                    <h3 class="font-black text-[13px] tracking-[0.2em] uppercase text-blue-100/70">Week ${w.weekNumber}</h3>
-                                    <span id="count-${w.id}" class="bg-blue-500/20 text-blue-300 text-[11px] px-2.5 py-0.5 rounded-full font-black border border-blue-500/30">0</span>
-                                </div>
-                                <button onclick="deleteWeek(${w.id})" class="text-white/20 hover:text-red-400 p-1.5 rounded-xl hover:bg-red-500/20 transition-all">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-width="3"></path></svg>
-                                </button>
+                <div class="flex-shrink-0 w-[350px] flex flex-col h-full bg-gray-800/50 rounded-xl border border-gray-700/50 max-h-full">
+                    <!-- Header -->
+                    <div class="p-4 border-b border-gray-700/50 bg-gray-800/80 rounded-t-xl backdrop-blur-sm sticky top-0 z-10">
+                        <div class="flex justify-between items-center mb-3">
+                            <div class="flex items-center gap-2">
+                                <h3 class="font-bold text-sm text-gray-200 uppercase tracking-wider">Week ${w.weekNumber}</h3>
+                                <span id="count-${w.id}" class="bg-gray-700 text-gray-300 text-xs px-2 py-0.5 rounded-full font-mono">0</span>
                             </div>
-                            <input type="text" placeholder="Set weekly goal..." value="${w.goal || ''}" 
-                                onblur="updateWeekGoal(${w.id}, this.value)"
-                                class="w-full bg-white/5 border border-white/5 rounded-xl py-2 px-3 text-[13px] text-blue-300 focus:text-white outline-none placeholder-blue-900/40 italic font-bold focus:bg-blue-500/10 transition-all">
+                            <button onclick="deleteWeek(${w.id})" class="text-gray-600 hover:text-red-400 p-1 rounded hover:bg-gray-700 transition" title="Delete Week">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                            </button>
                         </div>
+                        <input type="text" placeholder="Set Goal..." value="${w.goal || ''}" 
+                            onblur="updateWeekGoal(${w.id}, this.value)"
+                            class="w-full bg-gray-900/50 border border-gray-700 rounded-lg py-1.5 px-3 text-sm text-gray-300 focus:text-white focus:border-blue-500/50 outline-none transition placeholder-gray-600">
+                    </div>
 
-                        <!-- Tickets Container -->
-                        <div class="p-4 flex-grow space-y-4 min-h-[450px] bg-gray-900/20" id="tickets-${w.id}">
-                            <!-- Tickets for this week -->
-                        </div>
+                    <!-- Tickets Container (Sortable) -->
+                    <div class="p-3 flex-grow overflow-y-auto space-y-3 min-h-[100px] custom-scrollbar" id="week-container-${w.id}" data-week-id="${w.id}">
+                        <!-- Tickets injected here -->
+                    </div>
 
-                        <!-- Input Area -->
-                        <div class="p-4 bg-blue-500/5 border-t border-white/5">
-                            <div class="relative group/add">
-                                <input type="text" placeholder="Add keys (TIM-1, TIM-2...)" 
-                                    class="w-full bg-white/5 border border-white/10 rounded-xl py-3.5 pl-5 pr-12 text-[13px] font-bold outline-none focus:border-blue-500/40 focus:bg-blue-500/10 focus:text-white transition-all shadow-inner placeholder-blue-100/20" 
-                                    onkeydown="if(event.key==='Enter') addTicket(${w.id}, this)">
-                                <div class="absolute right-4 top-1/2 -translate-y-1/2 text-blue-500/40 group-focus-within/add:text-blue-400 transition-colors">
-                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4" stroke-width="3.5"></path></svg>
-                                </div>
+                    <!-- Input Footer -->
+                    <div class="p-3 border-t border-gray-700/50 bg-gray-800/30 rounded-b-xl">
+                        <div class="relative">
+                            <input type="text" placeholder="+ Add tickets (e.g. KEY-1)" 
+                                class="w-full bg-gray-900 border border-gray-700 rounded-lg py-2 pl-3 pr-10 text-sm text-white placeholder-gray-500 focus:border-blue-500 outline-none transition shadow-sm"
+                                onkeydown="if(event.key==='Enter') addTicket(${w.id}, this)">
+                             <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-gray-500">
+                                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
                             </div>
                         </div>
                     </div>
                 </div>
             `).join('');
 
+            // Initialize Sortable for each column
+            weeks.forEach(w => {
+                const el = document.getElementById(`week-container-${w.id}`);
+                sortables.push(new Sortable(el, {
+                    group: 'shared-sprint', // set both lists to same group
+                    animation: 150,
+                    ghostClass: 'ghost-card',
+                    delay: 100, // delay for touch devices
+                    delayOnTouchOnly: true,
+                    onEnd: function (evt) {
+                        const itemEl = evt.item;  // dragged HTMLElement
+                        const newWeekId = evt.to.getAttribute('data-week-id');
+                        const ticketId = itemEl.getAttribute('data-ticket-id');
+
+                        // Only update if moved to a different list
+                        if (evt.to !== evt.from) {
+                            moveTicket(ticketId, newWeekId);
+                            updateCounts();
+                        }
+                    },
+                }));
+            });
+
+            await loadSprintTickets();
+        }
+
+        async function moveTicket(ticketId, newWeekId) {
+            // Update backend
+            // Note: ticketId is the database ID, not the issue key
+            await fetch(`/api/sprint_tickets/${ticketId}`, {
+                method: 'PUT',
+                headers: getApiHeaders(),
+                body: JSON.stringify({ weekId: parseInt(newWeekId) })
+            });
+
+            // Update local model
+            const t = allTickets.find(x => x.id == ticketId);
+            if (t) t.weekId = parseInt(newWeekId);
+        }
+
+        async function loadSprintTickets() {
+            if (!currentSprintId) return;
+            const projectKey = (localStorage.getItem("project_key") || "").trim().toUpperCase();
+            const res = await fetch(`/api/sprints/${currentSprintId}/tickets`, {
+                headers: { 'X-Project-Key': projectKey }
+            });
+            allTickets = await res.json();
+            renderFilteredTickets();
+        }
+
+        async function renderFilteredTickets() {
+            // Clear all containers first
+            document.querySelectorAll('[id^="week-container-"]').forEach(c => c.innerHTML = '');
+
+            if (allTickets.length === 0) {
+                updateSprintProgress();
+                return;
+            }
+
+            // Create placeholders for all tickets
+            allTickets.forEach(t => {
+                const container = document.getElementById(`week-container-${t.weekId}`);
+                if (container) {
+                    const div = document.createElement('div');
+                    div.id = `ticket-row-${t.id}`;
+                    div.className = "ticket-placeholder bg-gray-800/20 border border-gray-700/30 rounded-lg p-3 animate-pulse h-24 mb-3";
+                    div.innerHTML = `<div class="h-4 bg-gray-700 w-24 mb-2 rounded"></div><div class="h-3 bg-gray-700 w-full rounded"></div>`;
+                    div.setAttribute('data-ticket-id', t.id);
+                    container.appendChild(div);
+                }
+            });
+
+            // Fetch details in bulk
+            const keys = allTickets.map(t => t.issueKey).filter((v, i, a) => a.indexOf(v) === i); // Unique keys
+
+            try {
+                // Optimization: Use a single JQL query to fetch all tickets in the sprint
+                const jql = `key IN (${keys.map(k => `"${k}"`).join(',')})`;
+                const res = await fetch('/api/execute_jql', {
+                    method: 'POST',
+                    headers: getApiHeaders(),
+                    body: JSON.stringify({ jql })
+                });
+
+                if (res.ok) {
+                    const jiraIssues = await res.json();
+                    const jiraMap = {};
+                    jiraIssues.forEach(isu => { jiraMap[isu.key] = isu; });
+
+                    allTickets.forEach(t => {
+                        const isu = jiraMap[t.issueKey];
+                        if (isu) {
+                            renderTicketData(t.id, isu);
+                            // Cache individually
+                            localStorage.setItem(`jira_cache_${isu.key}`, JSON.stringify({ data: isu, timestamp: Date.now() }));
+                        } else {
+                            renderTicketNotFound(t.id, t.issueKey);
+                        }
+                    });
+                } else {
+                    console.error("Bulk fetch failed, falling back to individual fetching");
+                    // Fallback to individual fetching if bulk fails
+                    allTickets.forEach(t => fetchTicketDetails(t.id, t.issueKey));
+                }
+            } catch (e) {
+                console.error("Error in bulk fetch:", e);
+                allTickets.forEach(t => fetchTicketDetails(t.id, t.issueKey));
+            }
+
+            updateCounts();
+            updateSprintProgress();
+        }
+
+        function updateSprintProgress() {
+            // Calculate progress based on DOM state or cached data
+            let total = 0;
+            let done = 0;
+            const statusBadges = document.querySelectorAll('.status-badge');
+            statusBadges.forEach(b => {
+                total++;
+                if (b.classList.contains('status-done')) done++;
+            });
+
+            const pct = total === 0 ? 0 : Math.round((done / total) * 100);
+            document.getElementById('sprintProgressBar').style.width = `${pct}%`;
+            document.getElementById('sprintProgressText').innerText = `${pct}%`;
+        }
+
+        async function fetchTicketDetails(dbId, key) {
+            let isDone = false;
+            try {
+                // Check Cache
+                const cacheKey = `jira_cache_${key}`;
+                const cached = localStorage.getItem(cacheKey);
+                if (cached) {
+                    const { data, timestamp } = JSON.parse(cached);
+                    if (Date.now() - timestamp < 3600000) { // 1 hour TTL
+                        isDone = renderTicketData(dbId, data);
+                        updateSprintProgress();
+                        return isDone;
+                    }
+                }
+
+                // Fetch Fresh
+                const res = await fetch('/api/execute_jql', {
+                    method: 'POST',
+                    headers: getApiHeaders(),
+                    body: JSON.stringify({ jql: `key = "${key}"` })
+                });
+
+                if (!res.ok) throw new Error(`API Error ${res.status}`);
+
+                const data = await res.json();
+                if (Array.isArray(data) && data.length > 0) {
+                    const jiraIssue = data[0];
+                    localStorage.setItem(cacheKey, JSON.stringify({ data: jiraIssue, timestamp: Date.now() }));
+                    isDone = renderTicketData(dbId, jiraIssue);
+                } else {
+                    // Handle Not Found or Error
+                    console.warn(`Jira returned no data for ${key}`, data);
+                    renderTicketNotFound(dbId, key);
+                }
+            } catch (e) {
+                console.error("Error fetching ticket:", e);
+                renderTicketNotFound(dbId, key);
+            }
+            updateSprintProgress();
+            return isDone;
+        }
+
+        function renderTicketNotFound(dbId, key) {
+            const div = document.getElementById(`ticket-row-${dbId}`);
+            if (div) {
+                div.className = "ticket-card bg-red-900/20 border border-red-500/30 p-3 rounded-lg";
+                div.innerHTML = `<span class="text-red-400 font-bold">${key}</span> <span class="text-xs text-red-500">Not Found in Jira</span>`;
+            }
+        }
+
+        function renderTicketData(dbId, jiraIssue) {
+            const fields = jiraIssue.fields || {};
+            const statusName = fields.status ? fields.status.name : 'Unknown';
+            const summaryText = fields.summary || 'No Summary';
+            const assignee = fields.assignee ? fields.assignee.displayName : 'Unassigned';
+            const priorityUrl = fields.priority ? fields.priority.iconUrl : '';
+            const typeUrl = fields.issuetype ? fields.issuetype.iconUrl : '';
+
+            const div = document.getElementById(`ticket-row-${dbId}`);
+            if (!div) return false;
+
+            // Apply Filters
+            const matchesAssignee = selectedAssignee === 'All' || assignee === selectedAssignee;
+            const matchesSearch = searchQuery === '' ||
+                jiraIssue.key.toLowerCase().includes(searchQuery) ||
+                summaryText.toLowerCase().includes(searchQuery);
+
+            if (!matchesAssignee || !matchesSearch) {
+                div.innerHTML = '';
+                div.classList.add('hidden');
+                updateCounts();
+                return false;
+            }
+
+            const t = allTickets.find(ticket => ticket.id === dbId);
+            if (!t) return false;
+
+            div.classList.remove('hidden');
+            div.className = 'ticket-card bg-gray-700/50 hover:bg-gray-700 p-3 rounded-lg border border-gray-600/50 shadow-sm relative group overflow-hidden';
+
+            const doneStatuses = ["DEPLOYED", "DONE", "NOT A BUG", "READY FOR STAGING", "RESOLVED", "STAGED", "UNABLE TO REPRODUCE", "READY FOR QA", "READY FOR INTERNAL DEMO"];
+            const isDone = doneStatuses.includes(statusName.toUpperCase());
+            const statusClass = isDone ? 'bg-emerald-900/50 text-emerald-400 border-emerald-500/30 status-done' : 'bg-blue-900/50 text-blue-400 border-blue-500/30';
+
+            div.innerHTML = `
+                <div class="flex justify-between items-start gap-2 mb-2">
+                    <div class="min-w-0 flex-1">
+                        <div class="flex items-center gap-2 mb-1">
+                            ${typeUrl ? `<img src="${typeUrl}" class="w-4 h-4" title="${fields.issuetype.name}">` : ''}
+                            <a href="${JIRA_DOMAIN}/browse/${t.issueKey}" target="_blank" class="text-blue-400 hover:text-blue-300 font-bold text-xs tracking-wide hover:underline">${t.issueKey}</a>
+                            ${priorityUrl ? `<img src="${priorityUrl}" class="w-3.5 h-3.5" title="${fields.priority.name}">` : ''}
+                        </div>
+                        <p class="text-xs text-gray-200 leading-snug line-clamp-2" title="${summaryText}">${summaryText}</p>
+                    </div>
+                    <div class="flex flex-col items-end gap-1">
+                        <button onclick="removeTicket(${t.id})" class="text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition p-1">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                        </button>
+                        <div class="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white shadow-sm ring-1 ring-gray-600 ${getAvatarColor(assignee)}" title="${assignee}">
+                            ${getInitials(assignee)}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between mt-2">
+                    <span class="text-[10px] px-2 py-0.5 rounded border ${statusClass} font-semibold uppercase tracking-wider status-badge truncate max-w-[100px]">${statusName}</span>
+                </div>
+                
+                <div class="mt-3 pt-2 border-t border-gray-600/30 flex flex-col gap-2">
+                     <div class="flex items-center gap-2">
+                         <!-- Toggles -->
+                        <div class="flex items-center gap-1.5" title="PR Raised">
+                            <input type="checkbox" ${t.prRaised ? 'checked' : ''} onchange="updateTicketMeta(${t.id}, {prRaised: this.checked})" class="w-3.5 h-3.5 rounded bg-gray-800 border-gray-600 text-blue-600 focus:ring-0 cursor-pointer">
+                            <span class="text-[9px] text-gray-400 font-bold">PR</span>
+                        </div>
+                        <div class="flex items-center gap-1.5" title="Demo Done">
+                            <input type="checkbox" ${t.demoDone ? 'checked' : ''} onchange="updateTicketMeta(${t.id}, {demoDone: this.checked})" class="w-3.5 h-3.5 rounded bg-gray-800 border-gray-600 text-emerald-600 focus:ring-0 cursor-pointer">
+                            <span class="text-[9px] text-gray-400 font-bold">DEMO</span>
+                        </div>
+                        <div class="flex items-center gap-1.5" title="PR Merged">
+                            <input type="checkbox" ${t.prMerged ? 'checked' : ''} onchange="updateTicketMeta(${t.id}, {prMerged: this.checked})" class="w-3.5 h-3.5 rounded bg-gray-800 border-gray-600 text-purple-600 focus:ring-0 cursor-pointer">
+                            <span class="text-[9px] text-gray-400 font-bold">MRG</span>
+                        </div>
+                     </div>
+                     
+                     <div class="relative">
+                         <input type="text" value="${t.comment || ''}" 
+                            onblur="updateTicketMeta(${t.id}, {comment: this.value})"
+                            class="w-full bg-gray-800/50 border-none rounded px-2 py-1 text-[10px] text-gray-300 placeholder-gray-600 focus:ring-1 focus:ring-blue-500 focus:bg-gray-800 transition" 
+                            placeholder="Add note...">
+                     </div>
+                </div>
+            `;
+
+            return isDone;
+        }
+
+        // --- Actions ---
+        async function updateTicketMeta(id, data) {
+            // Find in local array to merge
+            const ticket = allTickets.find(t => t.id === id);
+            if (!ticket) return;
+
+            const payload = {
+                comment: data.comment !== undefined ? data.comment : ticket.comment,
+                prRaised: data.prRaised !== undefined ? data.prRaised : ticket.prRaised,
+                demoDone: data.demoDone !== undefined ? data.demoDone : ticket.demoDone,
+                prMerged: data.prMerged !== undefined ? data.prMerged : ticket.prMerged
+            };
+
+            // Optimistic Update
+            Object.assign(ticket, payload);
+
+            await fetch(`/api/sprint_tickets/${id}`, {
+                method: 'PUT',
+                headers: getApiHeaders(),
+                body: JSON.stringify(payload)
+            });
+        }
+
+        async function addTicket(weekId, input) {
+            const rawValue = input.value.trim();
+            if (!rawValue) return;
+
+            const keys = rawValue.split(/[\s,]+/).filter(k => k.length > 0).map(k => k.toUpperCase());
+            if (keys.length === 0) return;
+
+            input.value = '';
+
+            // Show loading or temp state if needed? 
+            // For now, simple await
+            await Promise.all(keys.map(key =>
+                fetch(`/api/sprints/${currentSprintId}/tickets`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ weekId, issueKey: key })
+                })
+            ));
+
             loadSprintTickets();
         }
 
-        async function updateWeekGoal(id, goal) {
-            await fetch(`/api/sprint_weeks/${id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ goal })
-            });
+        async function removeTicket(id) {
+            if (!confirm("Remove this ticket from the sprint plan?")) return;
+            await fetch(`/api/sprint_tickets/${id}`, { method: 'DELETE', headers: getApiHeaders() });
+            loadSprintTickets();
         }
 
         async function addWeek() {
@@ -387,44 +725,32 @@
             loadWeeks();
         }
 
+        async function updateWeekGoal(id, goal) {
+            await fetch(`/api/sprint_weeks/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ goal })
+            });
+        }
+
         async function deleteWeek(id) {
+            if (!confirm("Delete this week and all its tickets?")) return;
             await fetch(`/api/sprint_weeks/${id}`, { method: 'DELETE' });
             loadWeeks();
         }
 
-        async function addTicket(weekId, input) {
-            const rawValue = input.value.trim();
-            if (!rawValue) return;
-
-            // Split by whitespace or comma, then filter out empty strings and map to uppercase
-            const keys = rawValue.split(/[\s,]+/).filter(k => k.length > 0).map(k => k.toUpperCase());
-
-            if (keys.length === 0) return;
-
-            input.value = ''; // Clear early for better UX
-
-            // Process all keys concurrently
-            await Promise.all(keys.map(key =>
-                fetch(`/api/sprints/${currentSprintId}/tickets`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ weekId, issueKey: key })
-                })
-            ));
-
-            loadSprintTickets();
-        }
-
-        async function loadSprintTickets() {
-            if (!currentSprintId) return;
-            const projectKey = (localStorage.getItem("project_key") || "").trim().toUpperCase();
-            const res = await fetch(`/api/sprints/${currentSprintId}/tickets`, {
-                headers: { 
-                    'X-Project-Key': projectKey 
-                }
+        // --- Helpers ---
+        function updateCounts() {
+            const counts = {};
+            document.querySelectorAll('[id^="week-container-"]').forEach(container => {
+                const wid = container.getAttribute('data-week-id');
+                const visibleCount = Array.from(container.children).filter(c => !c.classList.contains('hidden')).length;
+                counts[wid] = visibleCount;
             });
-            allTickets = await res.json();
-            renderFilteredTickets();
+            Object.keys(counts).forEach(wid => {
+                const el = document.getElementById(`count-${wid}`);
+                if (el) el.innerText = counts[wid];
+            });
         }
 
         function filterTickets(val) {
@@ -437,196 +763,58 @@
             renderFilteredTickets();
         }
 
-        function renderFilteredTickets() {
-            document.querySelectorAll('[id^="tickets-"]').forEach(c => c.innerHTML = '');
-
-            allTickets.forEach(t => {
-                const container = document.getElementById(`tickets-${t.weekId}`);
-                if (container) {
-                    const div = document.createElement('div');
-                    div.id = `ticket-row-${t.id}`;
-                    container.appendChild(div);
-                    fetchTicketDetails(t.id, t.issueKey);
-                }
-            });
-            updateCounts();
-        }
-
-        function updateCounts() {
-            const counts = {};
-            document.querySelectorAll('[id^="tickets-"]').forEach(container => {
-                const wid = container.id.split('-')[1];
-                const visibleCount = Array.from(container.children).filter(c => !c.classList.contains('hidden') && c.innerHTML.trim() !== '').length;
-                counts[wid] = visibleCount;
-            });
-            Object.keys(counts).forEach(wid => {
-                const el = document.getElementById(`count-${wid}`);
-                if (el) el.innerText = counts[wid];
-            });
-        }
-
-        const CACHE_TTL = 3600000; // 1 hour in ms
-
-        async function fetchTicketDetails(dbId, key) {
-            try {
-                // Check Cache
-                const cacheKey = `jira_cache_${key}`;
-                const cached = localStorage.getItem(cacheKey);
-                if (cached) {
-                    const { data, timestamp } = JSON.parse(cached);
-                    if (Date.now() - timestamp < CACHE_TTL) {
-                        renderTicketData(dbId, data);
-                        return;
-                    }
-                }
-
-                const res = await fetch('/api/execute_jql', {
-                    method: 'POST',
-                    headers: getApiHeaders(),
-                    body: JSON.stringify({ jql: `key = "${key}"` })
-                });
-                const data = await res.json();
-                if (data.length > 0) {
-                    const jiraIssue = data[0];
-                    localStorage.setItem(cacheKey, JSON.stringify({ data: jiraIssue, timestamp: Date.now() }));
-                    renderTicketData(dbId, jiraIssue);
-                }
-            } catch (e) {
-                console.error("Error fetching ticket details:", e);
-            }
-        }
-
-        function renderTicketData(dbId, jiraIssue) {
-            const fields = jiraIssue.fields || {};
-            const statusName = fields.status ? fields.status.name : 'Unknown';
-            const summaryText = fields.summary || 'No Summary';
-            const assignee = fields.assignee ? fields.assignee.displayName : 'Unassigned';
-
-            const div = document.getElementById(`ticket-row-${dbId}`);
-            if (!div) return;
-
-            // Apply Filters (Assignee & Search)
-            const matchesAssignee = selectedAssignee === 'All' || assignee === selectedAssignee;
-            const matchesSearch = searchQuery === '' ||
-                t.issueKey.toLowerCase().includes(searchQuery) ||
-                summaryText.toLowerCase().includes(searchQuery);
-
-            if (!matchesAssignee || !matchesSearch) {
-                div.innerHTML = '';
-                div.classList.add('hidden');
-                updateCounts();
-                return;
-            }
-
-            const t = allTickets.find(ticket => ticket.id === dbId);
-            if (!t) return;
-
-            div.classList.remove('hidden');
-            div.className = 'ticket-card glass p-3.5 rounded-2xl border-gray-800/50 shadow-xl mb-3 animate-slide-in relative overflow-hidden group/card';
-
-            const greenStatuses = ["DEPLOYED", "DONE", "NOT A BUG", "READY FOR STAGING", "RESOLVED", "STAGED", "UNABLE TO REPRODUCE", "READY FOR QA", "READY FOR INTERNAL DEMO"];
-            const isGreen = greenStatuses.includes(statusName.toUpperCase());
-
-            div.innerHTML = `
-                <!-- Left Accent -->
-                <div class="absolute left-0 top-0 bottom-0 w-1.5 bg-gradient-to-b from-blue-500 to-purple-600 opacity-0 group-hover/card:opacity-100 transition-opacity"></div>
-                
-                <div class="flex justify-between items-start mb-3">
-                    <div class="flex-grow min-w-0 pr-3">
-                        <div class="flex items-center gap-3 mb-2">
-                            <span class="text-blue-400 font-black text-[14px] tracking-widest uppercase mb-1 block">${t.issueKey}</span>
-                            <span class="text-[11px] px-3 py-0.5 rounded-full font-black tracking-wider ${isGreen ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-blue-500/20 text-blue-300 border border-blue-500/30'} shadow-sm">${statusName.toUpperCase()}</span>
-                        </div>
-                        <span class="text-[14px] text-white font-bold leading-relaxed line-clamp-3">${summaryText}</span>
-                    </div>
-                    <div class="flex flex-col items-end gap-3">
-                        <button onclick="removeTicket(${t.id})" class="text-gray-500 hover:text-red-400 opacity-0 group-hover/card:opacity-100 transition-all transform hover:scale-125">
-                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-width="3"></path></svg>
-                        </button>
-                        <div class="transform transition-all group-hover/card:scale-110 shadow-lg shadow-black/50">
-                            <div class="inline-flex items-center justify-center h-6 w-6 rounded-full ${getAvatarColor(assignee)} text-[9px] font-black text-white shadow-lg ring-2 ring-gray-900" title="${assignee}">
-                                ${getInitials(assignee)}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="flex flex-col gap-3.5 mt-4 pt-4 border-t border-white/10">
-                    <div class="flex items-center gap-5">
-                        <label class="flex items-center gap-2.5 cursor-pointer group/flag">
-                            <input type="checkbox" ${t.prRaised ? 'checked' : ''} onchange="updateTicketMeta(${t.id}, {prRaised: this.checked})" class="hidden peer">
-                            <div class="w-5 h-5 rounded-lg border-2 border-gray-700 peer-checked:bg-blue-600 peer-checked:border-blue-600 flex items-center justify-center transition shadow-lg shadow-blue-500/20">
-                                <svg class="w-3.5 h-3.5 text-white scale-0 peer-checked:scale-110 transition" fill="currentColor" viewBox="0 0 20 20"><path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"></path></svg>
-                            </div>
-                            <span class="text-[10px] font-black text-gray-400 peer-checked:text-blue-400 uppercase tracking-widest transition-colors">PR Raised</span>
-                        </label>
-                        
-                        <label class="flex items-center gap-2.5 cursor-pointer group/flag">
-                            <input type="checkbox" ${t.demoDone ? 'checked' : ''} onchange="updateTicketMeta(${t.id}, {demoDone: this.checked})" class="hidden peer">
-                            <div class="w-5 h-5 rounded-lg border-2 border-gray-700 peer-checked:bg-emerald-600 peer-checked:border-emerald-600 flex items-center justify-center transition shadow-lg shadow-emerald-500/20">
-                                <svg class="w-3.5 h-3.5 text-white scale-0 peer-checked:scale-110 transition" fill="currentColor" viewBox="0 0 20 20"><path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"></path></svg>
-                            </div>
-                            <span class="text-[10px] font-black text-gray-400 peer-checked:text-emerald-400 uppercase tracking-widest transition-colors">Demo Done</span>
-                        </label>
-
-                        <label class="flex items-center gap-2.5 cursor-pointer group/flag">
-                            <input type="checkbox" ${t.prMerged ? 'checked' : ''} onchange="updateTicketMeta(${t.id}, {prMerged: this.checked})" class="hidden peer">
-                            <div class="w-5 h-5 rounded-lg border-2 border-gray-700 peer-checked:bg-purple-600 peer-checked:border-purple-600 flex items-center justify-center transition shadow-lg shadow-purple-500/20">
-                                <svg class="w-3.5 h-3.5 text-white scale-0 peer-checked:scale-110 transition" fill="currentColor" viewBox="0 0 20 20"><path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"></path></svg>
-                            </div>
-                            <span class="text-[10px] font-black text-gray-400 peer-checked:text-purple-400 uppercase tracking-widest transition-colors">PR Merged</span>
-                        </label>
-                    </div>
-                    
-                    <div class="relative flex items-center gap-3 bg-black/40 p-2.5 rounded-xl border border-white/5 group/input shadow-inner">
-                        <svg class="w-4 h-4 text-gray-500 group-focus-within/input:text-blue-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" stroke-width="2.5"></path></svg>
-                        <input type="text" placeholder="Add a quick note..." value="${t.comment || ''}" 
-                            onblur="updateTicketMeta(${t.id}, {comment: this.value})"
-                            onkeyup="if(event.key==='Enter') this.blur()"
-                            class="w-full bg-transparent border-none text-[11px] text-gray-300 focus:text-white outline-none placeholder-gray-600 pb-0.5">
-                    </div>
-                </div>
-            `;
-            updateCounts();
-        }
-
         function refreshJiraData() {
-            // Clear only jira cache
             Object.keys(localStorage).forEach(key => {
                 if (key.startsWith('jira_cache_')) localStorage.removeItem(key);
             });
             loadSprintTickets();
         }
 
-        async function updateTicketMeta(id, data) {
-            // Find existing ticket data to merge
-            const resSprints = await fetch(`/api/sprints/${currentSprintId}/tickets`, { headers: getApiHeaders() });
-            const tickets = await resSprints.json();
-            const ticket = tickets.find(t => t.id === id);
-
-            const payload = {
-                comment: data.comment !== undefined ? data.comment : ticket.comment,
-                prRaised: data.prRaised !== undefined ? data.prRaised : ticket.prRaised,
-                demoDone: data.demoDone !== undefined ? data.demoDone : ticket.demoDone,
-                prMerged: data.prMerged !== undefined ? data.prMerged : ticket.prMerged
-            };
-
-            await fetch(`/api/sprint_tickets/${id}`, {
-                method: 'PUT',
-                headers: getApiHeaders(),
-                body: JSON.stringify(payload)
-            });
+        // Utils
+        function getInitials(name) { return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2); }
+        function getAvatarColor(name) {
+            const colors = ['bg-blue-500', 'bg-purple-500', 'bg-emerald-500', 'bg-pink-500', 'bg-amber-500', 'bg-indigo-500', 'bg-cyan-500', 'bg-rose-500'];
+            let hash = 0;
+            for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+            return colors[Math.abs(hash) % colors.length];
         }
 
-        async function removeTicket(id) {
-            await fetch(`/api/sprint_tickets/${id}`, { method: 'DELETE', headers: getApiHeaders() });
-            loadSprintTickets();
-        }
-
+        // Modal Logic
         function openMemberModal() { document.getElementById('memberModal').classList.remove('hidden'); }
         function closeMemberModal() { document.getElementById('memberModal').classList.add('hidden'); }
         function openSprintModal() { document.getElementById('sprintModal').classList.remove('hidden'); }
         function closeSprintModal() { document.getElementById('sprintModal').classList.add('hidden'); }
+
+        async function searchUsers() {
+            const query = document.getElementById('memberSearchInput').value;
+            if (query.length < 3) return;
+            const res = await fetch(`/api/assignees?q=${query}`, { headers: getApiHeaders() });
+            const users = await res.json();
+            const list = document.getElementById('userResults');
+            list.classList.remove('hidden');
+            list.innerHTML = users.map(u => `
+                <div onclick="addMember('${u.id}', '${u.name}')" class="p-2 hover:bg-gray-700 cursor-pointer rounded flex items-center justify-between text-sm text-gray-300">
+                    <span>${u.name}</span>
+                    <span class="text-blue-400 text-xs font-bold">+ ADD</span>
+                </div>
+            `).join('');
+        }
+
+        async function addMember(accountId, displayName) {
+            await fetch(`/api/teams/${teamId}/members`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ accountId, displayName, avatarUrl: '' })
+            });
+            closeMemberModal();
+            loadMembers();
+        }
+
+        async function removeMember(id) {
+            if (!confirm("Remove this member from the team?")) return;
+            await fetch(`/api/teams/${teamId}/members/${id}`, { method: 'DELETE' });
+            loadMembers();
+        }
 
         async function createSprint() {
             const name = document.getElementById('sprintNameInput').value;
@@ -639,6 +827,9 @@
             closeSprintModal();
             loadSprints();
         }
+
+        // JIRA_DOMAIN needed for links
+        const JIRA_DOMAIN = "{{ JIRA_DOMAIN }}";
 
         init();
     </script>

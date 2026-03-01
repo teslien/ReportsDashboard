@@ -12,12 +12,18 @@ function getJiraToken() {
     return (localStorage.getItem("jira_token") || "").trim();
 }
 
+function getJiraDomain() {
+    let d = (localStorage.getItem("jira_domain") || window.JIRA_DOMAIN || "").trim();
+    return d.replace(/\/$/, ""); // Remove trailing slash
+}
+
 function getApiHeaders() {
     return {
         "Content-Type": "application/json",
         "X-Project-Key": getProjectKey(),
         "X-Jira-Email": getJiraEmail(),
-        "X-Jira-Token": getJiraToken()
+        "X-Jira-Token": getJiraToken(),
+        "X-Jira-Domain": getJiraDomain()
     };
 }
 
@@ -332,12 +338,12 @@ async function loadUserTickets(accountId) {
             row.className = "hover:bg-gray-700/50 transition border-b border-gray-700 last:border-0";
             row.innerHTML = `
                 <td class="p-4 py-3">${icon}</td>
-                <td class="p-4 py-3 font-mono text-blue-300 hover:underline"><a href="https://lumberfi.atlassian.net/browse/${i.key}" target="_blank">${i.key}</a></td>
+                <td class="p-4 py-3 font-mono text-blue-300 hover:underline"><a href="${window.JIRA_DOMAIN || 'https://lumberfi.atlassian.net'}/browse/${i.key}" target="_blank">${i.key}</a></td>
                 <td class="p-4 py-3 font-medium text-white">${summary}</td>
                 <td class="p-4 py-3 ${priorityColor}">${priority}</td>
                 <td class="p-4 py-3 text-gray-400 text-xs">${date}</td>
                 <td class="p-4 py-3">
-                    <a href="https://lumberfi.atlassian.net/browse/${i.key}" target="_blank" 
+                    <a href="${window.JIRA_DOMAIN || 'https://lumberfi.atlassian.net'}/browse/${i.key}" target="_blank" 
                        class="text-xs bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded transition">
                        View in Jira
                     </a>

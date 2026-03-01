@@ -33,6 +33,14 @@
 
             <div class="space-y-6">
                 <div>
+                    <label class="block text-sm font-medium text-gray-400 mb-2">Jira Domain</label>
+                    <input type="text" id="jira_domain"
+                        class="w-full bg-gray-700 border border-gray-600 rounded-md px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="https://your-company.atlassian.net">
+                    <p class="mt-1 text-xs text-gray-500">The full URL of your Jira instance.</p>
+                </div>
+
+                <div>
                     <label class="block text-sm font-medium text-gray-400 mb-2">Jira Email</label>
                     <input type="email" id="jira_email"
                         class="w-full bg-gray-700 border border-gray-600 rounded-md px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -126,6 +134,7 @@
                 const res = await fetch('/api/settings/jira');
                 if (res.ok) {
                     const data = await res.json();
+                    document.getElementById('jira_domain').value = data.jira_domain || '';
                     document.getElementById('jira_email').value = data.email || '';
                     document.getElementById('jira_token').value = data.token || '';
                     document.getElementById('project_key').value = data.project_key || '';
@@ -238,11 +247,12 @@
         }
 
         async function saveSettings() {
+            const domain = document.getElementById('jira_domain').value.trim();
             const email = document.getElementById('jira_email').value.trim();
             const token = document.getElementById('jira_token').value.trim();
             const project = document.getElementById('project_key').value.trim().toUpperCase();
 
-            if (!email || !token || !project) {
+            if (!domain || !email || !token || !project) {
                 alert('Please fill in all fields');
                 return;
             }
@@ -256,9 +266,11 @@
                 if (!proceed) return;
             }
 
+            localStorage.removeItem('jira_domain');
             localStorage.removeItem('jira_email');
             localStorage.removeItem('jira_token');
             localStorage.removeItem('project_key');
+            document.cookie = 'jira_domain=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
             document.cookie = 'jira_email=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
             document.cookie = 'jira_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
             document.cookie = 'project_key=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
@@ -278,7 +290,7 @@
                 const res = await fetch('/api/settings/jira', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email, token, project_key: project })
+                    body: JSON.stringify({ jira_domain: domain, email, token, project_key: project })
                 });
 
                 if (res.ok) {

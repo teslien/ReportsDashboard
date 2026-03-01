@@ -7,51 +7,74 @@
     <title>Team Management - {{ project }}</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        .glass {
-            background: rgba(31, 41, 55, 0.7);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.05);
+        :root {
+            --bg-main: #0f172a;
+        }
+
+        body {
+            background-color: var(--bg-main);
+            color: #f8fafc;
+        }
+
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        .glass-panel:hover {
+            border-color: rgba(59, 130, 246, 0.3);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
         }
     </style>
     <link rel="stylesheet" href="/static/theme.css">
-    <script src="/static/theme.js"></script></head>
+    <script src="/static/theme.js"></script>
+</head>
 
-<body class="bg-gray-900 min-h-screen text-white font-sans">
+<body class="min-h-screen font-sans selection:bg-blue-500/30">
     {% include 'navbar.html' %}
 
     <main class="pt-24 pb-12 px-6 max-w-7xl mx-auto">
-        <div class="flex justify-between items-center mb-8">
+        <div class="flex justify-between items-end mb-10">
             <div>
-                <h1 class="text-3xl font-black mb-2">Team Management</h1>
-                <p class="text-gray-400">Organize your personnel into high-performance teams.</p>
+                <h1 class="text-4xl font-bold tracking-tight text-white mb-2">Team Management</h1>
+                <p class="text-gray-400 max-w-lg">Create and manage your development squads. Assign members and track sprint progress efficiently.</p>
             </div>
             <button onclick="openCreateModal()"
-                class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-6 rounded-lg shadow-lg transition">
-                + Create Team
+                class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-6 rounded-xl shadow-lg shadow-blue-500/20 transition transform hover:scale-105 flex items-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                Create Team
             </button>
         </div>
 
-        <div id="teamsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div id="teamsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             <!-- Team cards will be loaded here -->
         </div>
     </main>
 
     <!-- Create Team Modal -->
-    <div id="createModal" class="fixed inset-0 z-[60] hidden">
-        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeCreateModal()"></div>
-        <div
-            class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md glass rounded-2xl p-8 shadow-2xl">
-            <h3 class="text-xl font-bold mb-6">Create New Team</h3>
-            <div class="mb-4">
-                <label class="block text-sm font-medium text-gray-400 mb-2">Team Name</label>
-                <input type="text" id="teamNameInput"
-                    class="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 outline-none focus:border-blue-500 transition"
-                    placeholder="e.g. Quick Win Team">
-            </div>
-            <div class="flex justify-end gap-4">
-                <button onclick="closeCreateModal()" class="text-gray-400 hover:text-white font-medium">Cancel</button>
-                <button onclick="createTeam()"
-                    class="bg-blue-600 hover:bg-blue-500 py-2 px-6 rounded-lg font-bold">Create</button>
+    <div id="createModal" class="fixed inset-0 z-50 hidden">
+        <div class="fixed inset-0 bg-gray-900/80 backdrop-blur-sm transition-opacity" onclick="closeCreateModal()"></div>
+        <div class="fixed inset-0 z-10 overflow-y-auto">
+            <div class="flex min-h-full items-center justify-center p-4">
+                <div class="relative transform overflow-hidden rounded-2xl bg-gray-800 border border-gray-700 shadow-2xl transition-all w-full max-w-md p-8">
+                    <h3 class="text-2xl font-bold text-white mb-2">Create New Team</h3>
+                    <p class="text-gray-400 text-sm mb-6">Give your team a recognizable name.</p>
+                    
+                    <div class="mb-6">
+                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Team Name</label>
+                        <input type="text" id="teamNameInput"
+                            class="w-full bg-gray-900 border border-gray-700 rounded-lg p-4 text-white placeholder-gray-600 outline-none focus:ring-2 focus:ring-blue-500 transition"
+                            placeholder="e.g. Alpha Squad">
+                    </div>
+                    
+                    <div class="flex justify-end gap-3">
+                        <button onclick="closeCreateModal()" class="px-5 py-2.5 text-gray-400 hover:text-white font-medium transition">Cancel</button>
+                        <button onclick="createTeam()" class="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-bold shadow-lg transition">Create Team</button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -66,24 +89,43 @@
             const grid = document.getElementById('teamsGrid');
 
             if (teams.length === 0) {
-                grid.innerHTML = `<div class="col-span-full glass p-12 text-center text-gray-500 rounded-2xl">No teams found. Create your first team to get started!</div>`;
+                grid.innerHTML = `
+                    <div class="col-span-full glass-panel p-16 text-center rounded-3xl border-dashed border-2 border-gray-700">
+                        <div class="w-16 h-16 bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4 text-gray-600">
+                            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+                        </div>
+                        <h3 class="text-xl font-bold text-white mb-2">No Teams Yet</h3>
+                        <p class="text-gray-400 mb-6">Create your first team to start planning sprints.</p>
+                        <button onclick="openCreateModal()" class="text-blue-400 font-bold hover:text-blue-300">Create Team &rarr;</button>
+                    </div>
+                `;
                 return;
             }
 
             grid.innerHTML = teams.map(team => `
-                <div class="glass p-6 rounded-2xl hover:border-blue-500/50 transition cursor-pointer group" onclick="location.href='/planning/${team.id}'">
+                <div class="glass-panel p-6 rounded-2xl transition-all cursor-pointer group flex flex-col h-full" onclick="location.href='/planning/${team.id}'">
                     <div class="flex justify-between items-start mb-4">
-                        <h3 class="text-xl font-bold group-hover:text-blue-400 transition">${team.name}</h3>
-                        <button onclick="event.stopPropagation(); deleteTeam(${team.id})" class="text-gray-600 hover:text-red-400">
+                        <h3 class="text-xl font-bold text-white group-hover:text-blue-400 transition">${team.name}</h3>
+                        <button onclick="event.stopPropagation(); deleteTeam(${team.id})" class="text-gray-600 hover:text-red-400 p-1 rounded hover:bg-gray-800 transition" title="Delete Team">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                         </button>
                     </div>
-                    <div class="flex -space-x-2 overflow-hidden mb-6" id="members-${team.id}">
-                        <!-- Avatars loaded here -->
+                    
+                    <div class="flex-grow">
+                         <div class="flex items-center gap-2 mb-6">
+                            <div class="flex -space-x-3 overflow-hidden" id="members-${team.id}">
+                                <!-- Avatars loaded here -->
+                            </div>
+                        </div>
                     </div>
-                    <div class="flex justify-between items-center text-sm text-gray-500">
-                        <span>Sprint Active: Planning</span>
-                        <span class="text-blue-400 font-bold group-hover:underline">Plan Sprint →</span>
+
+                    <div class="mt-auto pt-4 border-t border-gray-700/50 flex justify-between items-center text-sm">
+                        <span class="text-gray-400 flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-emerald-500"></span> Active
+                        </span>
+                        <span class="text-blue-400 font-bold group-hover:translate-x-1 transition-transform inline-flex items-center gap-1">
+                            Plan Sprint <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg>
+                        </span>
                     </div>
                 </div>
             `).join('');
@@ -111,14 +153,14 @@
             const members = await res.json();
             const container = document.getElementById(`members-${teamId}`);
             if (members.length === 0) {
-                container.innerHTML = '<span class="text-xs text-gray-600">No members added</span>';
+                container.innerHTML = '<span class="text-xs text-gray-500 italic pl-1">No members</span>';
                 return;
             }
             container.innerHTML = members.slice(0, 5).map(m => `
-                <div class="inline-flex items-center justify-center h-8 w-8 rounded-full ring-2 ring-gray-900 ${getAvatarColor(m.displayName)} text-[10px] font-bold text-white shadow-lg" title="${m.displayName}">
+                <div class="inline-flex items-center justify-center h-9 w-9 rounded-full ring-2 ring-gray-800 ${getAvatarColor(m.displayName)} text-[10px] font-bold text-white shadow-lg relative z-0 hover:z-10 hover:scale-110 transition-transform cursor-help" title="${m.displayName}">
                     ${getInitials(m.displayName)}
                 </div>
-            `).join('') + (members.length > 5 ? `<span class="flex items-center justify-center h-8 w-8 rounded-full bg-gray-800 text-[10px] font-bold ring-2 ring-gray-900">+${members.length - 5}</span>` : '');
+            `).join('') + (members.length > 5 ? `<span class="flex items-center justify-center h-9 w-9 rounded-full bg-gray-700 text-[10px] font-bold ring-2 ring-gray-800 text-gray-300 z-0">+${members.length - 5}</span>` : '');
         }
 
         function openCreateModal() { document.getElementById('createModal').classList.remove('hidden'); }
@@ -151,5 +193,4 @@
         loadTeams();
     </script>
 </body>
-
 </html>

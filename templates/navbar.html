@@ -223,6 +223,9 @@
 <!-- Legacy localStorage script removed -->
 
 <script>
+    // Global Configuration
+    window.JIRA_DOMAIN = "{{ JIRA_DOMAIN }}";
+
     // Highlight active link
     document.addEventListener('DOMContentLoaded', function () {
         const currentPath = window.location.pathname;
