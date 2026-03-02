@@ -1610,63 +1610,44 @@ def get_sprints():
     # Explicitly cast LocalProxy objects
     headers_dict = dict(HEADERS)
     project_key_str = str(PROJECT_KEY)
-
-    # 1. Get all boards associated with project TIM
-    boards_url = f"{JIRA_DOMAIN}/rest/agile/1.0/board"
+    
+    # Use JQL to find issues for this project to extract sprint data
+    jql = f'project = "{project_key_str}"'
+    
+    url = f"{JIRA_DOMAIN}/rest/api/3/search/jql"
+    params = {
+        "jql": jql,
+        "maxResults": 100, # Assuming 100 issues specify most open sprints
+        "fields": "customfield_10020" # The sprint field
+    }
+    
     try:
         query = request.args.get("q", "").lower()
+        res = requests.get(url, headers=headers_dict, params=params)
+        if res.status_code != 200:
+            return jsonify({"error": f"Jira error: {res.text}"}), res.status_code
         
-        boards_res = requests.get(boards_url, headers=headers_dict, params={"projectKeyOrId": project_key_str})
-        if boards_res.status_code != 200:
-            return jsonify({"error": f"Failed to fetch boards: {boards_res.text}"}), 500
+        data = res.json()
+        issues = data.get("issues", [])
         
-        boards = boards_res.json().get("values", [])
-        all_sprints_map = {} # Use map to deduplicate by sprint ID
-        
-        for b in boards:
-            board_id = b["id"]
-            # To keep it fast, we only fetch the most recent sprints if no query is provided,
-            # or we fetch more if searching.
-            start_at = 0
-            max_results = 50
-            
-            while True:
-                sprint_url = f"{JIRA_DOMAIN}/rest/agile/1.0/board/{board_id}/sprint"
-                res = requests.get(
-                    sprint_url, 
-                    headers=headers_dict, 
-                    params={"startAt": start_at, "maxResults": max_results}
-                )
-                
-                if res.status_code != 200:
-                    break
+        all_sprints_map = {}
+        for issue in issues:
+            sprints = issue["fields"].get("customfield_10020")
+            if sprints and isinstance(sprints, list):
+                for s in sprints:
+                    s_id = s.get("id")
+                    s_name = s.get("name", "")
+                    s_state = s.get("state", "unknown")
                     
-                data = res.json()
-                values = data.get("values", [])
-                if not values:
-                    break
-                    
-                for s in values:
-                    sname = s.get("name", "")
-                    # Local filter by query
-                    if query and query not in sname.lower():
-                        continue
-                        
-                    all_sprints_map[s["id"]] = {
-                        "id": s["id"],
-                        "name": sname,
-                        "state": s["state"]
-                    }
-                
-                if data.get("isLast", True):
-                    break
-                
-                # If we have a query and found some, or if we have enough recent ones, maybe stop?
-                # Actually, Jira doesn't support server-side name filtering well for sprints.
-                # So we have to fetch and filter. To keep it responsive, we'll limit the search depth.
-                if start_at >= 150: break # Don't go too deep to avoid timeout
-                
-                start_at += len(values)
+                    # Only include active or future sprints (openSprints normally does this, but being safe)
+                    if s_state in ["active", "future"]:
+                        if query and query not in s_name.lower():
+                            continue
+                        all_sprints_map[s_id] = {
+                            "id": s_id,
+                            "name": s_name,
+                            "state": s_state
+                        }
         
         final_sprints = list(all_sprints_map.values())
         # Sort by ID descending (newest first)

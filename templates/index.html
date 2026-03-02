@@ -450,14 +450,32 @@
                 workList.innerHTML = '<p class="text-center text-gray-500 italic text-sm py-4">No active work found for this team in this sprint.</p>';
             } else {
                 data.today_work.forEach(w => {
+                    let badgeClass = "bg-gray-500/10 text-gray-400"; // Default
+                    const status = w.status.toUpperCase();
+
+                    if (status === "IN PROGRESS" || status === "REOPENED") {
+                        badgeClass = "bg-blue-500/10 text-blue-400 border border-blue-500/20";
+                    } else if (["DONE", "RESOLVED", "DEPLOYED", "STAGED", "READY FOR QA", "CLOSED"].includes(status)) {
+                        badgeClass = "bg-green-500/10 text-green-400 border border-green-500/20";
+                    } else if (status.includes("READY FOR") || status === "READY") {
+                        badgeClass = "bg-purple-500/10 text-purple-400 border border-purple-500/20";
+                    } else if (["BLOCKED", "CANCELLED", "CANCELED"].includes(status)) {
+                        badgeClass = "bg-red-500/10 text-red-400 border border-red-500/20";
+                    } else if (status === "OPEN" || status === "TO DO" || status === "BACKLOG") {
+                        badgeClass = "bg-gray-400/10 text-gray-400 border border-gray-400/20";
+                    }
+
                     const div = document.createElement("div");
                     div.className = "bg-gray-700/30 p-3 rounded-xl border border-gray-700/50 flex items-start gap-3 hover:bg-gray-700/50 transition cursor-default";
                     div.innerHTML = `
                         <img src="${w.type_icon}" class="w-4 h-4 mt-1">
                         <div class="flex-1 min-w-0">
                             <div class="flex justify-between items-start">
-                                <span class="text-xs font-mono text-blue-400 font-bold uppercase">${w.key}</span>
-                                <span class="px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 text-[10px] font-bold uppercase">${w.status}</span>
+                                <a href="https://lumberfi.atlassian.net/browse/${w.key}" target="_blank" 
+                                   class="text-xs font-mono text-blue-400 hover:text-blue-300 font-bold uppercase hover:underline decoration-blue-500/50">
+                                   ${w.key}
+                                </a>
+                                <span class="px-2 py-0.5 rounded ${badgeClass} text-[10px] font-bold uppercase">${w.status}</span>
                             </div>
                             <p class="text-sm text-gray-200 truncate font-medium mt-0.5">${w.summary}</p>
                             <p class="text-[10px] text-gray-500 mt-1 flex items-center gap-1">
