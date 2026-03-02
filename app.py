@@ -218,6 +218,11 @@ def init_db():
             pr_raised INTEGER DEFAULT 0,
             demo_done INTEGER DEFAULT 0,
             pr_merged INTEGER DEFAULT 0,
+            deploy_status TEXT DEFAULT 'N/A',
+            qa_assignee TEXT DEFAULT '',
+            qa_status TEXT DEFAULT 'Pending',
+            bugs_found TEXT DEFAULT '',
+            completed INTEGER DEFAULT 0,
             FOREIGN KEY (sprint_id) REFERENCES sprints(id) ON DELETE CASCADE,
             FOREIGN KEY (week_id) REFERENCES sprint_weeks(id) ON DELETE CASCADE
         )
@@ -266,6 +271,18 @@ def init_db():
         cursor.execute("ALTER TABLE sprint_tickets ADD COLUMN pr_raised INTEGER DEFAULT 0")
     if 'demo_done' not in columns:
         cursor.execute("ALTER TABLE sprint_tickets ADD COLUMN demo_done INTEGER DEFAULT 0")
+    if 'pr_merged' not in columns:
+        cursor.execute("ALTER TABLE sprint_tickets ADD COLUMN pr_merged INTEGER DEFAULT 0")
+    if 'deploy_status' not in columns:
+        cursor.execute("ALTER TABLE sprint_tickets ADD COLUMN deploy_status TEXT DEFAULT 'N/A'")
+    if 'qa_assignee' not in columns:
+        cursor.execute("ALTER TABLE sprint_tickets ADD COLUMN qa_assignee TEXT DEFAULT ''")
+    if 'qa_status' not in columns:
+        cursor.execute("ALTER TABLE sprint_tickets ADD COLUMN qa_status TEXT DEFAULT 'Pending'")
+    if 'bugs_found' not in columns:
+        cursor.execute("ALTER TABLE sprint_tickets ADD COLUMN bugs_found TEXT DEFAULT ''")
+    if 'completed' not in columns:
+        cursor.execute("ALTER TABLE sprint_tickets ADD COLUMN completed INTEGER DEFAULT 0")
 
     cursor.execute("PRAGMA table_info(todos)")
     columns = [row[1] for row in cursor.fetchall()]
@@ -439,6 +456,41 @@ def assignees():
         results = [{"id": u.get("accountId"), "name": u.get("displayName")} for u in users if u.get("accountType") == "atlassian"]
         return jsonify(results)
     except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/jira/search", methods=["GET"])
+def jira_search():
+    query = request.args.get('q', '')
+    if len(query) < 2:
+        return jsonify([])
+        
+    project_key_str = str(PROJECT_KEY)
+    headers_dict = dict(HEADERS)
+    
+    # Search for issues by key or summary in the current project
+    jql = f'project = "{project_key_str}" AND (key ~ "{query}*" OR summary ~ "{query}*")'
+    
+    try:
+        res = requests.get(
+            f"{JIRA_DOMAIN}/rest/api/3/search",
+            headers=headers_dict,
+            params={
+                "jql": jql,
+                "maxResults": 10,
+                "fields": "summary,issuetype"
+            }
+        )
+        data = res.json()
+        results = []
+        for issue in data.get('issues', []):
+            results.append({
+                "id": issue['key'],
+                "text": f"{issue['key']}: {issue['fields']['summary']}",
+                "key": issue['key']
+            })
+        return jsonify(results)
+    except Exception as e:
+        print(f"DEBUG: Search Error: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 # =========================
@@ -731,12 +783,59 @@ def sprint_stats():
             p = i["fields"]["priority"]["name"]
             pri_dist[p] = pri_dist.get(p, 0) + 1
             
+        # NEW: Fetch local tracking data for the table
+        tracking_data = {}
+        if sprint_id:
+            conn = sqlite3.connect(DB_PATH)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT issue_key, pr_raised, pr_merged, deploy_status, qa_assignee, qa_status, bugs_found, completed
+                FROM sprint_tickets 
+                WHERE sprint_id = ?
+            """, (sprint_id,))
+            rows = cursor.fetchall()
+            for r in rows:
+                tracking_data[r["issue_key"]] = {
+                    "pr_raised": bool(r["pr_raised"]),
+                    "pr_merged": bool(r["pr_merged"]),
+                    "deploy_status": r["deploy_status"],
+                    "qa_assignee": r["qa_assignee"],
+                    "qa_status": r["qa_status"],
+                    "bugs_found": r["bugs_found"],
+                    "completed": bool(r["completed"])
+                }
+            conn.close()
+
+        # Merge local data into all issues for the tracking table
+        tracking_issues = []
+        for i in all_issues:
+            key = i["key"]
+            local = tracking_data.get(key, {
+                "pr_raised": False,
+                "pr_merged": False,
+                "deploy_status": "N/A",
+                "qa_assignee": "",
+                "qa_status": "Pending",
+                "bugs_found": "",
+                "completed": False
+            })
+            tracking_issues.append({
+                "key": key,
+                "summary": i["fields"]["summary"],
+                "status": i["fields"]["status"]["name"],
+                "assignee": i["fields"].get("assignee", {}).get("displayName", "Unassigned"),
+                "type_icon": i["fields"]["issuetype"].get("iconUrl"),
+                "local": local
+            })
+
         return jsonify({
             "total_solved": total_solved,
             "bugs_solved": bugs_solved,
             "active_load": len(active_issues),
             "performance": list(performance.values()),
             "today_work": today_work,
+            "tracking_issues": tracking_issues,
             "charts": {
                 "status": status_dist,
                 "type": type_dist,
@@ -745,6 +844,38 @@ def sprint_stats():
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@app.route("/api/sprint_tickets/update_field", methods=["POST"])
+def update_sprint_ticket_field():
+    data = request.json
+    sprint_id = data.get("sprint_id")
+    issue_key = data.get("issue_key")
+    field = data.get("field")
+    value = data.get("value")
+    
+    if not sprint_id or not issue_key or not field:
+        return jsonify({"error": "Missing required fields"}), 400
+        
+    # Security: whitelist fields
+    allowed_fields = ['pr_raised', 'pr_merged', 'deploy_status', 'qa_assignee', 'qa_status', 'bugs_found', 'completed', 'comment', 'demo_done']
+    if field not in allowed_fields:
+        return jsonify({"error": "Invalid field"}), 400
+        
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    # Check if record exists
+    cursor.execute("SELECT id FROM sprint_tickets WHERE sprint_id = ? AND issue_key = ?", (sprint_id, issue_key))
+    row = cursor.fetchone()
+    
+    if row:
+        cursor.execute(f"UPDATE sprint_tickets SET {field} = ? WHERE id = ?", (value, row[0]))
+    else:
+        cursor.execute(f"INSERT INTO sprint_tickets (sprint_id, issue_key, {field}) VALUES (?, ?, ?)", (sprint_id, issue_key, value))
+        
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True})
 
 # =========================
 # VELOCITY DATA (TRENDS)

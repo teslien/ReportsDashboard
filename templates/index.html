@@ -87,6 +87,187 @@
             backdrop-filter: blur(10px);
             border: 1px solid rgba(255, 255, 255, 0.05);
         }
+
+        /* Tracking Table Status Colors */
+        .status-pill {
+            padding: 2px 8px;
+            border-radius: 9999px;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        /* Tracking Table Status Colors - Fixed with higher specificity and opacity */
+        select.deploy-na {
+            background-color: #4b5563 !important;
+            color: #f3f4f6 !important;
+        }
+
+        select.deploy-dev {
+            background-color: #1e3a8a !important;
+            color: #bfdbfe !important;
+        }
+
+        select.deploy-staged {
+            background-color: #854d0e !important;
+            color: #fef9c3 !important;
+        }
+
+        select.deploy-prod {
+            background-color: #064e3b !important;
+            color: #d1fae5 !important;
+        }
+
+        select.qa-pending {
+            background-color: #374151 !important;
+            color: #9ca3af !important;
+        }
+
+        select.qa-testing {
+            background-color: #1e40af !important;
+            color: #dbeafe !important;
+        }
+
+        select.qa-ready {
+            background-color: #6b21a8 !important;
+            color: #f3e8ff !important;
+        }
+
+        select.qa-done {
+            background-color: #14532d !important;
+            color: #dcfce7 !important;
+        }
+
+        /* Bug Badge Style */
+        .bug-badge {
+            background-color: #dc2626;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-right: 4px;
+        }
+
+        .bug-badge:hover {
+            background-color: #b91c1c;
+        }
+
+        /* Custom Offcanvas System */
+        .custom-offcanvas-backdrop {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(4px);
+            z-index: 2000;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .custom-offcanvas-backdrop.show {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .custom-offcanvas {
+            position: fixed;
+            top: 0;
+            right: -500px;
+            width: 500px;
+            height: 100%;
+            background: #111827;
+            /* Gray 900 */
+            border-left: 1px solid #374151;
+            /* Gray 700 */
+            z-index: 2001;
+            transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            flex-direction: column;
+            box-shadow: -10px 0 30px rgba(0, 0, 0, 0.6);
+        }
+
+        .custom-offcanvas.show {
+            right: 0;
+        }
+
+        .custom-offcanvas-header {
+            padding: 1.25rem 1.5rem;
+            border-bottom: 1px solid #1f2937;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #1f2937;
+        }
+
+        .custom-offcanvas-body {
+            padding: 1.5rem;
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .btn-close-custom {
+            background: #374151;
+            border: none;
+            color: #9ca3af;
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-close-custom:hover {
+            background: #4b5563;
+            color: white;
+        }
+
+        /* Offcanvas Table Style */
+        .offcanvas-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .offcanvas-table th {
+            text-align: left;
+            padding: 12px 8px;
+            border-bottom: 1px solid #1f2937;
+            color: #9ca3af;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            width: 120px;
+        }
+
+        .offcanvas-table td {
+            padding: 12px 8px;
+            border-bottom: 1px solid #1f2937;
+            color: #f3f4f6;
+            font-size: 14px;
+        }
+
+        .spinner-border-custom {
+            width: 2rem;
+            height: 2rem;
+            border: 0.25em solid #3b82f6;
+            border-right-color: transparent;
+            border-radius: 50%;
+            display: inline-block;
+            animation: spin 0.75s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
     </style>
     <link rel="stylesheet" href="/static/theme.css">
     <script src="/static/theme.js"></script>
@@ -278,6 +459,38 @@
             </div>
         </div>
 
+        <!-- Sprint Ticket Tracking Table -->
+        <div class="mt-8 glass p-6 rounded-2xl border border-gray-700">
+            <h3 class="text-xl font-bold mb-6 flex items-center gap-2">
+                <span class="w-2 h-7 bg-purple-500 rounded-full"></span>
+                Sprint Ticket Tracking
+                <span class="text-xs font-normal text-gray-500 ml-2">(Local Updates Only)</span>
+            </h3>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="text-gray-400 text-xs uppercase tracking-wider border-b border-gray-800">
+                            <th class="pb-4 px-2">Ticket</th>
+                            <th class="pb-4 px-2 text-center">PR Raised</th>
+                            <th class="pb-4 px-2 text-center">PR Merged</th>
+                            <th class="pb-4 px-2">Deployment</th>
+                            <th class="pb-4 px-2">QA Assignee</th>
+                            <th class="pb-4 px-2">QA Status</th>
+                            <th class="pb-4 px-2 text-center">Add Bugs</th>
+                            <th class="pb-4 px-2 text-center">Bugs</th>
+                            <th class="pb-4 px-2 text-center">Completed</th>
+                        </tr>
+                    </thead>
+                    <tbody id="trackingTableBody">
+                        <tr>
+                            <td colspan="9" class="py-12 text-center text-gray-500 italic">
+                                Run analysis to see ticket tracking data
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
 
     </main>
 
@@ -323,6 +536,9 @@
             // Initial load of teams
             loadTeams();
         });
+
+        const JIRA_BASE = (window.JIRA_DOMAIN || "{{ JIRA_DOMAIN }}").replace(/\/$/, "");
+        const jiraBrowseUrl = (key) => `${JIRA_BASE}/browse/${key}`;
 
         async function loadTeams() {
             try {
@@ -471,7 +687,7 @@
                         <img src="${w.type_icon}" class="w-4 h-4 mt-1">
                         <div class="flex-1 min-w-0">
                             <div class="flex justify-between items-start">
-                                <a href="https://lumberfi.atlassian.net/browse/${w.key}" target="_blank" 
+                                <a href="${jiraBrowseUrl(w.key)}" target="_blank" 
                                    class="text-xs font-mono text-blue-400 hover:text-blue-300 font-bold uppercase hover:underline decoration-blue-500/50">
                                    ${w.key}
                                 </a>
@@ -492,6 +708,407 @@
             renderStatusChart(data.charts.status);
             renderTypeChart(data.charts.type);
             renderPriorityChart(data.charts.priority);
+
+            // 5. Update Ticket Tracking Table
+            renderTrackingTable(data);
+        }
+
+        async function updateTicketField(issueKey, field, value) {
+            const sprintId = $("#sprintSelect").val();
+            if (!sprintId) return;
+
+            try {
+                const res = await fetch("/api/sprint_tickets/update_field", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        sprint_id: sprintId,
+                        issue_key: issueKey,
+                        field: field,
+                        value: value
+                    })
+                });
+            } catch (err) {
+                console.error("Error updating field:", err);
+            }
+        }
+
+        function renderTrackingTable(data) {
+            const body = document.getElementById("trackingTableBody");
+            body.innerHTML = "";
+            const sprintId = $("#sprintSelect").val();
+
+            if (!sprintId) {
+                body.innerHTML = '<tr><td colspan="9" class="py-8 text-center text-gray-500 italic">Select a sprint to enable local tracking</td></tr>';
+                return;
+            }
+
+            if (!data.tracking_issues || data.tracking_issues.length === 0) {
+                body.innerHTML = '<tr><td colspan="9" class="py-8 text-center text-gray-500 italic">No tickets found in this sprint</td></tr>';
+                return;
+            }
+
+            // Get team members for QA Assignee dropdown
+            const teamMembers = data.performance.map(p => p.name).sort();
+
+            data.tracking_issues.forEach(issue => {
+                const local = issue.local;
+                const tr = document.createElement("tr");
+                tr.className = "border-b border-gray-800/50 hover:bg-white/5 transition";
+
+                tr.innerHTML = `
+                    <td class="py-4 px-2 min-w-[200px]">
+                        <div class="flex items-start gap-2">
+                            <img src="${issue.type_icon}" class="w-4 h-4 mt-1">
+                            <div class="flex flex-col">
+                                <div class="flex items-center gap-2">
+                                    <a href="${jiraBrowseUrl(issue.key)}" target="_blank" class="text-blue-400 font-bold text-xs hover:underline">${issue.key}</a>
+                                    <button type="button" onclick="showTicketDetails('${issue.key}')" class="text-[10px] px-2 py-0.5 rounded bg-gray-700/50 text-gray-200 border border-gray-600 hover:bg-gray-700 transition">Details</button>
+                                </div>
+                                <span class="text-sm text-gray-300 font-medium truncate max-w-[200px]" title="${issue.summary}">${issue.summary}</span>
+                                <span class="text-[10px] text-gray-500">Jira: ${issue.status}</span>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="py-4 px-2 text-center">
+                        <input type="checkbox" ${local.pr_raised ? 'checked' : ''} 
+                            onchange="updateTicketField('${issue.key}', 'pr_raised', this.checked ? 1 : 0)"
+                            class="w-4 h-4 rounded bg-gray-800 border-gray-700 text-blue-500 focus:ring-0">
+                    </td>
+                    <td class="py-4 px-2 text-center">
+                        <input type="checkbox" ${local.pr_merged ? 'checked' : ''} 
+                            onchange="updateTicketField('${issue.key}', 'pr_merged', this.checked ? 1 : 0)"
+                            class="w-4 h-4 rounded bg-gray-800 border-gray-700 text-green-500 focus:ring-0">
+                    </td>
+                    <td class="py-4 px-2">
+                        <select onchange="updateTicketField('${issue.key}', 'deploy_status', this.value); updateSelectColor(this, 'deploy')"
+                            class="bg-gray-800 text-xs text-gray-200 border border-gray-700 rounded p-1 outline-none transition-colors ${getDeployClass(local.deploy_status)}">
+                            ${['N/A', 'Dev', 'Staged', 'Prod'].map(v => `<option value="${v}" ${local.deploy_status === v ? 'selected' : ''}>${v}</option>`).join('')}
+                        </select>
+                    </td>
+                    <td class="py-4 px-2">
+                        <select data-key="${issue.key}" class="qa-assignee-select tracking-assignee-select" style="width: 140px;">
+                            <option value="${local.qa_assignee || ''}" selected>${local.qa_assignee || 'Select Assignee...'}</option>
+                        </select>
+                    </td>
+                    <td class="py-4 px-2">
+                        <select onchange="updateTicketField('${issue.key}', 'qa_status', this.value); updateSelectColor(this, 'qa')"
+                            class="bg-gray-800 text-xs text-gray-200 border border-gray-700 rounded p-1 outline-none transition-colors ${getQaClass(local.qa_status)}">
+                            ${['Pending', 'Testing', 'Ready', 'Done'].map(v => `<option value="${v}" ${local.qa_status === v ? 'selected' : ''}>${v}</option>`).join('')}
+                        </select>
+                    </td>
+                    <td class="py-4 px-2 text-center">
+                        <button onclick="openBugManager('${issue.key}')" 
+                                class="text-[10px] bg-blue-600/20 text-blue-400 border border-blue-500/30 px-2 py-1 rounded hover:bg-blue-600/40 transition">
+                            Add Bugs
+                        </button>
+                    </td>
+                    <td class="py-4 px-2 text-center">
+                        <div id="bugBadges-${issue.key}" class="flex flex-wrap gap-1 justify-center">
+                             ${(local.bugs_found || "").split(",").filter(b => b).map(b => `<button type="button" onclick="showTicketDetails('${b}')" class="bug-badge hover:opacity-80 transition">${b}</button>`).join('')}
+                        </div>
+                    </td>
+                    <td class="py-4 px-2 text-center">
+                        <button onclick="toggleCompleted(this, '${issue.key}')" 
+                                class="px-3 py-1 rounded-full text-[10px] font-bold uppercase transition ${local.completed ? 'bg-green-500/20 text-green-400 border border-green-500/50' : 'bg-gray-700 text-gray-400 border border-gray-600'}">
+                            ${local.completed ? 'YES' : 'NO'}
+                        </button>
+                    </td>
+                `;
+                body.appendChild(tr);
+            });
+
+            // Initialize Select2 on the newly created selects
+            initTrackingAssigneeSelects();
+            initBugSearchSelects();
+        }
+
+        function initBugSearchSelects() {
+            // No longer needed for main table
+        }
+
+        async function openBugManager(issueKey) {
+            document.getElementById('offcanvasTitle').innerText = `Manage Bugs: ${issueKey}`;
+
+            // Initializing the bug manager UI
+            renderBugManagerUI(issueKey);
+            openOffcanvas();
+        }
+
+        function renderBugManagerUI(issueKey) {
+            const body = document.getElementById('offcanvasBody');
+
+            // Get current bugs from the badges in the table (quick way to get local state)
+            const badgeDiv = document.getElementById(`bugBadges-${issueKey}`);
+            const currentBugs = Array.from(badgeDiv.querySelectorAll('.bug-badge')).map(a => a.innerText);
+
+            body.innerHTML = `
+                <div class="mb-6 bg-gray-900/50 p-4 rounded-xl border border-gray-700">
+                    <label class="block text-xs font-bold text-gray-400 mb-2 uppercase">Search & Add Bug</label>
+                    <div class="flex gap-2 mb-4">
+                        <div class="flex-1">
+                            <select id="bugSearchSelect" class="w-full"></select>
+                        </div>
+                        <button onclick="addBugToIssue('${issueKey}')" 
+                                class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded text-sm font-bold transition">
+                            Add
+                        </button>
+                    </div>
+                </div>
+
+                <div id="bugDetailsPreview" class="hidden mb-6 bg-gray-700/30 p-4 rounded-xl border border-gray-600">
+                    <!-- Preview of selected bug -->
+                </div>
+
+                <h4 class="text-sm font-bold text-gray-400 mb-3 uppercase flex items-center gap-2">
+                    <span class="w-2 h-4 bg-red-500 rounded-full"></span>
+                    Linked Bugs
+                </h4>
+                <div id="bugListContainer">
+                    ${renderBugTable(issueKey, currentBugs)}
+                </div>
+            `;
+
+            // Initialize Select2 in offcanvas
+            $('#bugSearchSelect').select2({
+                dropdownParent: $('#ticketOffcanvas'),
+                placeholder: 'Search bug key or summary...',
+                minimumInputLength: 2,
+                ajax: {
+                    url: '/api/suggest_tickets',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    dataType: 'json',
+                    delay: 250,
+                    transport: function (params, success, failure) {
+                        var $request = $.ajax(params);
+                        $request.then(success);
+                        $request.fail(failure);
+                        return $request;
+                    },
+                    beforeSend: function (xhr) {
+                        const headers = window.getApiHeaders ? window.getApiHeaders() : {};
+                        for (const [key, value] of Object.entries(headers)) {
+                            xhr.setRequestHeader(key, value);
+                        }
+                    },
+                    data: function (params) {
+                        return JSON.stringify({ query: params.term });
+                    },
+                    processResults: function (data) {
+                        return { results: (data && data.results) ? data.results : [] };
+                    },
+                    cache: true
+                }
+            }).on('select2:select', function (e) {
+                const data = e.params.data;
+                showBugPreview(data.id);
+            });
+        }
+
+        async function showBugPreview(key) {
+            const preview = document.getElementById('bugDetailsPreview');
+            preview.classList.remove('hidden');
+            preview.innerHTML = '<div class="text-center py-4"><div class="spinner-border-custom"></div></div>';
+
+            try {
+                const headers = window.getApiHeaders ? window.getApiHeaders() : {};
+                const res = await fetch(`/api/jira/ticket/${key}`, { headers });
+                const data = await res.json();
+
+                preview.innerHTML = `
+                    <div class="flex items-start gap-3">
+                        <img src="${data.type_icon}" class="w-4 h-4 mt-1">
+                        <div class="flex flex-col">
+                            <span class="text-xs font-bold text-blue-400 font-mono">${data.key}</span>
+                            <span class="text-sm text-white font-medium mb-1">${data.summary}</span>
+                            <span class="text-[10px] text-gray-400 uppercase font-bold">${data.status}</span>
+                        </div>
+                    </div>
+                `;
+            } catch (e) {
+                preview.innerHTML = '<div class="text-red-400 text-xs">Error loading preview</div>';
+            }
+        }
+
+        function renderBugTable(issueKey, bugKeys) {
+            if (!bugKeys || bugKeys.length === 0) {
+                return '<div class="text-center py-8 text-gray-500 italic border border-dashed border-gray-700 rounded-xl text-sm">No linked bugs</div>';
+            }
+
+            let rows = bugKeys.map(key => `
+                <tr class="border-b border-gray-700/50">
+                    <td class="py-3 px-2">
+                        <button type="button" onclick="showTicketDetails('${key}')" class="text-blue-400 font-mono font-bold hover:underline text-sm uppercase">${key}</button>
+                    </td>
+                    <td class="py-3 px-2 text-right">
+                        <button onclick="removeBugFromIssue('${issueKey}', '${key}')" class="text-red-400 hover:text-red-300 text-xs font-bold uppercase transition">Remove</button>
+                    </td>
+                </tr>
+            `).join('');
+
+            return `
+                <table class="w-full text-left">
+                    <thead>
+                        <tr class="text-gray-500 text-[10px] uppercase border-b border-gray-700">
+                            <th class="pb-2 px-2">Key</th>
+                            <th class="pb-2 px-2 text-right">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            `;
+        }
+
+        async function addBugToIssue(issueKey) {
+            const bugKey = $('#bugSearchSelect').val();
+            if (!bugKey) return;
+
+            const badgeDiv = document.getElementById(`bugBadges-${issueKey}`);
+            let currentBugs = Array.from(badgeDiv.querySelectorAll('.bug-badge')).map(a => a.innerText);
+
+            if (currentBugs.includes(bugKey)) {
+                alert("Bug already linked!");
+                return;
+            }
+
+            currentBugs.push(bugKey);
+            const bugsStr = currentBugs.join(',');
+
+            await updateTicketField(issueKey, 'bugs_found', bugsStr);
+
+            // Sync UI
+            badgeDiv.innerHTML = currentBugs.map(b => `<button type="button" onclick="showTicketDetails('${b}')" class="bug-badge hover:opacity-80 transition">${b}</button>`).join('');
+            renderBugManagerUI(issueKey);
+            document.getElementById('bugDetailsPreview').classList.add('hidden');
+        }
+
+        async function removeBugFromIssue(issueKey, bugKey) {
+            const badgeDiv = document.getElementById(`bugBadges-${issueKey}`);
+            let currentBugs = Array.from(badgeDiv.querySelectorAll('.bug-badge')).map(a => a.innerText);
+
+            currentBugs = currentBugs.filter(b => b !== bugKey);
+            const bugsStr = currentBugs.join(',');
+
+            await updateTicketField(issueKey, 'bugs_found', bugsStr);
+
+            // Sync UI
+            badgeDiv.innerHTML = currentBugs.map(b => `<button type="button" onclick="showTicketDetails('${b}')" class="bug-badge hover:opacity-80 transition">${b}</button>`).join('');
+            renderBugManagerUI(issueKey);
+        }
+
+        async function showTicketDetails(ticketKey) {
+            document.getElementById('offcanvasTitle').innerText = `Ticket Details: ${ticketKey}`;
+            document.getElementById('offcanvasBody').innerHTML = '<div class="text-center py-10"><div class="spinner-border-custom"></div></div>';
+            openOffcanvas();
+
+            try {
+                const headers = window.getApiHeaders ? window.getApiHeaders() : {};
+                const res = await fetch(`/api/jira/ticket/${ticketKey}`, { headers });
+                const data = await res.json();
+
+                if (data.error) {
+                    document.getElementById('offcanvasBody').innerHTML = `<div class="text-red-400 p-4">Error: ${data.error}</div>`;
+                    return;
+                }
+
+                document.getElementById('offcanvasBody').innerHTML = `
+                    <table class="offcanvas-table">
+                        <tr><th>Key</th><td><a href="${jiraBrowseUrl(data.key)}" target="_blank" class="text-blue-400 underline">${data.key}</a></td></tr>
+                        <tr><th>Type</th><td><img src="${data.type_icon}" class="w-4 h-4 inline mr-2">${data.type}</td></tr>
+                        <tr><th>Summary</th><td>${data.summary}</td></tr>
+                        <tr><th>Status</th><td><span class="px-2 py-0.5 rounded bg-gray-700 text-xs font-bold uppercase">${data.status}</span></td></tr>
+                        <tr><th>Priority</th><td>${data.priority}</td></tr>
+                        <tr><th>Assignee</th><td>${data.assignee}</td></tr>
+                    </table>
+                    <div class="mt-6">
+                        <h4 class="text-sm font-bold text-gray-400 mb-2 uppercase">Description</h4>
+                        <div class="text-sm text-gray-300 bg-gray-900/50 p-3 rounded border border-gray-800 h-64 overflow-y-auto">
+                            ${data.description ? "Click the Jira link above to view full description." : "No description available."}
+                        </div>
+                    </div>
+                `;
+            } catch (err) {
+                document.getElementById('offcanvasBody').innerHTML = `<div class="text-red-400 p-4">Error fetching details: ${err}</div>`;
+            }
+        }
+
+        function openOffcanvas() {
+            const offcanvas = document.getElementById('ticketOffcanvas');
+            const backdrop = document.getElementById('ticketOffcanvasBackdrop');
+            offcanvas.classList.add('show');
+            backdrop.classList.add('show');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeOffcanvas() {
+            const offcanvas = document.getElementById('ticketOffcanvas');
+            const backdrop = document.getElementById('ticketOffcanvasBackdrop');
+            offcanvas.classList.remove('show');
+            backdrop.classList.remove('show');
+            document.body.style.overflow = '';
+        }
+
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') closeOffcanvas();
+        });
+
+        function initTrackingAssigneeSelects() {
+            $('.qa-assignee-select').select2({
+                placeholder: 'Search assignee...',
+                allowClear: true,
+                minimumInputLength: 2,
+                ajax: {
+                    url: '/api/assignees',
+                    dataType: 'json',
+                    delay: 500,
+                    data: function (params) {
+                        return { q: params.term };
+                    },
+                    processResults: function (data) {
+                        return {
+                            results: data.map(u => ({ id: u.name, text: u.name }))
+                        };
+                    },
+                    cache: true
+                }
+            }).on('change', function () {
+                const key = $(this).data('key');
+                const val = $(this).val();
+                updateTicketField(key, 'qa_assignee', val);
+            });
+        }
+
+        function getDeployClass(val) {
+            switch (val) {
+                case 'Dev': return 'deploy-dev';
+                case 'Staged': return 'deploy-staged';
+                case 'Prod': return 'deploy-prod';
+                default: return 'deploy-na';
+            }
+        }
+
+        function getQaClass(val) {
+            switch (val) {
+                case 'Testing': return 'qa-testing';
+                case 'Ready': return 'qa-ready';
+                case 'Done': return 'qa-done';
+                default: return 'qa-pending';
+            }
+        }
+
+        function updateSelectColor(select, type) {
+            const val = select.value;
+            select.classList.remove('deploy-dev', 'deploy-staged', 'deploy-prod', 'deploy-na', 'qa-testing', 'qa-ready', 'qa-done', 'qa-pending');
+            const newClass = type === 'deploy' ? getDeployClass(val) : getQaClass(val);
+            select.classList.add(newClass);
+        }
+
+        function toggleCompleted(btn, issueKey) {
+            const isCompleted = btn.innerText === "NO";
+            btn.innerText = isCompleted ? "YES" : "NO";
+            btn.className = `px-3 py-1 rounded-full text-[10px] font-bold uppercase transition ${isCompleted ? 'bg-green-500/20 text-green-400 border border-green-500/50' : 'bg-gray-700 text-gray-400 border border-gray-600'}`;
+            updateTicketField(issueKey, 'completed', isCompleted ? 1 : 0);
         }
 
         function renderTypeChart(counts) {
@@ -583,6 +1200,19 @@
 
 
     </script>
+
+    <div id="ticketOffcanvasBackdrop" class="custom-offcanvas-backdrop" onclick="closeOffcanvas()"></div>
+    <div id="ticketOffcanvas" class="custom-offcanvas" role="dialog" aria-modal="true" aria-labelledby="offcanvasTitle">
+        <div class="custom-offcanvas-header">
+            <h5 id="offcanvasTitle" class="text-lg font-bold">Ticket Details</h5>
+            <button type="button" class="btn-close-custom" onclick="closeOffcanvas()" aria-label="Close">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+        <div class="custom-offcanvas-body" id="offcanvasBody"></div>
+    </div>
 </body>
 
 </html>
