@@ -824,6 +824,7 @@ def sprint_stats():
                 "key": key,
                 "summary": i["fields"]["summary"],
                 "status": i["fields"]["status"]["name"],
+                "status_category": i["fields"]["status"]["statusCategory"]["key"],
                 "assignee": i["fields"].get("assignee", {}).get("displayName", "Unassigned"),
                 "type_icon": i["fields"]["issuetype"].get("iconUrl"),
                 "local": local

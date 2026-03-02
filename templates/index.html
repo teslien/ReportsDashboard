@@ -872,7 +872,8 @@
                                 </div>
                                 <span class="text-sm text-gray-300 font-medium truncate max-w-[200px]" title="${issue.summary}">${issue.summary}</span>
                                 <div class="flex items-center gap-2">
-                                    <span class="text-[10px] text-gray-500">Jira: ${issue.status}</span>
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[9px]  uppercase  whitespace-nowrap"
+                                        style="${getJiraStatusStyle(issue.status, issue.status_category)}">Jira: ${issue.status}</span>
                                     <span class="text-[10px] text-gray-500">Dev: ${issue.assignee || "Unassigned"}</span>
                                 </div>
                             </div>
@@ -928,6 +929,46 @@
 
             initTrackingAssigneeSelects(teamMembers);
             initBugSearchSelects();
+        }
+
+        function getJiraStatusStyle(statusName, statusCategory) {
+            const s = (statusName || "").toUpperCase();
+            const c = (statusCategory || "").toLowerCase();
+
+            const style = (bg, fg, border) => `color:${fg};`;
+
+            if (s.includes("BLOCKED") || s.includes("ON HOLD") || s === "HOLD") {
+                return style("rgba(239, 68, 68, 0.18)", "rgb(252, 165, 165)", "rgba(239, 68, 68, 0.35)");
+            }
+
+            if (
+                s.includes("READY FOR QA") ||
+                s.includes("READY FOR STAGING") ||
+                s === "STAGED" ||
+                s === "DEPLOYED" ||
+                s === "DONE" ||
+                s === "RESOLVED"
+            ) {
+                return style("rgba(34, 197, 94, 0.18)", "rgb(134, 239, 172)", "rgba(34, 197, 94, 0.35)");
+            }
+
+            if (c === "done") {
+                return style("rgba(34, 197, 94, 0.18)", "rgb(134, 239, 172)", "rgba(34, 197, 94, 0.35)");
+            }
+
+            if (s.includes("QA") || s.includes("TEST")) {
+                return style("rgba(168, 85, 247, 0.18)", "rgb(216, 180, 254)", "rgba(168, 85, 247, 0.35)");
+            }
+
+            if (c === "indeterminate") {
+                return style("rgba(59, 130, 246, 0.18)", "rgb(147, 197, 253)", "rgba(59, 130, 246, 0.35)");
+            }
+
+            if (c === "new" || s === "OPEN") {
+                return style("rgba(156, 163, 175, 0.14)", "rgb(229, 231, 235)", "rgba(156, 163, 175, 0.30)");
+            }
+
+            return style("rgba(234, 179, 8, 0.12)", "rgb(253, 230, 138)", "rgba(234, 179, 8, 0.25)");
         }
 
         function copyTrackingExcelToClipboard(btn) {
