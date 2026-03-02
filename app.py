@@ -1200,8 +1200,7 @@ def execute_jql():
     # Explicitly cast LocalProxy objects
     headers_dict = dict(HEADERS)
 
-    # Fetch widely used fields. customfield_10016 is commonly Story Points.
-    fields = "summary,status,assignee,priority,issuetype,created,updated,resolutiondate,project,reporter,resolution,duedate,customfield_10016"
+    fields = "summary,status,assignee,priority,issuetype,created,updated,resolutiondate,project,reporter,resolution,duedate,customfield_10016,customfield_10077"
     
     all_issues = []
     start_at = 0

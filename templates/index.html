@@ -466,6 +466,31 @@
                 Sprint Ticket Tracking
                 <span class="text-xs font-normal text-gray-500 ml-2">(Local Updates Only)</span>
             </h3>
+            <div class="flex flex-col md:flex-row md:items-end gap-3 mb-4">
+                <div class="flex-1">
+                    <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Search</label>
+                    <input id="trackingSearchInput" type="text" placeholder="Search Jira # or summary..."
+                        class="w-full bg-gray-800/60 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 outline-none focus:border-gray-500">
+                </div>
+                <div class="w-full md:w-64">
+                    <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Dev Assignee</label>
+                    <select id="trackingAssigneeFilter"
+                        class="w-full bg-gray-800/60 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 outline-none focus:border-gray-500">
+                        <option value="All">All</option>
+                    </select>
+                </div>
+                <div class="flex gap-3">
+                    <button id="trackingCopyExcelBtn" type="button" onclick="copyTrackingExcelToClipboard(this)"
+                        class="bg-blue-600 hover:bg-blue-500 text-white font-bold h-[42px] px-5 rounded-lg shadow-lg transition flex items-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M9 12h6m-6 4h6m-6-8h6M7 20h10a2 2 0 002-2V6a2 2 0 00-2-2H7a2 2 0 00-2 2v12a2 2 0 002 2z">
+                            </path>
+                        </svg>
+                        Copy for Excel
+                    </button>
+                </div>
+            </div>
             <div class="overflow-x-auto">
                 <table class="w-full text-left border-collapse">
                     <thead>
@@ -533,12 +558,54 @@
                 handleTeamChange();
             });
 
+            initTrackingTableControls();
+
             // Initial load of teams
             loadTeams();
         });
 
         const JIRA_BASE = (window.JIRA_DOMAIN || "{{ JIRA_DOMAIN }}").replace(/\/$/, "");
         const jiraBrowseUrl = (key) => `${JIRA_BASE}/browse/${key}`;
+
+        let lastDashboardData = null;
+        let trackingSearchQuery = "";
+        let trackingAssigneeFilter = "All";
+        let lastFilteredTrackingIssues = [];
+
+        function initTrackingTableControls() {
+            const search = document.getElementById("trackingSearchInput");
+            const assignee = document.getElementById("trackingAssigneeFilter");
+            if (search) {
+                search.addEventListener("input", (e) => {
+                    trackingSearchQuery = (e.target.value || "").toLowerCase();
+                    applyTrackingFiltersAndRender();
+                });
+            }
+            if (assignee) {
+                assignee.addEventListener("change", (e) => {
+                    trackingAssigneeFilter = e.target.value || "All";
+                    applyTrackingFiltersAndRender();
+                });
+            }
+        }
+
+        function updateTrackingAssigneeFilterOptions(issues) {
+            const sel = document.getElementById("trackingAssigneeFilter");
+            if (!sel) return;
+            const prev = trackingAssigneeFilter || "All";
+            const names = Array.from(new Set((issues || []).map(i => i.assignee || "Unassigned"))).sort((a, b) => a.localeCompare(b));
+
+            sel.innerHTML = "";
+            sel.appendChild(new Option("All", "All", false, prev === "All"));
+            names.forEach(n => sel.appendChild(new Option(n, n, false, prev === n)));
+
+            if (prev !== "All" && !names.includes(prev)) {
+                trackingAssigneeFilter = "All";
+                sel.value = "All";
+            } else {
+                sel.value = prev;
+            }
+        }
 
         async function loadTeams() {
             try {
@@ -734,24 +801,62 @@
         }
 
         function renderTrackingTable(data) {
+            lastDashboardData = data;
+            updateTrackingAssigneeFilterOptions((data && data.tracking_issues) ? data.tracking_issues : []);
+            applyTrackingFiltersAndRender();
+        }
+
+        function applyTrackingFiltersAndRender() {
             const body = document.getElementById("trackingTableBody");
             body.innerHTML = "";
             const sprintId = $("#sprintSelect").val();
 
             if (!sprintId) {
+                lastFilteredTrackingIssues = [];
                 body.innerHTML = '<tr><td colspan="9" class="py-8 text-center text-gray-500 italic">Select a sprint to enable local tracking</td></tr>';
                 return;
             }
 
-            if (!data.tracking_issues || data.tracking_issues.length === 0) {
+            const data = lastDashboardData;
+            const allIssues = (data && data.tracking_issues) ? data.tracking_issues : [];
+
+            if (!allIssues || allIssues.length === 0) {
+                lastFilteredTrackingIssues = [];
                 body.innerHTML = '<tr><td colspan="9" class="py-8 text-center text-gray-500 italic">No tickets found in this sprint</td></tr>';
                 return;
             }
 
-            // Get team members for QA Assignee dropdown
-            const teamMembers = data.performance.map(p => p.name).sort();
+            const q = (trackingSearchQuery || "").trim();
+            const assignee = trackingAssigneeFilter || "All";
 
-            data.tracking_issues.forEach(issue => {
+            let filtered = allIssues;
+            if (q) {
+                filtered = filtered.filter(i => {
+                    const key = (i.key || "").toLowerCase();
+                    const summary = (i.summary || "").toLowerCase();
+                    return key.includes(q) || summary.includes(q);
+                });
+            }
+            if (assignee !== "All") {
+                filtered = filtered.filter(i => (i.assignee || "Unassigned") === assignee);
+            }
+
+            lastFilteredTrackingIssues = filtered;
+
+            if (filtered.length === 0) {
+                body.innerHTML = '<tr><td colspan="9" class="py-8 text-center text-gray-500 italic">No tickets match current filters</td></tr>';
+                return;
+            }
+
+            const teamMembers = (data && data.performance) ? data.performance.map(p => p.name).sort() : [];
+            renderTrackingTableRows(filtered, teamMembers);
+        }
+
+        function renderTrackingTableRows(issues, teamMembers) {
+            const body = document.getElementById("trackingTableBody");
+            body.innerHTML = "";
+
+            issues.forEach(issue => {
                 const local = issue.local;
                 const tr = document.createElement("tr");
                 tr.className = "border-b border-gray-800/50 hover:bg-white/5 transition";
@@ -766,7 +871,10 @@
                                     <button type="button" onclick="showTicketDetails('${issue.key}')" class="text-[10px] px-2 py-0.5 rounded bg-gray-700/50 text-gray-200 border border-gray-600 hover:bg-gray-700 transition">Details</button>
                                 </div>
                                 <span class="text-sm text-gray-300 font-medium truncate max-w-[200px]" title="${issue.summary}">${issue.summary}</span>
-                                <span class="text-[10px] text-gray-500">Jira: ${issue.status}</span>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-[10px] text-gray-500">Jira: ${issue.status}</span>
+                                    <span class="text-[10px] text-gray-500">Dev: ${issue.assignee || "Unassigned"}</span>
+                                </div>
                             </div>
                         </div>
                     </td>
@@ -818,9 +926,71 @@
                 body.appendChild(tr);
             });
 
-            // Initialize Select2 on the newly created selects
-            initTrackingAssigneeSelects();
+            initTrackingAssigneeSelects(teamMembers);
             initBugSearchSelects();
+        }
+
+        function copyTrackingExcelToClipboard(btn) {
+            const sprintId = $("#sprintSelect").val();
+            if (!sprintId) {
+                alert("Select a sprint first.");
+                return;
+            }
+
+            const issues = lastFilteredTrackingIssues || [];
+            if (!issues || issues.length === 0) {
+                alert("No data to copy.");
+                return;
+            }
+
+            const sanitize = (v) => (v == null ? "" : String(v)).replace(/\t/g, " ").replace(/\r?\n/g, " ").trim();
+            const rows = issues.map(i => {
+                const local = i.local || {};
+                return [
+                    sanitize(i.key),
+                    sanitize(i.summary),
+                    sanitize(i.assignee || "Unassigned"),
+                    sanitize(i.status),
+                    sanitize(local.deploy_status || "N/A"),
+                    sanitize(local.qa_assignee || ""),
+                    sanitize(local.qa_status || "Pending"),
+                    sanitize(local.pr_raised ? "YES" : "NO"),
+                    sanitize(local.pr_merged ? "YES" : "NO"),
+                    sanitize(local.bugs_found || ""),
+                    sanitize(local.completed ? "YES" : "NO")
+                ].join("\t");
+            });
+            const header = ["Jira #", "Summary", "Dev", "Jira Status", "Deployment", "QA Assignee", "QA Status", "PR Raised", "PR Merged", "Bugs", "Completed"].join("\t");
+            const tsv = [header, ...rows].join("\n");
+
+            const original = btn.innerHTML;
+            const onCopied = () => {
+                btn.innerHTML = "Copied!";
+                setTimeout(() => { btn.innerHTML = original; }, 1500);
+            };
+
+            const fallback = () => {
+                const ta = document.createElement("textarea");
+                ta.value = tsv;
+                ta.style.position = "fixed";
+                ta.style.left = "-999999px";
+                ta.style.top = "-999999px";
+                document.body.appendChild(ta);
+                ta.focus();
+                ta.select();
+                try {
+                    document.execCommand("copy");
+                    onCopied();
+                } finally {
+                    document.body.removeChild(ta);
+                }
+            };
+
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(tsv).then(onCopied).catch(fallback);
+            } else {
+                fallback();
+            }
         }
 
         function initBugSearchSelects() {
@@ -1053,7 +1223,21 @@
             if (e.key === 'Escape') closeOffcanvas();
         });
 
-        function initTrackingAssigneeSelects() {
+        function initTrackingAssigneeSelects(teamMembers) {
+            const members = Array.isArray(teamMembers) ? teamMembers : [];
+            if (members.length > 0) {
+                $('.qa-assignee-select').select2({
+                    placeholder: 'Search assignee...',
+                    allowClear: true,
+                    data: members.map(n => ({ id: n, text: n }))
+                }).on('change', function () {
+                    const key = $(this).data('key');
+                    const val = $(this).val();
+                    updateTicketField(key, 'qa_assignee', val);
+                });
+                return;
+            }
+
             $('.qa-assignee-select').select2({
                 placeholder: 'Search assignee...',
                 allowClear: true,
