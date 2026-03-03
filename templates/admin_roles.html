@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Role Management - Reports Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/static/theme.css">
+    <script src="/static/theme.js"></script>
+</head>
+<body class="bg-gray-900 min-h-screen text-white font-sans">
+
+    <!-- Navbar -->
+    {% include 'navbar.html' %}
+
+    <main class="pt-24 pb-12 px-6 max-w-7xl mx-auto">
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-3xl font-bold text-white flex items-center gap-3">
+                <span class="bg-purple-600 p-2 rounded-lg"><i class="fas fa-shield-alt"></i></span>
+                Role Management
+            </h1>
+            <button onclick="document.getElementById('createRoleModal').classList.remove('hidden')" 
+                class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-6 rounded-lg shadow-lg transition flex items-center gap-2">
+                <i class="fas fa-plus"></i> Create Role
+            </button>
+        </div>
+
+        <div class="bg-gray-800 rounded-2xl shadow-xl border border-gray-700 overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-700">
+                    <thead class="bg-gray-900/50">
+                        <tr>
+                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase tracking-wider w-1/4">Permission / Role</th>
+                            {% for role in roles %}
+                            <th class="px-6 py-4 text-center text-xs font-bold text-gray-400 uppercase tracking-wider relative group">
+                                {{ role.name }}
+                                {% if role.name != 'Admin' %}
+                                <button onclick="deleteRole({{ role.id }}, '{{ role.name }}')" class="ml-2 text-red-400 hover:text-red-300 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                                {% endif %}
+                            </th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-700">
+                        {% for perm in permissions %}
+                        <tr class="hover:bg-gray-700/30 transition duration-150">
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-300">
+                                {{ perm.label }}
+                            </td>
+                            {% for role in roles %}
+                            <td class="px-6 py-4 whitespace-nowrap text-center">
+                                <input type="checkbox" 
+                                    onchange="togglePermission({{ role.id }}, '{{ perm.key }}', this.checked)"
+                                    {% if role.permissions.get(perm.key) or role.permissions.get('all') %}checked{% endif %}
+                                    {% if role.name == 'Admin' %}disabled class="text-indigo-500/50 bg-gray-800 border-gray-600 cursor-not-allowed"{% else %}class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-gray-800"{% endif %}
+                                >
+                            </td>
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <h2 class="text-2xl font-bold text-white mb-4 mt-8 flex items-center gap-3">
+            <span class="bg-blue-600 p-2 rounded-lg"><i class="fas fa-file-alt"></i></span>
+            Page Access Control
+        </h2>
+        <div class="bg-gray-800 rounded-2xl shadow-xl border border-gray-700 overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-700">
+                    <thead class="bg-gray-900/50">
+                        <tr>
+                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase tracking-wider w-1/4">Page / Role</th>
+                            {% for role in roles %}
+                            <th class="px-6 py-4 text-center text-xs font-bold text-gray-400 uppercase tracking-wider">
+                                {{ role.name }}
+                            </th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-700">
+                        {% for page in page_permissions %}
+                        <tr class="hover:bg-gray-700/30 transition duration-150">
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-300">
+                                {{ page.label }}
+                            </td>
+                            {% for role in roles %}
+                            <td class="px-6 py-4 whitespace-nowrap text-center">
+                                <input type="checkbox" 
+                                    onchange="togglePagePermission({{ role.id }}, '{{ page.key }}', this.checked)"
+                                    {% if role.permissions.get('allowed_pages') is none or page.key in role.permissions.get('allowed_pages') %}checked{% endif %}
+                                    {% if role.name == 'Admin' %}disabled class="text-indigo-500/50 bg-gray-800 border-gray-600 cursor-not-allowed"{% else %}class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-blue-500 focus:ring-blue-500 focus:ring-offset-gray-800"{% endif %}
+                                >
+                            </td>
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <!-- Create Role Modal -->
+    <div id="createRoleModal" class="fixed inset-0 bg-gray-900/80 backdrop-blur-sm overflow-y-auto h-full w-full hidden z-50 flex items-center justify-center">
+        <div class="relative p-8 border border-gray-700 w-full max-w-md shadow-2xl rounded-2xl bg-gray-800">
+            <div class="text-center">
+                <h3 class="text-xl font-bold text-white mb-4">Create New Role</h3>
+                <div class="mb-6">
+                    <input id="newRoleName" type="text" 
+                        class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition" 
+                        placeholder="Role Name (e.g., Manager)">
+                </div>
+                <div class="flex gap-3">
+                    <button onclick="document.getElementById('createRoleModal').classList.add('hidden')" 
+                        class="flex-1 px-4 py-3 bg-gray-700 hover:bg-gray-600 text-gray-200 font-bold rounded-lg transition">
+                        Cancel
+                    </button>
+                    <button id="createRoleBtn" onclick="createRole()" 
+                        class="flex-1 px-4 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg shadow-lg transition">
+                        Create Role
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Store initial state to avoid excessive API calls if needed, 
+        // but for now we'll do direct updates.
+        const rolesData = {{ roles | tojson }};
+        const allPages = {{ page_permissions | tojson }}.map(p => p.key);
+
+        async function togglePermission(roleId, permKey, isChecked) {
+            // Find current role permissions
+            const role = rolesData.find(r => r.id === roleId);
+            if (!role) return;
+
+            // Update local state
+            role.permissions[permKey] = isChecked;
+            await saveRolePermissions(role);
+        }
+
+        async function togglePagePermission(roleId, pageKey, isChecked) {
+            const role = rolesData.find(r => r.id === roleId);
+            if (!role) return;
+
+            let allowed = role.permissions.allowed_pages;
+            
+            // If allowed_pages is undefined/null, it implies ALL pages are allowed.
+            // So if we are unchecking one, we need to start with the full list and remove one.
+            if (!allowed) {
+                allowed = [...allPages];
+            }
+
+            if (isChecked) {
+                if (!allowed.includes(pageKey)) allowed.push(pageKey);
+            } else {
+                allowed = allowed.filter(k => k !== pageKey);
+            }
+
+            role.permissions.allowed_pages = allowed;
+            await saveRolePermissions(role);
+        }
+
+        async function saveRolePermissions(role) {
+            try {
+                const response = await fetch(`/api/admin/roles/${role.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ permissions: role.permissions })
+                });
+                
+                if (!response.ok) throw new Error('Failed to update');
+            } catch (error) {
+                console.error(error);
+                alert('Failed to save permission change');
+                // Ideally revert UI state here, but that requires more complex state management
+                // For now, reloading ensures consistency if needed, or just alerting.
+            }
+        }
+
+        async function createRole() {
+            const nameInput = document.getElementById('newRoleName');
+            const name = nameInput.value.trim();
+            if (!name) return;
+
+            try {
+                const response = await fetch('/api/admin/roles', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: name })
+                });
+
+                if (response.ok) {
+                    location.reload();
+                } else {
+                    const data = await response.json();
+                    alert(data.error || 'Failed to create role');
+                }
+            } catch (error) {
+                console.error(error);
+                alert('Error creating role');
+            }
+        }
+
+        async function deleteRole(roleId, roleName) {
+            if (!confirm(`Are you sure you want to delete the role "${roleName}"? Users with this role will be reset to Viewer.`)) return;
+
+            try {
+                const response = await fetch(`/api/admin/roles/${roleId}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    location.reload();
+                } else {
+                    const data = await response.json();
+                    alert(data.error || 'Failed to delete role');
+                }
+            } catch (error) {
+                console.error(error);
+                alert('Error deleting role');
+            }
+        }
+    </script>
+</body>
+</html>

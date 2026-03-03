@@ -538,6 +538,16 @@
     <script src="/static/app.js"></script>
     <script>
         $(document).ready(function () {
+            // Helper to get URL parameters
+            const urlParams = new URLSearchParams(window.location.search);
+            const initialTeamId = urlParams.get('team_id');
+            const initialSprintId = urlParams.get('sprint_id');
+            const initialProdOnly = urlParams.get('prod_only') === 'true';
+
+            if (initialProdOnly) {
+                $('#productionOnly').prop('checked', true);
+            }
+
             // Initialize Select2 for better searchability
             $('#teamSelect').select2({
                 placeholder: 'Select a team...',
@@ -572,16 +582,62 @@
             // Re-trigger global sync when Select2 changes
             $('#teamSelect').on('change', function () {
                 handleTeamChange();
+                updateUrlParams();
+            });
+
+            $('#sprintSelect').on('change', function() {
+                updateUrlParams();
+            });
+
+            $('#productionOnly').on('change', function() {
+                updateUrlParams();
             });
 
             initTrackingTableControls();
 
             // Initial load of teams
-            loadTeams();
+            loadTeams(initialTeamId).then(() => {
+                // If we have an initial sprint ID, we need to fetch its details to show it in Select2
+                if (initialSprintId) {
+                    // Fetch all sprints to find the name of the one in the URL
+                    fetch('/api/sprints').then(res => res.json()).then(sprints => {
+                        const sprint = sprints.find(s => s.id == initialSprintId);
+                        if (sprint) {
+                            const newOption = new Option(`${sprint.name} (${sprint.state})`, sprint.id, true, true);
+                            $('#sprintSelect').append(newOption).trigger('change');
+                        }
+                        
+                        // If we have both, auto-run analysis
+                        if (initialTeamId) {
+                            loadSprintDashboardData();
+                        }
+                    });
+                } else if (initialTeamId) {
+                    // If only team is present, auto-run analysis
+                    loadSprintDashboardData();
+                }
+            });
         });
+
+        function updateUrlParams() {
+            const teamId = $('#teamSelect').val();
+            const sprintId = $('#sprintSelect').val();
+            const prodOnly = $('#productionOnly').is(':checked');
+            
+            const params = new URLSearchParams();
+            if (teamId) params.set('team_id', teamId);
+            if (sprintId) params.set('sprint_id', sprintId);
+            if (prodOnly) params.set('prod_only', 'true');
+            
+            const newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
+            window.history.replaceState({path: newUrl}, '', newUrl);
+        }
 
         const JIRA_BASE = (window.JIRA_DOMAIN || "{{ JIRA_DOMAIN }}").replace(/\/$/, "");
         const jiraBrowseUrl = (key) => `${JIRA_BASE}/browse/${key}`;
+        
+        // Permissions
+        const USER_CAN_EDIT = {{ 'true' if current_user.has_permission('edit_tickets') or current_user.role_name == 'Admin' else 'false' }};
 
         let lastDashboardData = null;
         let trackingSearchQuery = "";
@@ -694,14 +750,15 @@
             }
         }
 
-        async function loadTeams() {
+        async function loadTeams(initialId) {
             try {
                 const res = await fetch("/api/teams");
                 const teams = await res.json();
                 const sel = $("#teamSelect");
                 sel.empty().append('<option value="">Select a team...</option>');
                 teams.forEach(t => {
-                    const opt = new Option(t.name, t.id, false, false);
+                    const selected = t.id == initialId;
+                    const opt = new Option(t.name, t.id, selected, selected);
                     sel.append(opt);
                 });
                 sel.trigger('change');
@@ -949,7 +1006,8 @@
                 const tr = document.createElement("tr");
                 tr.className = "border-b border-gray-800/50 hover:bg-white/5 transition";
 
-                tr.innerHTML = `
+                // 1. Ticket (Always visible)
+                const ticketCell = `
                     <td class="py-4 px-2 min-w-[200px]" data-track-col="ticket">
                         <div class="flex items-start gap-2">
                             <img src="${issue.type_icon}" class="w-4 h-4 mt-1">
@@ -966,63 +1024,172 @@
                                 </div>
                             </div>
                         </div>
-                    </td>
+                    </td>`;
+
+                // 2. Requirements Clear
+                let reqCell = "";
+                if (USER_CAN_EDIT) {
+                    reqCell = `
                     <td class="py-4 px-2 text-center" data-track-col="requirements_clear">
                         <select onchange="updateTicketField('${issue.key}', 'requirements_clear', this.value)"
                             class="bg-gray-800 text-xs text-gray-200 border border-gray-700 rounded p-1 outline-none">
                             ${['No', 'Yes'].map(v => `<option value="${v}" ${(local.requirements_clear || 'No') === v ? 'selected' : ''}>${v}</option>`).join('')}
                         </select>
-                    </td>
+                    </td>`;
+                } else {
+                    const val = local.requirements_clear || 'No';
+                    const colorClass = val === 'Yes' ? 'text-green-400' : 'text-gray-400';
+                    reqCell = `
+                    <td class="py-4 px-2 text-center" data-track-col="requirements_clear">
+                        <span class="text-xs font-bold ${colorClass}">${val}</span>
+                    </td>`;
+                }
+
+                // 3. PR Raised
+                let prRaisedCell = "";
+                if (USER_CAN_EDIT) {
+                    prRaisedCell = `
                     <td class="py-4 px-2 text-center" data-track-col="pr_raised">
                         <input type="checkbox" ${local.pr_raised ? 'checked' : ''} 
                             onchange="updateTicketField('${issue.key}', 'pr_raised', this.checked ? 1 : 0)"
                             class="w-4 h-4 rounded bg-gray-800 border-gray-700 text-blue-500 focus:ring-0">
-                    </td>
+                    </td>`;
+                } else {
+                    prRaisedCell = `
+                    <td class="py-4 px-2 text-center" data-track-col="pr_raised">
+                        <input type="checkbox" ${local.pr_raised ? 'checked' : ''} disabled
+                            class="w-4 h-4 rounded bg-gray-800 border-gray-700 text-blue-500 focus:ring-0 cursor-not-allowed opacity-80">
+                    </td>`;
+                }
+
+                // 4. PR Merged
+                let prMergedCell = "";
+                if (USER_CAN_EDIT) {
+                    prMergedCell = `
                     <td class="py-4 px-2 text-center" data-track-col="pr_merged">
                         <input type="checkbox" ${local.pr_merged ? 'checked' : ''} 
                             onchange="updateTicketField('${issue.key}', 'pr_merged', this.checked ? 1 : 0)"
                             class="w-4 h-4 rounded bg-gray-800 border-gray-700 text-green-500 focus:ring-0">
-                    </td>
+                    </td>`;
+                } else {
+                     prMergedCell = `
+                    <td class="py-4 px-2 text-center" data-track-col="pr_merged">
+                        <input type="checkbox" ${local.pr_merged ? 'checked' : ''} disabled
+                            class="w-4 h-4 rounded bg-gray-800 border-gray-700 text-green-500 focus:ring-0 cursor-not-allowed opacity-80">
+                    </td>`;
+                }
+
+                // 5. Deployment
+                let deployCell = "";
+                if (USER_CAN_EDIT) {
+                    deployCell = `
                     <td class="py-4 px-2" data-track-col="deployment">
                         <select onchange="updateTicketField('${issue.key}', 'deploy_status', this.value); updateSelectColor(this, 'deploy')"
                             class="bg-gray-800 text-xs text-gray-200 border border-gray-700 rounded p-1 outline-none transition-colors ${getDeployClass(local.deploy_status)}">
                             ${['N/A', 'Dev', 'Staged', 'Prod'].map(v => `<option value="${v}" ${local.deploy_status === v ? 'selected' : ''}>${v}</option>`).join('')}
                         </select>
-                    </td>
+                    </td>`;
+                } else {
+                     deployCell = `
+                    <td class="py-4 px-2" data-track-col="deployment">
+                        <span class="px-2 py-1 rounded text-xs font-bold ${getDeployClass(local.deploy_status)} block text-center opacity-80">
+                            ${local.deploy_status || 'N/A'}
+                        </span>
+                    </td>`;
+                }
+
+                // 6. QA Assignee
+                let qaAssigneeCell = "";
+                if (USER_CAN_EDIT) {
+                    qaAssigneeCell = `
                     <td class="py-4 px-2" data-track-col="qa_assignee">
                         <select data-key="${issue.key}" class="qa-assignee-select tracking-assignee-select" style="width: 140px;">
                             <option value="${local.qa_assignee || ''}" selected>${local.qa_assignee || 'Select Assignee...'}</option>
                         </select>
-                    </td>
+                    </td>`;
+                } else {
+                    qaAssigneeCell = `
+                    <td class="py-4 px-2" data-track-col="qa_assignee">
+                        <span class="text-xs text-gray-300 block truncate" style="max-width: 140px;" title="${local.qa_assignee || 'Unassigned'}">
+                            ${local.qa_assignee || 'Unassigned'}
+                        </span>
+                    </td>`;
+                }
+
+                // 7. QA Status
+                let qaStatusCell = "";
+                if (USER_CAN_EDIT) {
+                    qaStatusCell = `
                     <td class="py-4 px-2" data-track-col="qa_status">
                         <select onchange="updateTicketField('${issue.key}', 'qa_status', this.value); updateSelectColor(this, 'qa')"
                             class="bg-gray-800 text-xs text-gray-200 border border-gray-700 rounded p-1 outline-none transition-colors ${getQaClass(local.qa_status)}">
                             ${['Pending', 'Testing', 'Ready', 'Done'].map(v => `<option value="${v}" ${local.qa_status === v ? 'selected' : ''}>${v}</option>`).join('')}
                         </select>
-                    </td>
+                    </td>`;
+                } else {
+                    qaStatusCell = `
+                    <td class="py-4 px-2" data-track-col="qa_status">
+                        <span class="px-2 py-1 rounded text-xs font-bold ${getQaClass(local.qa_status)} block text-center opacity-80">
+                            ${local.qa_status || 'Pending'}
+                        </span>
+                    </td>`;
+                }
+
+                // 8. Add Bugs
+                let addBugsCell = "";
+                if (USER_CAN_EDIT) {
+                    addBugsCell = `
                     <td class="py-4 px-2 text-center" data-track-col="add_bugs">
                         <button onclick="openBugManager('${issue.key}')" 
                                 class="text-[10px] bg-blue-600/20 text-blue-400 border border-blue-500/30 px-2 py-1 rounded hover:bg-blue-600/40 transition">
                             Add Bugs
                         </button>
-                    </td>
+                    </td>`;
+                } else {
+                     addBugsCell = `
+                    <td class="py-4 px-2 text-center" data-track-col="add_bugs">
+                        <button disabled 
+                                class="text-[10px] bg-blue-600/10 text-blue-400 border border-blue-500/20 px-2 py-1 rounded cursor-not-allowed opacity-80">
+                            Add Bugs
+                        </button>
+                    </td>`;
+                }
+
+                // 9. Bugs List (View Only)
+                const bugsCell = `
                     <td class="py-4 px-2 text-center" data-track-col="bugs">
                         <div id="bugBadges-${issue.key}" class="flex flex-wrap gap-1 justify-center">
                              ${(local.bugs_found || "").split(",").filter(b => b).map(b => `<button type="button" onclick="showTicketDetails('${b}')" class="bug-badge hover:opacity-80 transition">${b}</button>`).join('')}
                         </div>
-                    </td>
+                    </td>`;
+
+                // 10. Completed
+                let completedCell = "";
+                if (USER_CAN_EDIT) {
+                    completedCell = `
                     <td class="py-4 px-2 text-center" data-track-col="completed">
                         <button onclick="toggleCompleted(this, '${issue.key}')" 
                                 class="px-3 py-1 rounded-full text-[10px] font-bold uppercase transition ${local.completed ? 'bg-green-500/20 text-green-400 border border-green-500/50' : 'bg-gray-700 text-gray-400 border border-gray-600'}">
                             ${local.completed ? 'YES' : 'NO'}
                         </button>
-                    </td>
-                `;
+                    </td>`;
+                } else {
+                     completedCell = `
+                    <td class="py-4 px-2 text-center" data-track-col="completed">
+                        <span class="px-3 py-1 rounded-full text-[10px] font-bold uppercase transition ${local.completed ? 'bg-green-500/20 text-green-400 border border-green-500/50' : 'bg-gray-700 text-gray-400 border border-gray-600'}">
+                            ${local.completed ? 'YES' : 'NO'}
+                        </span>
+                    </td>`;
+                }
+
+                tr.innerHTML = ticketCell + reqCell + prRaisedCell + prMergedCell + deployCell + qaAssigneeCell + qaStatusCell + addBugsCell + bugsCell + completedCell;
                 body.appendChild(tr);
             });
 
-            initTrackingAssigneeSelects(teamMembers);
-            initBugSearchSelects();
+            if (USER_CAN_EDIT) {
+                initTrackingAssigneeSelects(teamMembers);
+                initBugSearchSelects();
+            }
         }
 
         function getJiraStatusStyle(statusName, statusCategory) {
@@ -1366,20 +1533,6 @@
         });
 
         function initTrackingAssigneeSelects(teamMembers) {
-            const members = Array.isArray(teamMembers) ? teamMembers : [];
-            if (members.length > 0) {
-                $('.qa-assignee-select').select2({
-                    placeholder: 'Search assignee...',
-                    allowClear: true,
-                    data: members.map(n => ({ id: n, text: n }))
-                }).on('change', function () {
-                    const key = $(this).data('key');
-                    const val = $(this).val();
-                    updateTicketField(key, 'qa_assignee', val);
-                });
-                return;
-            }
-
             $('.qa-assignee-select').select2({
                 placeholder: 'Search assignee...',
                 allowClear: true,

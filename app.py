@@ -1,5 +1,10 @@
-from flask import Flask, render_template, request, jsonify, make_response, has_request_context, redirect, url_for, send_file
+from flask import Flask, render_template, request, jsonify, make_response, has_request_context, redirect, url_for, send_file, session, abort
 from werkzeug.local import LocalProxy
+from werkzeug.security import generate_password_hash, check_password_hash
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from authlib.integrations.flask_client import OAuth
+from functools import wraps
+from dotenv import load_dotenv
 import io
 import re
 import json
@@ -7,6 +12,7 @@ import sqlite3
 import os
 import requests
 import base64
+import secrets
 from datetime import datetime, timedelta, timezone
 from urllib.parse import unquote
 import matplotlib
@@ -18,7 +24,102 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from xhtml2pdf import pisa
 from pypdf import PdfWriter
 
+load_dotenv()
+
 app = Flask(__name__)
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev_secret_key_change_in_production")
+
+# =========================
+# 🔐 AUTH & SECURITY SETUP
+# =========================
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = "login_page"
+
+oauth = OAuth(app)
+google = oauth.register(
+    name='google',
+    client_id=os.environ.get('GOOGLE_CLIENT_ID'),
+    client_secret=os.environ.get('GOOGLE_CLIENT_SECRET'),
+    server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
+    client_kwargs={'scope': 'openid email profile'}
+)
+
+# User Class
+class User(UserMixin):
+    def __init__(self, id, email, name, role_id, role_name, permissions, api_token):
+        self.id = id
+        self.email = email
+        self.name = name
+        self.role_id = role_id
+        self.role_name = role_name
+        self.permissions = permissions
+        self.api_token = api_token
+        
+    def has_permission(self, perm):
+        if self.role_name == 'Admin': return True
+        return self.permissions.get(perm, False)
+
+    def can_view_page(self, page_key):
+        if self.role_name == 'Admin': return True
+        # If 'allowed_pages' is not present, default to True (backward compatibility)
+        allowed = self.permissions.get('allowed_pages')
+        if allowed is None: return True 
+        return page_key in allowed
+
+@login_manager.user_loader
+def load_user(user_id):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT u.id, u.email, u.name, u.role_id, r.name, r.permissions, u.api_token
+        FROM users u
+        LEFT JOIN roles r ON u.role_id = r.id
+        WHERE u.id = ?
+    """, (user_id,))
+    row = cursor.fetchone()
+    conn.close()
+    
+    if row:
+        perms = json.loads(row[5]) if row[5] else {}
+        return User(id=row[0], email=row[1], name=row[2], role_id=row[3], role_name=row[4], permissions=perms, api_token=row[6])
+    return None
+
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not current_user.is_authenticated or current_user.role_name != 'Admin':
+            return abort(403)
+        return f(*args, **kwargs)
+    return decorated_function
+
+def permission_required(permission):
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if not current_user.is_authenticated:
+                return abort(403)
+            # Admin has all permissions
+            if current_user.role_name == 'Admin':
+                return f(*args, **kwargs)
+            # Check specific permission
+            if current_user.has_permission(permission):
+                return f(*args, **kwargs)
+            return abort(403)
+        return decorated_function
+    return decorator
+
+def page_permission_required(page_key):
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if not current_user.is_authenticated:
+                return redirect(url_for('login_page'))
+            if not current_user.can_view_page(page_key):
+                return render_template("403.html"), 403
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
 
 # =========================
 # 🔴 CONFIG (DYNAMIC)
@@ -308,6 +409,54 @@ def init_db():
         )
     ''')
 
+    # Users Table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT UNIQUE NOT NULL,
+            name TEXT,
+            google_id TEXT UNIQUE,
+            password_hash TEXT,
+            role_id INTEGER,
+            api_token TEXT UNIQUE,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (role_id) REFERENCES roles(id)
+        )
+    ''')
+
+    # Roles Table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS roles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL,
+            permissions TEXT DEFAULT '{}'
+        )
+    ''')
+
+    # Seed Roles if empty
+    cursor.execute("SELECT count(*) FROM roles")
+    if cursor.fetchone()[0] == 0:
+        cursor.execute("INSERT INTO roles (name, permissions) VALUES ('Admin', '{\"all\": true}')")
+        cursor.execute("INSERT INTO roles (name, permissions) VALUES ('Editor', '{\"view\": true, \"edit\": true}')")
+        cursor.execute("INSERT INTO roles (name, permissions) VALUES ('Viewer', '{\"view\": true, \"allowed_pages\": [\"dashboard\"]}')")
+    else:
+        # Ensure Viewer role is restricted to dashboard if it was previously seeded without allowed_pages
+        cursor.execute("SELECT permissions FROM roles WHERE name = 'Viewer'")
+        row = cursor.fetchone()
+        if row:
+            perms = json.loads(row[0]) if row[0] else {}
+            if 'allowed_pages' not in perms:
+                perms['allowed_pages'] = ['dashboard']
+                cursor.execute("UPDATE roles SET permissions = ? WHERE name = 'Viewer'", (json.dumps(perms),))
+    
+    # Seed Admin User if empty (Optional: Remove in prod or rely on first login)
+    cursor.execute("SELECT count(*) FROM users")
+    if cursor.fetchone()[0] == 0:
+        # Create a default admin user: admin@example.com / admin123 (hashed)
+        # Note: In a real scenario, we might want to force setup or rely on OAuth.
+        # Here we leave it empty or create a placeholder. 
+        pass
+
     conn.commit()
     conn.close()
 
@@ -317,11 +466,17 @@ init_db()
 # PAGE ROUTE
 # =========================
 @app.route("/settings")
+@login_required
+@page_permission_required("settings")
 def settings():
     return render_template("settings.html", project=PROJECT_KEY)
 
 @app.route("/api/settings/jira", methods=["GET", "POST"])
+@login_required
 def jira_settings_api():
+    if request.method == "POST" and not current_user.has_permission("manage_settings") and current_user.role_name != 'Admin':
+        return jsonify({"error": "Permission denied"}), 403
+        
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
@@ -388,6 +543,7 @@ def todo_tags_settings_api():
         return jsonify(tags)
 
 @app.route("/api/settings/todo_tags/<int:tag_id>", methods=["DELETE"])
+@login_required
 def delete_todo_tag(tag_id):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
@@ -396,7 +552,206 @@ def delete_todo_tag(tag_id):
     conn.close()
     return jsonify({"success": True})
 
+# =========================
+# 🔑 AUTH ROUTES
+# =========================
+@app.route("/login")
+def login_page():
+    return render_template("login.html")
+
+@app.route("/login/google")
+def login_google():
+    redirect_uri = url_for('auth_callback', _external=True)
+    return google.authorize_redirect(redirect_uri)
+
+@app.route("/auth/callback")
+def auth_callback():
+    try:
+        token = google.authorize_access_token()
+        user_info = google.parse_id_token(token, nonce=None)
+        
+        email = user_info.get('email')
+        name = user_info.get('name')
+        google_id = user_info.get('sub')
+        
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        
+        # Check if user exists
+        cursor.execute("SELECT id FROM users WHERE email = ?", (email,))
+        row = cursor.fetchone()
+        
+        if row:
+            user_id = row[0]
+            # Update google_id if missing
+            cursor.execute("UPDATE users SET google_id = ?, name = ? WHERE id = ?", (google_id, name, user_id))
+        else:
+            # Create new user
+            # Assign 'Viewer' role by default (assuming ID 3 is Viewer based on init order, but safer to lookup)
+            cursor.execute("SELECT id FROM roles WHERE name = 'Viewer'")
+            role_row = cursor.fetchone()
+            role_id = role_row[0] if role_row else 3
+            
+            api_token = secrets.token_hex(32)
+            cursor.execute("INSERT INTO users (email, name, google_id, role_id, api_token) VALUES (?, ?, ?, ?, ?)",
+                           (email, name, google_id, role_id, api_token))
+            user_id = cursor.lastrowid
+            
+        conn.commit()
+        conn.close()
+        
+        # Login the user
+        user_obj = load_user(user_id)
+        login_user(user_obj)
+        
+        return redirect(url_for('index'))
+        
+    except Exception as e:
+        print(f"Auth Error: {e}")
+        return f"Authentication failed: {e}", 400
+
+@app.route("/logout")
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for('login_page'))
+
+# =========================
+# 👑 ADMIN ROUTES
+# =========================
+@app.route("/admin/users")
+@admin_required
+def admin_users():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT u.*, r.name as role_name 
+        FROM users u 
+        LEFT JOIN roles r ON u.role_id = r.id
+        ORDER BY u.created_at DESC
+    """)
+    users = cursor.fetchall()
+    
+    cursor.execute("SELECT * FROM roles")
+    roles = cursor.fetchall()
+    conn.close()
+    return render_template("admin_users.html", users=users, roles=roles)
+
+@app.route("/api/admin/users/<int:user_id>/role", methods=["POST"])
+@admin_required
+def update_user_role(user_id):
+    role_id = request.json.get("role_id")
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("UPDATE users SET role_id = ? WHERE id = ?", (role_id, user_id))
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True})
+
+PAGE_PERMISSIONS = [
+    {"key": "dashboard", "label": "Dashboard"},
+    {"key": "scoreboard", "label": "Scoreboard"},
+    {"key": "explorer", "label": "Explorer"},
+    {"key": "custom_reports", "label": "Custom Reports"},
+    {"key": "scrum_notes", "label": "Scrum Notes"},
+    {"key": "work_report", "label": "Work Report"},
+    {"key": "planning", "label": "Sprint Planning"},
+    {"key": "teams", "label": "Teams"},
+    {"key": "settings", "label": "Settings"},
+    {"key": "todo", "label": "Todo List"},
+    {"key": "tracker", "label": "Tracker"},
+    {"key": "status_tracker", "label": "Status Tracker"},
+    {"key": "query_builder", "label": "Query Builder"},
+    {"key": "bulk_update", "label": "Bulk Update"},
+    {"key": "merge_pdf", "label": "Merge PDF"}
+]
+
+@app.route("/admin/roles")
+@admin_required
+def admin_roles():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM roles ORDER BY id ASC")
+    roles = []
+    for row in cursor.fetchall():
+        roles.append({
+            "id": row["id"],
+            "name": row["name"],
+            "permissions": json.loads(row["permissions"]) if row["permissions"] else {}
+        })
+    conn.close()
+    
+    # Define available permissions for the UI
+    available_permissions = [
+        {"key": "view_reports", "label": "View Reports & Dashboards"},
+        {"key": "create_tickets", "label": "Create Tickets/Todos"},
+        {"key": "edit_tickets", "label": "Edit Tickets/Todos"},
+        {"key": "delete_tickets", "label": "Delete Tickets/Todos"},
+        {"key": "manage_settings", "label": "Manage Settings"},
+        {"key": "manage_teams", "label": "Manage Teams"}
+    ]
+    
+    return render_template("admin_roles.html", roles=roles, permissions=available_permissions, page_permissions=PAGE_PERMISSIONS)
+
+@app.route("/api/admin/roles", methods=["POST"])
+@admin_required
+def create_role():
+    name = request.json.get("name")
+    if not name:
+        return jsonify({"error": "Role name is required"}), 400
+    
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    try:
+        cursor.execute("INSERT INTO roles (name, permissions) VALUES (?, '{}')", (name,))
+        conn.commit()
+        role_id = cursor.lastrowid
+        conn.close()
+        return jsonify({"success": True, "id": role_id, "name": name})
+    except sqlite3.IntegrityError:
+        conn.close()
+        return jsonify({"error": "Role name already exists"}), 400
+
+@app.route("/api/admin/roles/<int:role_id>", methods=["PUT", "DELETE"])
+@admin_required
+def manage_role(role_id):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    if request.method == "DELETE":
+        # Prevent deleting the last Admin role or system roles if necessary
+        # For now, just checking ID 1 (Admin)
+        if role_id == 1:
+            conn.close()
+            return jsonify({"error": "Cannot delete the default Admin role"}), 400
+            
+        cursor.execute("DELETE FROM roles WHERE id = ?", (role_id,))
+        # Optional: Reset users with this role to Viewer (ID 3) or NULL
+        cursor.execute("UPDATE users SET role_id = 3 WHERE role_id = ?", (role_id,))
+        
+        conn.commit()
+        conn.close()
+        return jsonify({"success": True})
+        
+    elif request.method == "PUT":
+        data = request.json
+        permissions = data.get("permissions") # Expecting a dict/object
+        
+        if permissions is not None:
+            perm_json = json.dumps(permissions)
+            cursor.execute("UPDATE roles SET permissions = ? WHERE id = ?", (perm_json, role_id))
+            conn.commit()
+            conn.close()
+            return jsonify({"success": True})
+            
+        conn.close()
+        return jsonify({"error": "No data provided"}), 400
+
 @app.route("/")
+@login_required
+@page_permission_required("dashboard")
 def index():
     email, token, _, _ = _get_jira_config()
     if not email or not token:
@@ -582,6 +937,7 @@ def search():
 # SCOREBOARD ROUTE
 # =========================
 @app.route("/scoreboard")
+@page_permission_required("scoreboard")
 def scoreboard():
     return render_template("scoreboard.html", project=PROJECT_KEY)
 
@@ -852,7 +1208,11 @@ def sprint_stats():
         return jsonify({"error": str(e)}), 500
 
 @app.route("/api/sprint_tickets/update_field", methods=["POST"])
+@login_required
 def update_sprint_ticket_field():
+    if not current_user.has_permission("edit_tickets") and current_user.role_name != 'Admin':
+        return jsonify({"error": "Permission denied"}), 403
+
     data = request.json
     sprint_id = data.get("sprint_id")
     issue_key = data.get("issue_key")
@@ -962,6 +1322,8 @@ def velocity_data():
 # USER DETAILS ROUTE
 # =========================
 @app.route("/user/<account_id>")
+@login_required
+@page_permission_required("dashboard") # Assuming user details is part of dashboard access
 def user_details(account_id):
     return render_template("user_tickets.html", project=PROJECT_KEY, account_id=account_id)
 
@@ -1121,6 +1483,7 @@ def assignee_full_profile():
 # CUSTOM REPORTS
 # =========================
 @app.route("/reports")
+@page_permission_required("custom_reports")
 def reports_page():
     return render_template("custom_reports.html", project=PROJECT_KEY)
 
@@ -1186,10 +1549,13 @@ def report_detail(report_id):
         return jsonify({"success": True})
 
 @app.route("/tracker")
+@page_permission_required("tracker")
 def tracker():
     return render_template("tracker.html", project=PROJECT_KEY)
 
 @app.route("/report_view")
+@login_required
+@page_permission_required("custom_reports")
 def report_view():
     return render_template("report_view.html", project=PROJECT_KEY)
 
@@ -1273,6 +1639,7 @@ def manage_trackers():
         return jsonify(trackers)
 
 @app.route("/api/trackers/<int:tracker_id>", methods=["DELETE"])
+@permission_required("manage_settings")
 def delete_tracker(tracker_id):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
@@ -1332,6 +1699,7 @@ def update_ticket_comment(tracker_id):
 # =========================
 
 @app.route("/todo")
+@page_permission_required("todo")
 def todo_page():
     return render_template("todo.html", project=PROJECT_KEY)
 
@@ -1384,7 +1752,11 @@ def manage_todos():
         return jsonify(todos)
 
 @app.route("/api/todos/<int:todo_id>", methods=["PUT", "DELETE"])
+@login_required
 def update_delete_todo(todo_id):
+    if request.method == "DELETE" and not current_user.has_permission("delete_tickets") and current_user.role_name != 'Admin':
+        return jsonify({"error": "Permission denied"}), 403
+        
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
@@ -1439,6 +1811,7 @@ def update_delete_todo(todo_id):
 # =========================
 
 @app.route("/explorer")
+@page_permission_required("explorer")
 def explorer_page():
     return render_template("explorer.html", project=PROJECT_KEY)
 
@@ -1558,6 +1931,7 @@ def explorer_data():
         return jsonify({"error": str(e)}), 500
 
 @app.route("/query_builder")
+@page_permission_required("query_builder")
 def query_builder_page():
     return render_template("query_builder.html", project=PROJECT_KEY)
 
@@ -1648,6 +2022,7 @@ def query_builder_data():
         return jsonify({"error": str(e)}), 500
 
 @app.route("/bulk_update")
+@page_permission_required("bulk_update")
 def bulk_update_page():
     return render_template("bulk_update.html", project=PROJECT_KEY)
 
@@ -1798,11 +2173,16 @@ def get_sprints():
 # =========================
 
 @app.route("/teams")
+@page_permission_required("teams")
 def teams_page():
     return render_template("teams.html", project=PROJECT_KEY)
 
 @app.route("/api/teams", methods=["GET", "POST"])
+@login_required
 def manage_teams():
+    if request.method == "POST" and not current_user.has_permission("manage_teams") and current_user.role_name != 'Admin':
+        return jsonify({"error": "Permission denied"}), 403
+        
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     if request.method == "POST":
@@ -1821,6 +2201,7 @@ def manage_teams():
         return jsonify(teams)
 
 @app.route("/api/teams/<int:team_id>", methods=["DELETE"])
+@permission_required("manage_teams")
 def delete_team(team_id):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
@@ -1868,6 +2249,7 @@ def delete_team_member(team_id, member_id):
 # =========================
 
 @app.route("/planning/<int:team_id>")
+@page_permission_required("planning")
 def planning_page(team_id):
     return render_template("planning.html", project=PROJECT_KEY, team_id=team_id)
 
@@ -1986,6 +2368,7 @@ def manage_sprint_ticket(ticket_id):
         return jsonify({"success": True})
 
 @app.route("/status_tracker")
+@page_permission_required("status_tracker")
 def status_tracker():
     return render_template("status_tracker.html", project=PROJECT_KEY)
 
@@ -2130,6 +2513,7 @@ def ticket_history(key):
 # =========================
 
 @app.route("/scrum_notes")
+@page_permission_required("scrum_notes")
 def scrum_notes_page():
     resp = make_response(render_template("scrum_notes.html", project=PROJECT_KEY))
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
@@ -2449,6 +2833,7 @@ def scrum_notes_report():
 
 
 @app.route("/work_report")
+@page_permission_required("work_report")
 def work_report():
     return render_template("work_report.html", project=PROJECT_KEY)
 
@@ -2761,6 +3146,7 @@ def generate_report_api():
         return send_file(output, as_attachment=True, download_name=f"Work_Report_{team_name.replace(' ', '_')}.pdf")
 
 @app.route("/merge_pdf")
+@page_permission_required("merge_pdf")
 def merge_pdf_page():
     return render_template("merge_pdf.html")
 

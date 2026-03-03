@@ -1,4 +1,5 @@
 <!-- Navbar Component -->
+{% if current_user.role_name != 'Viewer' or (current_user.permissions.get('allowed_pages') and current_user.permissions.get('allowed_pages')|length > 1) %}
 <nav class="border-b border-gray-800 bg-gray-900/90 backdrop-blur fixed w-full z-50">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex items-center justify-between h-16">
@@ -117,6 +118,44 @@
                     Project: {{ project }}
                 </div>
 
+                <!-- User Menu -->
+                {% if current_user.is_authenticated %}
+                <div class="relative group">
+                    <button class="flex items-center gap-2 text-gray-300 hover:text-white focus:outline-none">
+                        <div class="h-8 w-8 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold shadow-sm">
+                            {{ current_user.name[0].upper() if current_user.name else 'U' }}
+                        </div>
+                    </button>
+                    <div class="absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-gray-800 ring-1 ring-black ring-opacity-5 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 border border-gray-700">
+                        <div class="py-1">
+                            <div class="px-4 py-2 text-xs text-gray-500 border-b border-gray-700">
+                                Signed in as<br>
+                                <span class="font-medium text-gray-300 truncate block">{{ current_user.email }}</span>
+                            </div>
+                            
+                            {% if current_user.role_name == 'Admin' %}
+                            <a href="/admin/users" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white">
+                                <i class="fas fa-users-cog mr-2"></i> User Management
+                            </a>
+                            <a href="/admin/roles" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white">
+                                <i class="fas fa-shield-alt mr-2"></i> Role Management
+                            </a>
+                            {% endif %}
+                            
+                            <a href="/settings" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white">
+                                <i class="fas fa-cog mr-2"></i> Settings
+                            </a>
+                            
+                            <div class="border-t border-gray-700 my-1"></div>
+                            
+                            <a href="/logout" class="block px-4 py-2 text-sm text-red-400 hover:bg-gray-700 hover:text-red-300">
+                                <i class="fas fa-sign-out-alt mr-2"></i> Sign out
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
                 <!-- Quick To-Do Button -->
                 <button onclick="toggleGlobalTodoModal()"
                     class="text-gray-400 hover:text-white transition p-2 rounded-full hover:bg-gray-800"
@@ -219,6 +258,29 @@
         </div>
     </div>
 </nav>
+{% else %}
+<!-- Minimal Header for Viewers (Only Logo and Logout) -->
+<nav class="border-b border-gray-800 bg-gray-900/90 backdrop-blur fixed w-full z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex items-center justify-between h-16">
+            <div class="flex items-center gap-4">
+                <span class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500">
+                    Jira Analytics
+                </span>
+                <span class="text-xs text-gray-500 bg-gray-800 px-2 py-1 rounded">View Only</span>
+            </div>
+            <div class="flex items-center gap-4">
+                <div class="text-xs text-gray-400 hidden sm:block">
+                    {{ current_user.email }}
+                </div>
+                <a href="/logout" class="text-sm text-red-400 hover:text-red-300 font-bold transition">
+                    <i class="fas fa-sign-out-alt mr-1"></i> Sign Out
+                </a>
+            </div>
+        </div>
+    </div>
+</nav>
+{% endif %}
 
 <!-- Legacy localStorage script removed -->
 

@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Management - Reports Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/static/theme.css">
+    <script src="/static/theme.js"></script>
+</head>
+<body class="bg-gray-900 min-h-screen text-white font-sans">
+
+    <!-- Navbar -->
+    {% include 'navbar.html' %}
+
+    <main class="pt-24 pb-12 px-6 max-w-7xl mx-auto">
+        <h1 class="text-3xl font-bold mb-6 text-white flex items-center gap-3">
+            <span class="bg-blue-600 p-2 rounded-lg"><i class="fas fa-users-cog"></i></span>
+            User Management
+        </h1>
+
+        <div class="bg-gray-800 rounded-2xl shadow-xl border border-gray-700 overflow-hidden">
+            <table class="min-w-full divide-y divide-gray-700">
+                <thead class="bg-gray-900/50">
+                    <tr>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase tracking-wider">User</th>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase tracking-wider">Email</th>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase tracking-wider">Role</th>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase tracking-wider">API Token</th>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase tracking-wider">Joined</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-700">
+                    {% for user in users %}
+                    <tr class="hover:bg-gray-700/30 transition duration-150">
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="flex items-center">
+                                <div class="flex-shrink-0 h-10 w-10">
+                                    <span class="inline-flex items-center justify-center h-10 w-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white font-bold shadow-lg">
+                                        {{ user.name[0].upper() if user.name else 'U' }}
+                                    </span>
+                                </div>
+                                <div class="ml-4">
+                                    <div class="text-sm font-medium text-white">{{ user.name or 'Unknown User' }}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                            {{ user.email }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                            <select onchange="updateRole({{ user.id }}, this.value)" class="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 outline-none transition">
+                                {% for role in roles %}
+                                <option value="{{ role[0] }}" {% if user.role_id == role[0] %}selected{% endif %}>{{ role[1] }}</option>
+                                {% endfor %}
+                            </select>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-400 font-mono bg-gray-900/30 rounded px-2 py-1 inline-block mt-2">
+                            {{ user.api_token[:10] }}...
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
+                            {{ user.created_at }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </main>
+
+    <script>
+        async function updateRole(userId, roleId) {
+            try {
+                const response = await fetch(`/api/admin/users/${userId}/role`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ role_id: roleId }),
+                });
+                
+                if (response.ok) {
+                    // Success toast logic could go here
+                } else {
+                    alert("Failed to update role");
+                }
+            } catch (error) {
+                console.error("Error:", error);
+                alert("An error occurred");
+            }
+        }
+    </script>
+</body>
+</html>
