@@ -222,6 +222,7 @@ def init_db():
             qa_assignee TEXT DEFAULT '',
             qa_status TEXT DEFAULT 'Pending',
             bugs_found TEXT DEFAULT '',
+            requirements_clear TEXT DEFAULT 'No',
             completed INTEGER DEFAULT 0,
             FOREIGN KEY (sprint_id) REFERENCES sprints(id) ON DELETE CASCADE,
             FOREIGN KEY (week_id) REFERENCES sprint_weeks(id) ON DELETE CASCADE
@@ -281,6 +282,8 @@ def init_db():
         cursor.execute("ALTER TABLE sprint_tickets ADD COLUMN qa_status TEXT DEFAULT 'Pending'")
     if 'bugs_found' not in columns:
         cursor.execute("ALTER TABLE sprint_tickets ADD COLUMN bugs_found TEXT DEFAULT ''")
+    if 'requirements_clear' not in columns:
+        cursor.execute("ALTER TABLE sprint_tickets ADD COLUMN requirements_clear TEXT DEFAULT 'No'")
     if 'completed' not in columns:
         cursor.execute("ALTER TABLE sprint_tickets ADD COLUMN completed INTEGER DEFAULT 0")
 
@@ -790,7 +793,7 @@ def sprint_stats():
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT issue_key, pr_raised, pr_merged, deploy_status, qa_assignee, qa_status, bugs_found, completed
+                SELECT issue_key, pr_raised, pr_merged, deploy_status, qa_assignee, qa_status, bugs_found, requirements_clear, completed
                 FROM sprint_tickets 
                 WHERE sprint_id = ?
             """, (sprint_id,))
@@ -803,6 +806,7 @@ def sprint_stats():
                     "qa_assignee": r["qa_assignee"],
                     "qa_status": r["qa_status"],
                     "bugs_found": r["bugs_found"],
+                    "requirements_clear": r["requirements_clear"] or "No",
                     "completed": bool(r["completed"])
                 }
             conn.close()
@@ -818,6 +822,7 @@ def sprint_stats():
                 "qa_assignee": "",
                 "qa_status": "Pending",
                 "bugs_found": "",
+                "requirements_clear": "No",
                 "completed": False
             })
             tracking_issues.append({
@@ -858,7 +863,7 @@ def update_sprint_ticket_field():
         return jsonify({"error": "Missing required fields"}), 400
         
     # Security: whitelist fields
-    allowed_fields = ['pr_raised', 'pr_merged', 'deploy_status', 'qa_assignee', 'qa_status', 'bugs_found', 'completed', 'comment', 'demo_done']
+    allowed_fields = ['pr_raised', 'pr_merged', 'deploy_status', 'qa_assignee', 'qa_status', 'bugs_found', 'requirements_clear', 'completed', 'comment', 'demo_done']
     if field not in allowed_fields:
         return jsonify({"error": "Invalid field"}), 400
         

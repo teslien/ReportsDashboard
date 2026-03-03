@@ -489,26 +489,42 @@
                         </svg>
                         Copy for Excel
                     </button>
+                    <div class="relative">
+                        <button id="trackingColumnsBtn" type="button" onclick="toggleTrackingColumnsMenu()"
+                            class="bg-gray-700/60 hover:bg-gray-700 text-white font-bold h-[42px] px-5 rounded-lg border border-gray-600/60 transition flex items-center gap-2">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M4 6h16M4 12h16M4 18h16"></path>
+                            </svg>
+                            Columns
+                        </button>
+                        <div id="trackingColumnsMenu"
+                            class="hidden absolute right-0 mt-2 w-56 bg-gray-900 border border-gray-700 rounded-lg shadow-xl p-3 z-50">
+                            <div class="text-[10px] uppercase tracking-wider text-gray-400 font-bold mb-2">Show Columns</div>
+                            <div id="trackingColumnsList" class="space-y-2"></div>
+                        </div>
+                    </div>
                 </div>
             </div>
             <div class="overflow-x-auto">
                 <table class="w-full text-left border-collapse">
                     <thead>
                         <tr class="text-gray-400 text-xs uppercase tracking-wider border-b border-gray-800">
-                            <th class="pb-4 px-2">Ticket</th>
-                            <th class="pb-4 px-2 text-center">PR Raised</th>
-                            <th class="pb-4 px-2 text-center">PR Merged</th>
-                            <th class="pb-4 px-2">Deployment</th>
-                            <th class="pb-4 px-2">QA Assignee</th>
-                            <th class="pb-4 px-2">QA Status</th>
-                            <th class="pb-4 px-2 text-center">Add Bugs</th>
-                            <th class="pb-4 px-2 text-center">Bugs</th>
-                            <th class="pb-4 px-2 text-center">Completed</th>
+                            <th class="pb-4 px-2" data-track-col="ticket">Ticket</th>
+                            <th class="pb-4 px-2 text-center" data-track-col="requirements_clear">Req Clear</th>
+                            <th class="pb-4 px-2 text-center" data-track-col="pr_raised">PR Raised</th>
+                            <th class="pb-4 px-2 text-center" data-track-col="pr_merged">PR Merged</th>
+                            <th class="pb-4 px-2" data-track-col="deployment">Deployment</th>
+                            <th class="pb-4 px-2" data-track-col="qa_assignee">QA Assignee</th>
+                            <th class="pb-4 px-2" data-track-col="qa_status">QA Status</th>
+                            <th class="pb-4 px-2 text-center" data-track-col="add_bugs">Add Bugs</th>
+                            <th class="pb-4 px-2 text-center" data-track-col="bugs">Bugs</th>
+                            <th class="pb-4 px-2 text-center" data-track-col="completed">Completed</th>
                         </tr>
                     </thead>
                     <tbody id="trackingTableBody">
                         <tr>
-                            <td colspan="9" class="py-12 text-center text-gray-500 italic">
+                            <td colspan="10" class="py-12 text-center text-gray-500 italic">
                                 Run analysis to see ticket tracking data
                             </td>
                         </tr>
@@ -571,10 +587,24 @@
         let trackingSearchQuery = "";
         let trackingAssigneeFilter = "All";
         let lastFilteredTrackingIssues = [];
+        const trackingColumnDefs = [
+            { key: "ticket", label: "Ticket" },
+            { key: "pr_raised", label: "PR Raised" },
+            { key: "pr_merged", label: "PR Merged" },
+            { key: "deployment", label: "Deployment" },
+            { key: "qa_assignee", label: "QA Assignee" },
+            { key: "qa_status", label: "QA Status" },
+            { key: "requirements_clear", label: "Req Clear" },
+            { key: "add_bugs", label: "Add Bugs" },
+            { key: "bugs", label: "Bugs" },
+            { key: "completed", label: "Completed" }
+        ];
+        let trackingHiddenCols = new Set();
 
         function initTrackingTableControls() {
             const search = document.getElementById("trackingSearchInput");
             const assignee = document.getElementById("trackingAssigneeFilter");
+            initTrackingColumns();
             if (search) {
                 search.addEventListener("input", (e) => {
                     trackingSearchQuery = (e.target.value || "").toLowerCase();
@@ -587,6 +617,63 @@
                     applyTrackingFiltersAndRender();
                 });
             }
+        }
+
+        function initTrackingColumns() {
+            try {
+                const raw = localStorage.getItem("tracking_hidden_cols");
+                const parsed = raw ? JSON.parse(raw) : [];
+                trackingHiddenCols = new Set(Array.isArray(parsed) ? parsed : []);
+            } catch {
+                trackingHiddenCols = new Set();
+            }
+            renderTrackingColumnsMenu();
+            applyTrackingColumnVisibility();
+
+            document.addEventListener("click", (e) => {
+                const menu = document.getElementById("trackingColumnsMenu");
+                const btn = document.getElementById("trackingColumnsBtn");
+                if (!menu || !btn) return;
+                if (menu.classList.contains("hidden")) return;
+                if (menu.contains(e.target) || btn.contains(e.target)) return;
+                menu.classList.add("hidden");
+            });
+        }
+
+        function toggleTrackingColumnsMenu() {
+            const menu = document.getElementById("trackingColumnsMenu");
+            if (!menu) return;
+            menu.classList.toggle("hidden");
+        }
+
+        function renderTrackingColumnsMenu() {
+            const list = document.getElementById("trackingColumnsList");
+            if (!list) return;
+            list.innerHTML = trackingColumnDefs.map(c => {
+                const checked = !trackingHiddenCols.has(c.key);
+                return `
+                    <label class="flex items-center justify-between gap-3 text-sm text-gray-200">
+                        <span class="text-xs">${c.label}</span>
+                        <input type="checkbox" ${checked ? "checked" : ""} onchange="setTrackingColumnVisible('${c.key}', this.checked)"
+                            class="w-4 h-4 rounded bg-gray-800 border-gray-600 text-blue-500 focus:ring-0">
+                    </label>
+                `;
+            }).join("");
+        }
+
+        function setTrackingColumnVisible(key, visible) {
+            if (!visible) trackingHiddenCols.add(key);
+            else trackingHiddenCols.delete(key);
+            localStorage.setItem("tracking_hidden_cols", JSON.stringify(Array.from(trackingHiddenCols)));
+            applyTrackingColumnVisibility();
+        }
+
+        function applyTrackingColumnVisibility() {
+            const hidden = trackingHiddenCols;
+            document.querySelectorAll("[data-track-col]").forEach(el => {
+                const key = el.getAttribute("data-track-col");
+                el.style.display = hidden.has(key) ? "none" : "";
+            });
         }
 
         function updateTrackingAssigneeFilterOptions(issues) {
@@ -813,7 +900,7 @@
 
             if (!sprintId) {
                 lastFilteredTrackingIssues = [];
-                body.innerHTML = '<tr><td colspan="9" class="py-8 text-center text-gray-500 italic">Select a sprint to enable local tracking</td></tr>';
+                body.innerHTML = '<tr><td colspan="10" class="py-8 text-center text-gray-500 italic">Select a sprint to enable local tracking</td></tr>';
                 return;
             }
 
@@ -822,7 +909,7 @@
 
             if (!allIssues || allIssues.length === 0) {
                 lastFilteredTrackingIssues = [];
-                body.innerHTML = '<tr><td colspan="9" class="py-8 text-center text-gray-500 italic">No tickets found in this sprint</td></tr>';
+                body.innerHTML = '<tr><td colspan="10" class="py-8 text-center text-gray-500 italic">No tickets found in this sprint</td></tr>';
                 return;
             }
 
@@ -844,12 +931,13 @@
             lastFilteredTrackingIssues = filtered;
 
             if (filtered.length === 0) {
-                body.innerHTML = '<tr><td colspan="9" class="py-8 text-center text-gray-500 italic">No tickets match current filters</td></tr>';
+                body.innerHTML = '<tr><td colspan="10" class="py-8 text-center text-gray-500 italic">No tickets match current filters</td></tr>';
                 return;
             }
 
             const teamMembers = (data && data.performance) ? data.performance.map(p => p.name).sort() : [];
             renderTrackingTableRows(filtered, teamMembers);
+            applyTrackingColumnVisibility();
         }
 
         function renderTrackingTableRows(issues, teamMembers) {
@@ -862,12 +950,12 @@
                 tr.className = "border-b border-gray-800/50 hover:bg-white/5 transition";
 
                 tr.innerHTML = `
-                    <td class="py-4 px-2 min-w-[200px]">
+                    <td class="py-4 px-2 min-w-[200px]" data-track-col="ticket">
                         <div class="flex items-start gap-2">
                             <img src="${issue.type_icon}" class="w-4 h-4 mt-1">
                             <div class="flex flex-col">
                                 <div class="flex items-center gap-2">
-                                    <a href="${jiraBrowseUrl(issue.key)}" target="_blank" class="text-blue-400 font-bold text-xs hover:underline">${issue.key}</a>
+                                    <a href="${jiraBrowseUrl(issue.key)}" target="_blank" rel="noopener noreferrer" class="text-blue-400 font-bold text-xs hover:underline">${issue.key}</a>
                                     <button type="button" onclick="showTicketDetails('${issue.key}')" class="text-[10px] px-2 py-0.5 rounded bg-gray-700/50 text-gray-200 border border-gray-600 hover:bg-gray-700 transition">Details</button>
                                 </div>
                                 <span class="text-sm text-gray-300 font-medium truncate max-w-[200px]" title="${issue.summary}">${issue.summary}</span>
@@ -879,45 +967,51 @@
                             </div>
                         </div>
                     </td>
-                    <td class="py-4 px-2 text-center">
+                    <td class="py-4 px-2 text-center" data-track-col="requirements_clear">
+                        <select onchange="updateTicketField('${issue.key}', 'requirements_clear', this.value)"
+                            class="bg-gray-800 text-xs text-gray-200 border border-gray-700 rounded p-1 outline-none">
+                            ${['No', 'Yes'].map(v => `<option value="${v}" ${(local.requirements_clear || 'No') === v ? 'selected' : ''}>${v}</option>`).join('')}
+                        </select>
+                    </td>
+                    <td class="py-4 px-2 text-center" data-track-col="pr_raised">
                         <input type="checkbox" ${local.pr_raised ? 'checked' : ''} 
                             onchange="updateTicketField('${issue.key}', 'pr_raised', this.checked ? 1 : 0)"
                             class="w-4 h-4 rounded bg-gray-800 border-gray-700 text-blue-500 focus:ring-0">
                     </td>
-                    <td class="py-4 px-2 text-center">
+                    <td class="py-4 px-2 text-center" data-track-col="pr_merged">
                         <input type="checkbox" ${local.pr_merged ? 'checked' : ''} 
                             onchange="updateTicketField('${issue.key}', 'pr_merged', this.checked ? 1 : 0)"
                             class="w-4 h-4 rounded bg-gray-800 border-gray-700 text-green-500 focus:ring-0">
                     </td>
-                    <td class="py-4 px-2">
+                    <td class="py-4 px-2" data-track-col="deployment">
                         <select onchange="updateTicketField('${issue.key}', 'deploy_status', this.value); updateSelectColor(this, 'deploy')"
                             class="bg-gray-800 text-xs text-gray-200 border border-gray-700 rounded p-1 outline-none transition-colors ${getDeployClass(local.deploy_status)}">
                             ${['N/A', 'Dev', 'Staged', 'Prod'].map(v => `<option value="${v}" ${local.deploy_status === v ? 'selected' : ''}>${v}</option>`).join('')}
                         </select>
                     </td>
-                    <td class="py-4 px-2">
+                    <td class="py-4 px-2" data-track-col="qa_assignee">
                         <select data-key="${issue.key}" class="qa-assignee-select tracking-assignee-select" style="width: 140px;">
                             <option value="${local.qa_assignee || ''}" selected>${local.qa_assignee || 'Select Assignee...'}</option>
                         </select>
                     </td>
-                    <td class="py-4 px-2">
+                    <td class="py-4 px-2" data-track-col="qa_status">
                         <select onchange="updateTicketField('${issue.key}', 'qa_status', this.value); updateSelectColor(this, 'qa')"
                             class="bg-gray-800 text-xs text-gray-200 border border-gray-700 rounded p-1 outline-none transition-colors ${getQaClass(local.qa_status)}">
                             ${['Pending', 'Testing', 'Ready', 'Done'].map(v => `<option value="${v}" ${local.qa_status === v ? 'selected' : ''}>${v}</option>`).join('')}
                         </select>
                     </td>
-                    <td class="py-4 px-2 text-center">
+                    <td class="py-4 px-2 text-center" data-track-col="add_bugs">
                         <button onclick="openBugManager('${issue.key}')" 
                                 class="text-[10px] bg-blue-600/20 text-blue-400 border border-blue-500/30 px-2 py-1 rounded hover:bg-blue-600/40 transition">
                             Add Bugs
                         </button>
                     </td>
-                    <td class="py-4 px-2 text-center">
+                    <td class="py-4 px-2 text-center" data-track-col="bugs">
                         <div id="bugBadges-${issue.key}" class="flex flex-wrap gap-1 justify-center">
                              ${(local.bugs_found || "").split(",").filter(b => b).map(b => `<button type="button" onclick="showTicketDetails('${b}')" class="bug-badge hover:opacity-80 transition">${b}</button>`).join('')}
                         </div>
                     </td>
-                    <td class="py-4 px-2 text-center">
+                    <td class="py-4 px-2 text-center" data-track-col="completed">
                         <button onclick="toggleCompleted(this, '${issue.key}')" 
                                 class="px-3 py-1 rounded-full text-[10px] font-bold uppercase transition ${local.completed ? 'bg-green-500/20 text-green-400 border border-green-500/50' : 'bg-gray-700 text-gray-400 border border-gray-600'}">
                             ${local.completed ? 'YES' : 'NO'}
@@ -985,11 +1079,18 @@
             }
 
             const sanitize = (v) => (v == null ? "" : String(v)).replace(/\t/g, " ").replace(/\r?\n/g, " ").trim();
+            const excelHyperlink = (url, text) => {
+                const u = sanitize(url).replace(/"/g, '""');
+                const t = sanitize(text).replace(/"/g, '""');
+                return `=HYPERLINK("${u}","${t}")`;
+            };
             const rows = issues.map(i => {
                 const local = i.local || {};
+                const jiraUrl = jiraBrowseUrl(i.key);
                 return [
-                    sanitize(i.key),
+                    excelHyperlink(jiraUrl, i.key),
                     sanitize(i.summary),
+                    sanitize(local.requirements_clear || "No"),
                     sanitize(i.assignee || "Unassigned"),
                     sanitize(i.status),
                     sanitize(local.deploy_status || "N/A"),
@@ -1001,7 +1102,7 @@
                     sanitize(local.completed ? "YES" : "NO")
                 ].join("\t");
             });
-            const header = ["Jira #", "Summary", "Dev", "Jira Status", "Deployment", "QA Assignee", "QA Status", "PR Raised", "PR Merged", "Bugs", "Completed"].join("\t");
+            const header = ["Jira #", "Summary", "Req Clear", "Dev", "Jira Status", "Deployment", "QA Assignee", "QA Status", "PR Raised", "PR Merged", "Bugs", "Completed"].join("\t");
             const tsv = [header, ...rows].join("\n");
 
             const original = btn.innerHTML;
