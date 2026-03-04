@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Root Cause Analysis - {{ issue.key }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        body { background-color: #0f172a; color: #f8fafc; }
+        .glass-card {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4">
+    <div id="app" class="w-full max-w-2xl">
+        <div v-if="submitted" class="glass-card p-12 rounded-3xl text-center animate-in fade-in zoom-in duration-500">
+            <div class="w-20 h-20 bg-green-500/20 text-green-500 rounded-full flex items-center justify-center mx-auto mb-6">
+                <i class="fas fa-check text-4xl"></i>
+            </div>
+            <h1 class="text-3xl font-bold mb-2">Thank You!</h1>
+            <p class="text-gray-400">The Root Cause Analysis has been submitted successfully.</p>
+            <p class="text-gray-500 text-sm mt-4">You can now close this window.</p>
+        </div>
+
+        <div v-else class="glass-card p-8 rounded-3xl shadow-2xl">
+            <!-- Header -->
+            <div class="border-b border-white/10 pb-6 mb-8">
+                <div class="flex justify-between items-start mb-4">
+                    <div>
+                        <h2 class="text-blue-400 font-mono text-sm font-bold tracking-widest uppercase">Root Cause Analysis</h2>
+                        <h1 class="text-2xl font-bold mt-1 flex items-center gap-3">
+                            {{ issue.key }}
+                            <a href="{{ jira_domain }}/browse/{{ issue.key }}" target="_blank" class="text-gray-500 hover:text-white transition text-sm">
+                                <i class="fas fa-external-link-alt"></i>
+                            </a>
+                        </h1>
+                    </div>
+                    <div class="text-right">
+                        <span class="px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-gray-800 text-gray-400 border border-gray-700">
+                            {{ issue.status }}
+                        </span>
+                    </div>
+                </div>
+                <p class="text-gray-300 text-lg leading-relaxed">{{ issue.summary }}</p>
+                
+                <div class="flex gap-4 mt-4">
+                    <div class="flex items-center gap-2 text-xs text-gray-500">
+                        <i class="fas fa-layer-group"></i>
+                        <span>Priority: {{ issue.priority }}</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Form -->
+            <form @submit.prevent="submitForm" class="space-y-6">
+                <div class="space-y-2">
+                    <label class="block text-sm font-semibold text-gray-400">1. Root Cause Analysis (RCA)</label>
+                    <textarea v-model="form.rca_text" required rows="4" 
+                        placeholder="What was the underlying cause of this issue?"
+                        class="w-full bg-gray-900/50 border border-gray-700 rounded-xl px-4 py-3 text-white focus:border-blue-500 outline-none transition resize-none"></textarea>
+                </div>
+
+                <div class="space-y-2">
+                    <label class="block text-sm font-semibold text-gray-400">2. What was the fix?</label>
+                    <textarea v-model="form.fix_text" required rows="4" 
+                        placeholder="Describe the solution implemented to resolve the ticket."
+                        class="w-full bg-gray-900/50 border border-gray-700 rounded-xl px-4 py-3 text-white focus:border-blue-500 outline-none transition resize-none"></textarea>
+                </div>
+
+                <div class="space-y-2">
+                    <label class="block text-sm font-semibold text-gray-400">3. How to prevent it in future?</label>
+                    <textarea v-model="form.prevention_text" required rows="4" 
+                        placeholder="What steps can be taken to ensure this doesn't happen again?"
+                        class="w-full bg-gray-900/50 border border-gray-700 rounded-xl px-4 py-3 text-white focus:border-blue-500 outline-none transition resize-none"></textarea>
+                </div>
+
+                <button type="submit" :disabled="loading"
+                    class="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-900/20 transition flex items-center justify-center gap-3">
+                    <i v-if="loading" class="fas fa-circle-notch fa-spin"></i>
+                    <span>[[ loading ? 'Submitting...' : 'Submit RCA' ]]</span>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script>
+        const { createApp } = Vue;
+        createApp({
+            delimiters: ['[[', ']]'],
+            data() {
+                return {
+                    token: '{{ token }}',
+                    submitted: false,
+                    loading: false,
+                    form: {
+                        rca_text: '{{ rca.rca_text or "" }}',
+                        fix_text: '{{ rca.fix_text or "" }}',
+                        prevention_text: '{{ rca.prevention_text or "" }}'
+                    }
+                }
+            },
+            methods: {
+                async submitForm() {
+                    this.loading = true;
+                    try {
+                        const res = await fetch(`/api/rca/submit/${this.token}`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(this.form)
+                        });
+                        const data = await res.json();
+                        if (data.success) {
+                            this.submitted = true;
+                        } else {
+                            alert(data.error || 'Submission failed');
+                        }
+                    } catch (e) {
+                        alert('An error occurred. Please try again.');
+                    } finally {
+                        this.loading = false;
+                    }
+                }
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>

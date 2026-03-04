@@ -87,6 +87,35 @@
             </div>
         </div>
 
+        <!-- App Configuration (Admin Only) -->
+        {% if current_user.role_name == 'Admin' %}
+        <div class="max-w-2xl mx-auto bg-gray-800 rounded-lg shadow-xl p-6 border border-gray-700 mt-8">
+            <h2 class="text-xl font-bold text-white mb-4 flex items-center">
+                <i class="fas fa-desktop mr-2 text-blue-400"></i>
+                App Customization
+            </h2>
+            <p class="text-xs text-gray-400 mb-6">Customize application-wide settings and appearance.</p>
+
+            <div class="space-y-6">
+                <div>
+                    <label class="block text-sm font-medium text-gray-400 mb-2">Header Title</label>
+                    <input type="text" id="header_title"
+                        class="w-full bg-gray-700 border border-gray-600 rounded-md px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="e.g. Jira Analytics">
+                    <p class="mt-1 text-xs text-gray-500">The main title shown in the navigation bar.</p>
+                </div>
+
+                <div class="pt-2 flex justify-end">
+                    <button id="saveAppBtn" onclick="saveAppConfig()"
+                        class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-md transition-colors flex items-center">
+                        <i class="fas fa-save mr-2"></i>
+                        Update App Config
+                    </button>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
         <!-- To-Do Tags Configuration -->
         <div class="max-w-2xl mx-auto bg-gray-800 rounded-lg shadow-xl p-6 border border-gray-700 mt-8">
             <h2 class="text-xl font-bold text-white mb-4 flex items-center">
@@ -145,6 +174,19 @@
 
             // Load tags
             loadTodoTags();
+
+            // Load App Config (Admin Only)
+            if (document.getElementById('header_title')) {
+                try {
+                    const appRes = await fetch('/api/settings/app_config');
+                    if (appRes.ok) {
+                        const appData = await appRes.json();
+                        document.getElementById('header_title').value = appData.header_title || 'Jira Analytics';
+                    }
+                } catch (err) {
+                    console.error("Failed to load app config:", err);
+                }
+            }
         });
 
         const settingsColorClasses = {
@@ -243,6 +285,42 @@
                 input.type = 'text';
             } else {
                 input.type = 'password';
+            }
+        }
+
+        async function saveAppConfig() {
+            const headerTitle = document.getElementById('header_title').value.trim();
+            const btn = document.getElementById('saveAppBtn');
+            const originalHTML = btn.innerHTML;
+
+            if (!headerTitle) {
+                alert('Header title cannot be empty');
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-circle-notch fa-spin mr-2"></i> Saving...';
+
+            try {
+                const res = await fetch('/api/settings/app_config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ header_title: headerTitle })
+                });
+
+                if (res.ok) {
+                    alert('App configuration updated successfully! Refresh the page to see changes.');
+                    window.location.reload();
+                } else {
+                    const data = await res.json();
+                    alert('Error: ' + (data.error || 'Failed to save'));
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Connection error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalHTML;
             }
         }
 

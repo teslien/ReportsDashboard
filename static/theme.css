@@ -64,13 +64,47 @@
     border-bottom-color: #e2e8f0 !important;
 }
 
-[data-theme="light"] nav a {
+[data-theme="light"] .navbar-link {
     color: #475569 !important;
 }
 
-[data-theme="light"] nav a:hover {
+[data-theme="light"] .navbar-link:hover {
     color: #0f172a !important;
 }
+
+[data-theme="light"] .navbar-dropdown {
+    background-color: #ffffff !important;
+    border-color: #e2e8f0 !important;
+}
+
+[data-theme="light"] .navbar-dropdown a {
+    color: #475569 !important;
+}
+
+[data-theme="light"] .navbar-dropdown a:hover {
+    background-color: #f1f5f9 !important;
+    color: #0f172a !important;
+}
+
+[data-theme="light"] nav .text-gray-500 {
+    color: #64748b !important;
+}
+
+/* ─── Empty States (Todo Page) ──────────────────────────────── */
+[data-theme="light"] .border-dashed.border-gray-700 {
+    background-color: #ffffff !important;
+    border-color: #cbd5e1 !important;
+    color: #475569 !important;
+}
+
+[data-theme="light"] .text-gray-600 {
+    color: #475569 !important;
+}
+
+[data-theme="light"] .text-gray-400 {
+    color: #475569 !important;
+}
+
 
 [data-theme="light"] nav a.text-blue-400,
 [data-theme="light"] nav a.text-white {
@@ -469,7 +503,58 @@
     color: #dc2626 !important;
 }
 
-/* Preserve gradient text readability */
+/* ─── Button Overrides ───────────────────────────────────────── */
+[data-theme="light"] .bg-blue-600 {
+    background-color: #2563eb !important;
+}
+
+[data-theme="light"] .bg-blue-600:hover {
+    background-color: #1d4ed8 !important;
+}
+
+[data-theme="light"] button.text-white {
+    color: #ffffff !important;
+}
+
+/* ─── Details Button fix (Image 2) ─────────────────────────── */
+[data-theme="light"] button.bg-gray-700\/50 {
+    background-color: #f1f5f9 !important;
+    color: #475569 !important;
+    border-color: #cbd5e1 !important;
+}
+
+[data-theme="light"] button.bg-gray-700\/50:hover {
+    background-color: #e2e8f0 !important;
+    color: #0f172a !important;
+}
+
+/* ─── Card Overrides (Today's Work - Image 1) ───────────────── */
+[data-theme="light"] .bg-gray-700\/30 {
+    background-color: #ffffff !important;
+    border-color: #e2e8f0 !important;
+}
+
+[data-theme="light"] .bg-gray-700\/30:hover {
+    background-color: #f8fafc !important;
+}
+
+[data-theme="light"] .bg-gray-700\/50 {
+    background-color: #f1f5f9 !important;
+}
+
+/* ─── Column visibility button (Image 2) ───────────────────── */
+[data-theme="light"] button.bg-gray-700\/60 {
+    background-color: #ffffff !important;
+    color: #475569 !important;
+    border-color: #cbd5e1 !important;
+}
+
+[data-theme="light"] button.bg-gray-700\/60:hover {
+    background-color: #f8fafc !important;
+    color: #0f172a !important;
+}
+
+/* ─── Preserve gradient text readability ─────────── */
 [data-theme="light"] .bg-clip-text.text-transparent {
     -webkit-text-fill-color: transparent !important;
 }
@@ -554,4 +639,90 @@
 /* ─── Bulk update row highlight ─────────────────────────────── */
 [data-theme="light"] tr.selected-row {
     background-color: rgba(59, 130, 246, 0.08) !important;
+}
+
+/* ─── Offcanvas Overrides (Ticket Details - Image 3) ───────── */
+[data-theme="light"] .custom-offcanvas-backdrop {
+    background: rgba(15, 23, 42, 0.4) !important;
+}
+
+[data-theme="light"] .custom-offcanvas {
+    background-color: #ffffff !important;
+    border-left-color: #e2e8f0 !important;
+    box-shadow: -10px 0 30px rgba(0, 0, 0, 0.05) !important;
+}
+
+[data-theme="light"] .custom-offcanvas-header {
+    background-color: #f8fafc !important;
+    border-bottom-color: #e2e8f0 !important;
+}
+
+[data-theme="light"] .custom-offcanvas-header h5 {
+    color: #0f172a !important;
+}
+
+[data-theme="light"] .btn-close-custom {
+    background-color: #e2e8f0 !important;
+    color: #64748b !important;
+}
+
+[data-theme="light"] .btn-close-custom:hover {
+    background-color: #cbd5e1 !important;
+    color: #0f172a !important;
+}
+
+[data-theme="light"] .offcanvas-table th {
+    color: #64748b !important;
+    border-bottom-color: #f1f5f9 !important;
+}
+
+[data-theme="light"] .offcanvas-table td {
+    color: #1e293b !important;
+    border-bottom-color: #f1f5f9 !important;
+}
+
+[data-theme="light"] .custom-offcanvas-body h4 {
+    color: #475569 !important;
+}
+
+/* Description box in offcanvas */
+[data-theme="light"] .custom-offcanvas-body .bg-gray-900\/50 {
+    background-color: #f8fafc !important;
+    border-color: #e2e8f0 !important;
+    color: #475569 !important;
+}
+
+/* Linked bug table in offcanvas */
+[data-theme="light"] .custom-offcanvas-body .border-gray-700\/50,
+[data-theme="light"] .custom-offcanvas-body .border-gray-700 {
+    border-color: #e2e8f0 !important;
+}
+
+/* Status badges and tags in offcanvas */
+[data-theme="light"] .custom-offcanvas-body span.bg-gray-700,
+[data-theme="light"] .custom-offcanvas-body .bg-gray-700 {
+    background-color: #f1f5f9 !important;
+    color: #475569 !important;
+    border: 1px solid #e2e8f0 !important;
+}
+
+/* ─── Global Select2 Dark Theme Fixes ───────────────────────── */
+.select2-results__option--selected {
+    background-color: #374151 !important;
+    color: white !important;
+}
+
+.select2-results__option[aria-selected=true] {
+    background-color: #374151 !important;
+    color: white !important;
+}
+
+.select2-results__option--highlighted[aria-selected] {
+    background-color: #2563eb !important;
+    color: white !important;
+}
+
+/* Ensure text is visible in all states */
+.select2-results__option {
+    color: #d1d5db;
 }

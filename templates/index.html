@@ -9,6 +9,9 @@
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
 
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
@@ -21,18 +24,71 @@
 
     <style>
         /* Custom Dark Theme for Select2 */
-        .select2-container--default .select2-selection--single {
-            background-color: #1f2937;
+        .select2-container--default .select2-selection--single,
+        .select2-container--default .select2-selection--multiple {
+            background-color: #1f2937 !important;
             /* Gray 800 */
-            border: 1px solid #374151;
+            border: 1px solid #374151 !important;
             /* Gray 700 */
-            color: white;
-            height: 42px;
-            display: flex;
-            align-items: center;
+            color: white !important;
+            min-height: 42px !important;
+            display: flex !important;
+            align-items: center !important;
         }
 
-        .select2-container--default.select2-container--disabled .select2-selection--single {
+        .select2-container--default .select2-selection--multiple {
+            padding-bottom: 0;
+            padding-right: 0;
+        }
+
+        .select2-container--default .select2-selection--multiple .select2-selection__rendered {
+            display: flex !important;
+            flex-wrap: wrap !important;
+            flex-direction: row !important;
+            padding: 0 8px !important;
+            gap: 4px !important;
+            width: 100% !important;
+        }
+
+        .select2-container--default .select2-selection--multiple .select2-search--inline {
+            flex-grow: 1 !important;
+            display: flex !important;
+            align-items: center !important;
+        }
+
+        .select2-container--default .select2-selection--multiple .select2-selection__choice {
+            background-color: #374151 !important;
+            border: 1px solid #4b5563 !important;
+            color: #f3f4f6 !important;
+            border-radius: 6px !important;
+            padding: 2px 8px !important;
+            margin: 4px 0 !important;
+            font-size: 12px !important;
+            display: flex !important;
+            align-items: center !important;
+            gap: 4px !important;
+            float: none !important; /* Override default float */
+        }
+
+        .select2-container--default .select2-selection--multiple .select2-selection__choice__remove {
+            color: #9ca3af;
+            border-right: 1px solid #4b5563;
+            margin-right: 4px;
+            padding: 0 4px;
+            float: none;
+            background: none;
+            border-top: none;
+            border-bottom: none;
+            border-left: none;
+        }
+
+        .select2-container--default .select2-selection--multiple .select2-selection__choice__remove:hover {
+            color: #ef4444;
+            background-color: rgba(239, 68, 68, 0.1);
+        }
+
+        .select2-container--default.select2-container--disabled .select2-selection--single,
+        .select2-container--default.select2-container--disabled .select2-selection--multiple {
             background-color: #374151 !important;
         }
 
@@ -55,12 +111,46 @@
         .select2-results__option--highlighted {
             background-color: #2563eb !important;
             /* Blue 600 */
+            color: white !important;
+        }
+
+        .select2-results__option--selected {
+            background-color: #374151 !important;
+            /* Gray 700 */
+            color: white !important;
+        }
+
+        .select2-results__option[aria-selected=true] {
+            background-color: #374151 !important;
+            color: white !important;
+        }
+
+        .select2-container--default .select2-selection--multiple .select2-search--inline {
+            background: transparent !important;
+        }
+
+        .select2-container--default .select2-selection--multiple .select2-search--inline .select2-search__field {
+            background-color: transparent !important;
+            color: white !important;
+            border: none !important;
+            margin-top: 0 !important;
+            padding-left: 8px !important;
+            box-shadow: none !important;
         }
 
         .select2-search__field {
             background-color: #374151 !important;
             color: white !important;
             border: 1px solid #4b5563 !important;
+            border-radius: 4px !important;
+        }
+
+        /* Container search field needs background */
+        .select2-dropdown .select2-search__field {
+            background-color: #374151 !important;
+            border: 1px solid #4b5563 !important;
+            margin-top: 4px !important;
+            border-radius: 4px;
         }
 
         /* Fix Clear Button Position */
@@ -148,10 +238,15 @@
             font-weight: bold;
             cursor: pointer;
             margin-right: 4px;
+            border: none;
+        }
+
+        .bug-badge.bug-done {
+            background-color: #16a34a;
         }
 
         .bug-badge:hover {
-            background-color: #b91c1c;
+            opacity: 0.8;
         }
 
         /* Custom Offcanvas System */
@@ -268,6 +363,125 @@
                 transform: rotate(360deg);
             }
         }
+
+        /* Tooltip Style */
+        .info-tooltip {
+            position: relative;
+            display: inline-block;
+            cursor: help;
+        }
+
+        .info-tooltip .tooltip-text {
+            visibility: hidden;
+            width: 240px;
+            background-color: #1f2937;
+            color: #f3f4f6;
+            text-align: left;
+            border-radius: 12px;
+            padding: 12px;
+            position: absolute;
+            z-index: 9999;
+            bottom: 125%;
+            left: 50%;
+            margin-left: -120px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            border: 1px solid #374151;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+            font-size: 11px;
+            line-height: 1.5;
+            font-weight: normal;
+            text-transform: none;
+            letter-spacing: normal;
+        }
+
+        .info-tooltip:hover .tooltip-text {
+            visibility: visible;
+            opacity: 1;
+        }
+
+        .info-tooltip .tooltip-text::after {
+            content: "";
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            margin-left: -5px;
+            border-width: 5px;
+            border-style: solid;
+            border-color: #374151 transparent transparent transparent;
+        }
+
+        /* ─── Light Theme Overrides ────────────────────────────────── */
+        [data-theme="light"] .select2-container--default .select2-selection--single,
+        [data-theme="light"] .select2-container--default .select2-selection--multiple {
+            background-color: #ffffff !important;
+            border-color: #cbd5e1 !important;
+            color: #0f172a !important;
+        }
+
+        [data-theme="light"] .select2-container--default .select2-selection--multiple .select2-selection__choice {
+            background-color: #f1f5f9 !important;
+            border-color: #cbd5e1 !important;
+            color: #334155 !important;
+        }
+
+        [data-theme="light"] .select2-container--default .select2-selection--multiple .select2-selection__choice__remove {
+            color: #64748b !important;
+            border-right-color: #cbd5e1 !important;
+        }
+
+        [data-theme="light"] .select2-container--default .select2-selection--multiple .select2-search--inline .select2-search__field {
+            color: #0f172a !important;
+        }
+
+        [data-theme="light"] .select2-dropdown {
+            background-color: #ffffff !important;
+            border-color: #cbd5e1 !important;
+            color: #334155 !important;
+        }
+
+        [data-theme="light"] .select2-results__option {
+            color: #334155 !important;
+        }
+
+        [data-theme="light"] .select2-results__option--selected {
+            background-color: #f1f5f9 !important;
+            color: #0f172a !important;
+        }
+
+        [data-theme="light"] .select2-results__option[aria-selected=true] {
+            background-color: #f1f5f9 !important;
+            color: #0f172a !important;
+        }
+
+        [data-theme="light"] .select2-dropdown .select2-search__field {
+            background-color: #f8fafc !important;
+            border-color: #cbd5e1 !important;
+            color: #0f172a !important;
+        }
+
+        [data-theme="light"] .info-tooltip .tooltip-text {
+            background-color: #ffffff !important;
+            color: #1e293b !important;
+            border-color: #e2e8f0 !important;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+        }
+
+        [data-theme="light"] .info-tooltip .tooltip-text::after {
+            border-color: #e2e8f0 transparent transparent transparent;
+        }
+
+        [data-theme="light"] .info-tooltip .tooltip-text .text-blue-400 {
+            color: #2563eb !important;
+        }
+
+        [data-theme="light"] .info-tooltip .tooltip-text .text-gray-400 {
+            color: #64748b !important;
+        }
+
+        [data-theme="light"] .info-tooltip .fa-info-circle {
+            color: #2563eb !important;
+        }
     </style>
     <link rel="stylesheet" href="/static/theme.css">
     <script src="/static/theme.js"></script>
@@ -285,11 +499,10 @@
         <div
             class="bg-gray-800 p-6 rounded-2xl shadow-xl border border-gray-700 mb-8 flex flex-col md:flex-row gap-6 items-end">
             <div class="flex-1 w-full">
-                <label class="block text-sm font-bold text-gray-400 mb-2">Select Team</label>
-                <select id="teamSelect"
+                <label class="block text-sm font-bold text-gray-400 mb-2">Select Teams</label>
+                <select id="teamSelect" multiple="multiple"
                     class="w-full bg-gray-700 text-white h-[42px] rounded px-3 border border-gray-600 focus:border-blue-500 outline-none"
                     onchange="handleTeamChange()">
-                    <option value="">Select a team...</option>
                 </select>
             </div>
 
@@ -374,9 +587,27 @@
 
             <!-- Sprint Health -->
             <div
-                class="glass p-6 rounded-2xl relative overflow-hidden group hover:-translate-y-1 transition duration-300 bg-gradient-to-br from-blue-900/50 to-purple-900/50 border-blue-800">
-                <h3 id="progressLabel" class="text-gray-100 text-sm font-bold uppercase tracking-wider">Sprint Progress
-                </h3>
+                class="glass p-6 rounded-2xl relative group hover:-translate-y-1 transition duration-300 bg-gradient-to-br from-blue-900/50 to-purple-900/50 border-blue-800">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-gray-100 text-sm font-bold uppercase tracking-wider flex items-center gap-2">
+                        <span id="progressLabelText">Sprint Progress</span>
+                        <div class="info-tooltip">
+                            <i class="fas fa-info-circle text-blue-400 text-xs"></i>
+                            <div class="tooltip-text">
+                                <p class="font-bold border-b border-gray-700 pb-1 mb-2 text-blue-400">Progress Logic</p>
+                                <p class="mb-2 text-gray-400 italic">Tickets in these statuses contribute to completion:</p>
+                                <ul class="space-y-1">
+                                    <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-green-500"></span> DONE / RESOLVED</li>
+                                    <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span> READY FOR QA</li>
+                                    <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span> DEPLOYED / STAGED</li>
+                                    <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span> READY FOR STAGING</li>
+                                    <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span> READY FOR INTERNAL DEMO</li>
+                                    <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-gray-500"></span> NOT A BUG / CLOSED</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </h3>
+                </div>
                 <div class="text-4xl font-black text-white mt-2" id="kpiProgress">0%</div>
                 <div class="text-blue-200 text-xs mt-1 font-mono">Solved / Total</div>
             </div>
@@ -414,10 +645,10 @@
             <div class="glass p-6 rounded-2xl border border-gray-700">
                 <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
                     <span class="w-2 h-6 bg-blue-500 rounded-full"></span>
-                    Today's Work (Who's doing what)
+                    Sprint Goals (Important Items)
                 </h3>
-                <div class="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar" id="todayWorkList">
-                    <p class="text-center text-gray-500 italic text-sm py-4">No active work data</p>
+                <div class="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar" id="goalsList">
+                    <p class="text-center text-gray-500 italic text-sm py-4">No goals flagged yet</p>
                 </div>
             </div>
         </div>
@@ -541,6 +772,7 @@
             // Helper to get URL parameters
             const urlParams = new URLSearchParams(window.location.search);
             const initialTeamId = urlParams.get('team_id');
+            const initialTeamIds = initialTeamId ? initialTeamId.split(',') : [];
             const initialSprintId = urlParams.get('sprint_id');
             const initialProdOnly = urlParams.get('prod_only') === 'true';
 
@@ -550,8 +782,9 @@
 
             // Initialize Select2 for better searchability
             $('#teamSelect').select2({
-                placeholder: 'Select a team...',
+                placeholder: 'Select teams...',
                 allowClear: true,
+                multiple: true,
                 width: '100%'
             });
 
@@ -596,7 +829,7 @@
             initTrackingTableControls();
 
             // Initial load of teams
-            loadTeams(initialTeamId).then(() => {
+            loadTeams(initialTeamIds).then(() => {
                 // If we have an initial sprint ID, we need to fetch its details to show it in Select2
                 if (initialSprintId) {
                     // Fetch all sprints to find the name of the one in the URL
@@ -608,11 +841,11 @@
                         }
                         
                         // If we have both, auto-run analysis
-                        if (initialTeamId) {
+                        if (initialTeamIds.length > 0) {
                             loadSprintDashboardData();
                         }
                     });
-                } else if (initialTeamId) {
+                } else if (initialTeamIds.length > 0) {
                     // If only team is present, auto-run analysis
                     loadSprintDashboardData();
                 }
@@ -620,12 +853,12 @@
         });
 
         function updateUrlParams() {
-            const teamId = $('#teamSelect').val();
+            const teamIds = $('#teamSelect').val();
             const sprintId = $('#sprintSelect').val();
             const prodOnly = $('#productionOnly').is(':checked');
             
             const params = new URLSearchParams();
-            if (teamId) params.set('team_id', teamId);
+            if (teamIds && teamIds.length > 0) params.set('team_id', teamIds.join(','));
             if (sprintId) params.set('sprint_id', sprintId);
             if (prodOnly) params.set('prod_only', 'true');
             
@@ -640,6 +873,7 @@
         const USER_CAN_EDIT = {{ 'true' if current_user.has_permission('edit_tickets') or current_user.role_name == 'Admin' else 'false' }};
 
         let lastDashboardData = null;
+        let lastStatusMap = {};
         let trackingSearchQuery = "";
         let trackingAssigneeFilter = "All";
         let lastFilteredTrackingIssues = [];
@@ -750,16 +984,22 @@
             }
         }
 
-        async function loadTeams(initialId) {
+        async function loadTeams(initialIds) {
             try {
                 const res = await fetch("/api/teams");
                 const teams = await res.json();
                 const sel = $("#teamSelect");
-                sel.empty().append('<option value="">Select a team...</option>');
+                sel.empty();
                 teams.forEach(t => {
-                    const selected = t.id == initialId;
+                    const selected = initialIds && initialIds.includes(t.id.toString());
                     const opt = new Option(t.name, t.id, selected, selected);
                     sel.append(opt);
+                });
+                sel.select2({
+                    placeholder: "Select teams...",
+                    allowClear: true,
+                    multiple: true,
+                    width: '100%'
                 });
                 sel.trigger('change');
             } catch (err) {
@@ -775,24 +1015,24 @@
         }
 
         async function loadSprintDashboardData() {
-            const teamId = $("#teamSelect").val();
+            const teamIds = $("#teamSelect").val(); // This will be an array
             const sprintId = $("#sprintSelect").val();
             const productionOnly = $("#productionOnly").is(":checked");
-
-            if (!teamId) {
-                alert("Please select a Team first.");
+    
+            if (!teamIds || teamIds.length === 0) {
+                alert("Please select at least one Team.");
                 return;
             }
-
+    
             // Show Loading
             setKpiLoading(true);
-
+    
             try {
                 const res = await fetch("/api/dashboard/sprint_stats", {
                     method: "POST",
                     headers: getApiHeaders(),
                     body: JSON.stringify({
-                        team_id: teamId,
+                        team_id: teamIds,
                         sprint_id: sprintId || null,
                         production_only: productionOnly
                     })
@@ -800,11 +1040,11 @@
                 const data = await res.json();
 
                 // Update Progress Label based on sprint selection
-                const progressLabel = document.getElementById("progressLabel");
+                const progressLabelText = document.getElementById("progressLabelText");
                 if (sprintId) {
-                    progressLabel.innerText = "Sprint Progress";
+                    progressLabelText.innerText = "Sprint Progress";
                 } else {
-                    progressLabel.innerText = "Team Performance";
+                    progressLabelText.innerText = "Team Performance";
                 }
 
                 if (data.error) {
@@ -869,14 +1109,28 @@
                 perfBody.appendChild(tr);
             });
 
-            // 3. Update Today's Work List
-            const workList = document.getElementById("todayWorkList");
-            workList.innerHTML = "";
+            // 3. Update Goals List (Flagged Tickets)
+            updateGoalsList(data);
 
-            if (data.today_work.length === 0) {
-                workList.innerHTML = '<p class="text-center text-gray-500 italic text-sm py-4">No active work found for this team in this sprint.</p>';
+            // 4. Update Charts
+            renderStatusChart(data.charts.status);
+            renderTypeChart(data.charts.type);
+            renderPriorityChart(data.charts.priority);
+
+            // 5. Update Ticket Tracking Table
+            renderTrackingTable(data);
+        }
+
+        function updateGoalsList(data) {
+            const goalsList = document.getElementById("goalsList");
+            goalsList.innerHTML = "";
+
+            const flaggedIssues = data.tracking_issues.filter(i => i.local && i.local.is_flagged);
+
+            if (flaggedIssues.length === 0) {
+                goalsList.innerHTML = '<p class="text-center text-gray-500 italic text-sm py-4">No goals flagged yet.</p>';
             } else {
-                data.today_work.forEach(w => {
+                flaggedIssues.forEach(w => {
                     let badgeClass = "bg-gray-500/10 text-gray-400"; // Default
                     const status = w.status.toUpperCase();
 
@@ -911,17 +1165,72 @@
                             </p>
                         </div>
                     `;
-                    workList.appendChild(div);
+                    goalsList.appendChild(div);
                 });
             }
+        }
 
-            // 4. Update Charts
-            renderStatusChart(data.charts.status);
-            renderTypeChart(data.charts.type);
-            renderPriorityChart(data.charts.priority);
+        async function toggleFlag(btn, issueKey) {
+            const sprintId = $("#sprintSelect").val();
+            if (!sprintId) return;
 
-            // 5. Update Ticket Tracking Table
-            renderTrackingTable(data);
+            const icon = btn.querySelector('i');
+            const isFlagged = icon.classList.contains('fas');
+            const newValue = isFlagged ? 0 : 1;
+
+            // Optimistic UI update
+            if (newValue === 1) {
+                icon.classList.remove('far');
+                icon.classList.add('fas');
+                btn.classList.remove('text-gray-600', 'hover:text-yellow-500/50');
+                btn.classList.add('text-yellow-500');
+                btn.title = "Important";
+            } else {
+                icon.classList.remove('fas');
+                icon.classList.add('far');
+                btn.classList.remove('text-yellow-500');
+                btn.classList.add('text-gray-600', 'hover:text-yellow-500/50');
+                btn.title = "Mark as Important";
+            }
+
+            try {
+                const response = await fetch('/api/sprint_tickets/update_field', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        sprint_id: sprintId,
+                        issue_key: issueKey,
+                        field: 'is_flagged',
+                        value: newValue
+                    })
+                });
+                
+                // Update lastDashboardData
+                if (lastDashboardData && lastDashboardData.tracking_issues) {
+                    const issue = lastDashboardData.tracking_issues.find(i => i.key === issueKey);
+                    if (issue && issue.local) {
+                        issue.local.is_flagged = (newValue === 1);
+                    }
+                    // Update the goals list dynamically
+                    updateGoalsList(lastDashboardData);
+                }
+            } catch (err) {
+                console.error("Error toggling flag:", err);
+                // Revert on error - manually toggle back
+                if (newValue === 0) {
+                    icon.classList.remove('far');
+                    icon.classList.add('fas');
+                    btn.classList.remove('text-gray-600', 'hover:text-yellow-500/50');
+                    btn.classList.add('text-yellow-500');
+                    btn.title = "Important";
+                } else {
+                    icon.classList.remove('fas');
+                    icon.classList.add('far');
+                    btn.classList.remove('text-yellow-500');
+                    btn.classList.add('text-gray-600', 'hover:text-yellow-500/50');
+                    btn.title = "Mark as Important";
+                }
+            }
         }
 
         async function updateTicketField(issueKey, field, value) {
@@ -973,7 +1282,7 @@
             const q = (trackingSearchQuery || "").trim();
             const assignee = trackingAssigneeFilter || "All";
 
-            let filtered = allIssues;
+            let filtered = allIssues.filter(i => !i.is_extra);
             if (q) {
                 filtered = filtered.filter(i => {
                     const key = (i.key || "").toLowerCase();
@@ -993,6 +1302,18 @@
             }
 
             const teamMembers = (data && data.performance) ? data.performance.map(p => p.name).sort() : [];
+            
+            // Create a status map for quick lookup
+            lastStatusMap = {};
+            if (data && data.tracking_issues) {
+                data.tracking_issues.forEach(i => {
+                    lastStatusMap[i.key] = {
+                        status: (i.status || "").toUpperCase(),
+                        category: (i.status_category || "").toLowerCase()
+                    };
+                });
+            }
+            
             renderTrackingTableRows(filtered, teamMembers);
             applyTrackingColumnVisibility();
         }
@@ -1002,7 +1323,7 @@
             body.innerHTML = "";
 
             issues.forEach(issue => {
-                const local = issue.local;
+                const local = issue.local || {};
                 const tr = document.createElement("tr");
                 tr.className = "border-b border-gray-800/50 hover:bg-white/5 transition";
 
@@ -1015,6 +1336,12 @@
                                 <div class="flex items-center gap-2">
                                     <a href="${jiraBrowseUrl(issue.key)}" target="_blank" rel="noopener noreferrer" class="text-blue-400 font-bold text-xs hover:underline">${issue.key}</a>
                                     <button type="button" onclick="showTicketDetails('${issue.key}')" class="text-[10px] px-2 py-0.5 rounded bg-gray-700/50 text-gray-200 border border-gray-600 hover:bg-gray-700 transition">Details</button>
+                                    <button type="button" 
+                                            onclick="${USER_CAN_EDIT ? `toggleFlag(this, '${issue.key}')` : ''}"
+                                            class="text-sm transition-colors ${local.is_flagged ? 'text-yellow-500' : 'text-gray-600 hover:text-yellow-500/50'} ${!USER_CAN_EDIT ? 'cursor-default' : ''}"
+                                            title="${local.is_flagged ? 'Important' : 'Mark as Important'}">
+                                        <i class="${local.is_flagged ? 'fas' : 'far'} fa-flag"></i>
+                                    </button>
                                 </div>
                                 <span class="text-sm text-gray-300 font-medium truncate max-w-[200px]" title="${issue.summary}">${issue.summary}</span>
                                 <div class="flex items-center gap-2">
@@ -1156,10 +1483,19 @@
                 }
 
                 // 9. Bugs List (View Only)
+                const doneStatuses = ["DONE", "RESOLVED", "DEPLOYED", "STAGED", "READY FOR QA", "READY FOR STAGING", "READY FOR INTERNAL DEMO", "CLOSED", "NOT A BUG", "UNABLE TO REPRODUCE"];
+                
                 const bugsCell = `
                     <td class="py-4 px-2 text-center" data-track-col="bugs">
                         <div id="bugBadges-${issue.key}" class="flex flex-wrap gap-1 justify-center">
-                             ${(local.bugs_found || "").split(",").filter(b => b).map(b => `<button type="button" onclick="showTicketDetails('${b}')" class="bug-badge hover:opacity-80 transition">${b}</button>`).join('')}
+                             ${(local.bugs_found || "").split(",").filter(b => b).map(b => {
+                                const info = lastStatusMap[b];
+                                let isDone = false;
+                                if (info) {
+                                    isDone = (info.category === 'done' || doneStatuses.includes(info.status));
+                                }
+                                return `<button type="button" onclick="showTicketDetails('${b}')" class="bug-badge ${isDone ? 'bug-done' : ''} transition">${b}</button>`;
+                             }).join('')}
                         </div>
                     </td>`;
 
@@ -1457,7 +1793,15 @@
             await updateTicketField(issueKey, 'bugs_found', bugsStr);
 
             // Sync UI
-            badgeDiv.innerHTML = currentBugs.map(b => `<button type="button" onclick="showTicketDetails('${b}')" class="bug-badge hover:opacity-80 transition">${b}</button>`).join('');
+            const doneStatuses = ["DONE", "RESOLVED", "DEPLOYED", "STAGED", "READY FOR QA", "READY FOR STAGING", "READY FOR INTERNAL DEMO", "CLOSED", "NOT A BUG", "UNABLE TO REPRODUCE"];
+            badgeDiv.innerHTML = currentBugs.map(b => {
+                const info = lastStatusMap[b];
+                let isDone = false;
+                if (info) {
+                    isDone = (info.category === 'done' || doneStatuses.includes(info.status));
+                }
+                return `<button type="button" onclick="showTicketDetails('${b}')" class="bug-badge ${isDone ? 'bug-done' : ''} hover:opacity-80 transition">${b}</button>`;
+            }).join('');
             renderBugManagerUI(issueKey);
             document.getElementById('bugDetailsPreview').classList.add('hidden');
         }
@@ -1472,7 +1816,15 @@
             await updateTicketField(issueKey, 'bugs_found', bugsStr);
 
             // Sync UI
-            badgeDiv.innerHTML = currentBugs.map(b => `<button type="button" onclick="showTicketDetails('${b}')" class="bug-badge hover:opacity-80 transition">${b}</button>`).join('');
+            const doneStatuses = ["DONE", "RESOLVED", "DEPLOYED", "STAGED", "READY FOR QA", "READY FOR STAGING", "READY FOR INTERNAL DEMO", "CLOSED", "NOT A BUG", "UNABLE TO REPRODUCE"];
+            badgeDiv.innerHTML = currentBugs.map(b => {
+                const info = lastStatusMap[b];
+                let isDone = false;
+                if (info) {
+                    isDone = (info.category === 'done' || doneStatuses.includes(info.status));
+                }
+                return `<button type="button" onclick="showTicketDetails('${b}')" class="bug-badge ${isDone ? 'bug-done' : ''} hover:opacity-80 transition">${b}</button>`;
+            }).join('');
             renderBugManagerUI(issueKey);
         }
 

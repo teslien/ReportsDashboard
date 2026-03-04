@@ -8,11 +8,12 @@ from dotenv import load_dotenv
 import io
 import re
 import json
-import sqlite3
 import os
 import requests
 import base64
 import secrets
+import mysql.connector
+from mysql.connector import Error
 from datetime import datetime, timedelta, timezone
 from urllib.parse import unquote
 import matplotlib
@@ -67,15 +68,25 @@ class User(UserMixin):
         if allowed is None: return True 
         return page_key in allowed
 
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "email": self.email,
+            "name": self.name,
+            "role_id": self.role_id,
+            "role_name": self.role_name,
+            "permissions": self.permissions
+        }
+
 @login_manager.user_loader
 def load_user(user_id):
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+    conn, cursor = get_db_connection()
+    if not conn: return None
     cursor.execute("""
         SELECT u.id, u.email, u.name, u.role_id, r.name, r.permissions, u.api_token
         FROM users u
         LEFT JOIN roles r ON u.role_id = r.id
-        WHERE u.id = ?
+        WHERE u.id = %s
     """, (user_id,))
     row = cursor.fetchone()
     conn.close()
@@ -147,8 +158,8 @@ def _decode_value(value):
 def _get_jira_config():
     """Fetch Jira config from DB. Returns (email, token, project_key, domain)."""
     try:
-        conn = sqlite3.connect("tracker.db")
-        cursor = conn.cursor()
+        conn, cursor = get_db_connection()
+        if not conn: return "", "", "", DEFAULT_JIRA_DOMAIN
         cursor.execute("SELECT email, api_token, project_key, jira_domain FROM jira_config WHERE id = 1")
         row = cursor.fetchone()
         conn.close()
@@ -210,9 +221,28 @@ JIRA_DOMAIN = LocalProxy(_get_jira_domain)
 
 @app.context_processor
 def inject_config():
+    conn, cursor = get_db_connection(dictionary=True)
+    public_trackers = []
+    header_title = "Jira Analytics"
+    if conn:
+        try:
+            cursor.execute("SELECT id, name FROM trackers_v2 WHERE is_public = TRUE")
+            public_trackers = cursor.fetchall()
+            
+            cursor.execute("SELECT config_value FROM app_config WHERE config_key = 'header_title'")
+            row = cursor.fetchone()
+            if row:
+                header_title = row['config_value']
+        except:
+            pass
+        finally:
+            conn.close()
+            
     return dict(
         JIRA_DOMAIN=str(JIRA_DOMAIN),
-        project=str(PROJECT_KEY)
+        project=str(PROJECT_KEY),
+        public_trackers=public_trackers,
+        header_title=header_title
     )
 
 # Legacy auth (deprecated but kept for compatibility if used directly)
@@ -225,15 +255,49 @@ AUTH = base64.b64encode(f"{DEFAULT_JIRA_EMAIL}:{DEFAULT_JIRA_API_TOKEN}".encode(
 # =========================
 # DATABASE SETUP
 # =========================
-DB_PATH = "tracker.db"
+MYSQL_CONFIG = {
+    'host': 'localhost',
+    'user': 'rohit',
+    'password': 'rohit',
+    'database': 'reports_dashboard'
+}
+
+def get_db_connection(dictionary=False):
+    """Establish a connection to the MySQL database."""
+    try:
+        conn = mysql.connector.connect(**MYSQL_CONFIG)
+        if dictionary:
+            # Equivalent to sqlite3.Row
+            cursor = conn.cursor(dictionary=True)
+        else:
+            cursor = conn.cursor()
+        return conn, cursor
+    except Error as e:
+        print(f"Error connecting to MySQL: {e}")
+        return None, None
 
 def init_db():
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+    # First, try to connect without a database to create it if it doesn't exist
+    try:
+        conn = mysql.connector.connect(
+            host=MYSQL_CONFIG['host'],
+            user=MYSQL_CONFIG['user'],
+            password=MYSQL_CONFIG['password']
+        )
+        cursor = conn.cursor()
+        cursor.execute(f"CREATE DATABASE IF NOT EXISTS {MYSQL_CONFIG['database']}")
+        conn.close()
+    except Error as e:
+        print(f"Error creating database: {e}")
+
+    conn, cursor = get_db_connection()
+    if not conn:
+        return
+
     # Trackers Table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS trackers (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id INT AUTO_INCREMENT PRIMARY KEY,
             title TEXT NOT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
@@ -241,10 +305,10 @@ def init_db():
     # Tickets Table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS tracker_tickets (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            tracker_id INTEGER,
-            issue_key TEXT NOT NULL,
-            comment TEXT DEFAULT '',
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            tracker_id INT,
+            issue_key VARCHAR(255) NOT NULL,
+            comment TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (tracker_id) REFERENCES trackers(id) ON DELETE CASCADE
         )
@@ -252,37 +316,39 @@ def init_db():
     # Todos Table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS todos (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT,
             title TEXT NOT NULL,
             description TEXT,
-            priority TEXT DEFAULT 'Low',
+            priority VARCHAR(50) DEFAULT 'Low',
             due_date DATE NOT NULL,
-            status TEXT DEFAULT 'Pending',
+            status VARCHAR(50) DEFAULT 'Pending',
+            tags TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     ''')
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS todo_tags (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            color TEXT DEFAULT 'blue'
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(255) NOT NULL,
+            color VARCHAR(50) DEFAULT 'blue'
         )
     ''')
     # Teams Table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS teams (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(255) NOT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     ''')
     # Team Members Table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS team_members (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            team_id INTEGER,
-            account_id TEXT NOT NULL,
-            display_name TEXT NOT NULL,
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            team_id INT,
+            account_id VARCHAR(255) NOT NULL,
+            display_name VARCHAR(255) NOT NULL,
             avatar_url TEXT,
             FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE
         )
@@ -290,10 +356,10 @@ def init_db():
     # Sprints Table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS sprints (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            team_id INTEGER,
-            name TEXT NOT NULL,
-            state TEXT DEFAULT 'active',
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            team_id INT,
+            name VARCHAR(255) NOT NULL,
+            state VARCHAR(50) DEFAULT 'active',
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE
         )
@@ -301,9 +367,9 @@ def init_db():
     # Sprint Weeks Table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS sprint_weeks (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            sprint_id INTEGER,
-            week_number INTEGER NOT NULL,
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            sprint_id INT,
+            week_number INT NOT NULL,
             goal TEXT,
             FOREIGN KEY (sprint_id) REFERENCES sprints(id) ON DELETE CASCADE
         )
@@ -311,38 +377,45 @@ def init_db():
     # Sprint Tickets Table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS sprint_tickets (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            sprint_id INTEGER,
-            week_id INTEGER,
-            issue_key TEXT NOT NULL,
-            comment TEXT DEFAULT '',
-            pr_raised INTEGER DEFAULT 0,
-            demo_done INTEGER DEFAULT 0,
-            pr_merged INTEGER DEFAULT 0,
-            deploy_status TEXT DEFAULT 'N/A',
-            qa_assignee TEXT DEFAULT '',
-            qa_status TEXT DEFAULT 'Pending',
-            bugs_found TEXT DEFAULT '',
-            requirements_clear TEXT DEFAULT 'No',
-            completed INTEGER DEFAULT 0,
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            sprint_id INT,
+            week_id INT,
+            issue_key VARCHAR(255) NOT NULL,
+            comment TEXT,
+            pr_raised INT DEFAULT 0,
+            demo_done INT DEFAULT 0,
+            pr_merged INT DEFAULT 0,
+            deploy_status VARCHAR(50) DEFAULT 'N/A',
+            qa_assignee VARCHAR(255) DEFAULT '',
+            qa_status VARCHAR(50) DEFAULT 'Pending',
+            bugs_found TEXT,
+            requirements_clear VARCHAR(50) DEFAULT 'No',
+            completed INT DEFAULT 0,
+            is_flagged INT DEFAULT 0,
             FOREIGN KEY (sprint_id) REFERENCES sprints(id) ON DELETE CASCADE,
             FOREIGN KEY (week_id) REFERENCES sprint_weeks(id) ON DELETE CASCADE
         )
     ''')
 
+    # Ensure is_flagged exists if table already exists
+    try:
+        cursor.execute("ALTER TABLE sprint_tickets ADD COLUMN is_flagged INT DEFAULT 0")
+    except:
+        pass
+
     # Scrum Notes Table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS scrum_notes (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            date        DATE    NOT NULL,
-            team_id     INTEGER NOT NULL,
-            member_id   TEXT    NOT NULL,
-            member_name TEXT    NOT NULL,
-            ticket_key  TEXT    NOT NULL,
-            comment     TEXT    DEFAULT \'\',
+            id          INT AUTO_INCREMENT PRIMARY KEY,
+            `date`      DATE    NOT NULL,
+            team_id     INT NOT NULL,
+            member_id   VARCHAR(255)    NOT NULL,
+            member_name VARCHAR(255)    NOT NULL,
+            ticket_key  VARCHAR(255)    NOT NULL,
+            comment     TEXT,
             deadline    DATE,
-            status      TEXT    DEFAULT \'Pending\',
-            tags        TEXT    DEFAULT \'\',
+            status      VARCHAR(50)    DEFAULT 'Pending',
+            tags        TEXT,
             created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE
         )
@@ -351,85 +424,107 @@ def init_db():
     # Jira Config Table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS jira_config (
-            id INTEGER PRIMARY KEY CHECK (id = 1),
-            email TEXT,
+            id INT PRIMARY KEY,
+            email VARCHAR(255),
             api_token TEXT,
-            project_key TEXT,
-            jira_domain TEXT
+            project_key VARCHAR(255),
+            jira_domain VARCHAR(255)
         )
     ''')
     
-    # Migration: Add new columns if they don't exist
-    cursor.execute("PRAGMA table_info(jira_config)")
-    columns = [row[1] for row in cursor.fetchall()]
-    if 'jira_domain' not in columns:
-        cursor.execute("ALTER TABLE jira_config ADD COLUMN jira_domain TEXT")
-    
-    cursor.execute("PRAGMA table_info(sprint_tickets)")
-    columns = [row[1] for row in cursor.fetchall()]
-    if 'comment' not in columns:
-        cursor.execute("ALTER TABLE sprint_tickets ADD COLUMN comment TEXT DEFAULT ''")
-    if 'pr_raised' not in columns:
-        cursor.execute("ALTER TABLE sprint_tickets ADD COLUMN pr_raised INTEGER DEFAULT 0")
-    if 'demo_done' not in columns:
-        cursor.execute("ALTER TABLE sprint_tickets ADD COLUMN demo_done INTEGER DEFAULT 0")
-    if 'pr_merged' not in columns:
-        cursor.execute("ALTER TABLE sprint_tickets ADD COLUMN pr_merged INTEGER DEFAULT 0")
-    if 'deploy_status' not in columns:
-        cursor.execute("ALTER TABLE sprint_tickets ADD COLUMN deploy_status TEXT DEFAULT 'N/A'")
-    if 'qa_assignee' not in columns:
-        cursor.execute("ALTER TABLE sprint_tickets ADD COLUMN qa_assignee TEXT DEFAULT ''")
-    if 'qa_status' not in columns:
-        cursor.execute("ALTER TABLE sprint_tickets ADD COLUMN qa_status TEXT DEFAULT 'Pending'")
-    if 'bugs_found' not in columns:
-        cursor.execute("ALTER TABLE sprint_tickets ADD COLUMN bugs_found TEXT DEFAULT ''")
-    if 'requirements_clear' not in columns:
-        cursor.execute("ALTER TABLE sprint_tickets ADD COLUMN requirements_clear TEXT DEFAULT 'No'")
-    if 'completed' not in columns:
-        cursor.execute("ALTER TABLE sprint_tickets ADD COLUMN completed INTEGER DEFAULT 0")
-
-    cursor.execute("PRAGMA table_info(todos)")
-    columns = [row[1] for row in cursor.fetchall()]
-    if 'tags' not in columns:
-        cursor.execute("ALTER TABLE todos ADD COLUMN tags TEXT DEFAULT '[]'")
-
-    # Migration: Add tags column to scrum_notes if it doesn't exist
-    cursor.execute("PRAGMA table_info(scrum_notes)")
-    columns = [row[1] for row in cursor.fetchall()]
-    if 'tags' not in columns:
-        cursor.execute("ALTER TABLE scrum_notes ADD COLUMN tags TEXT DEFAULT ''")
-
     # Custom Reports Table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS custom_reports (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(255) NOT NULL,
             jql TEXT NOT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     ''')
 
-    # Users Table
+    # --- DYNAMIC TRACKERS (V2) ---
     cursor.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            email TEXT UNIQUE NOT NULL,
-            name TEXT,
-            google_id TEXT UNIQUE,
-            password_hash TEXT,
-            role_id INTEGER,
-            api_token TEXT UNIQUE,
+        CREATE TABLE IF NOT EXISTS trackers_v2 (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(255) NOT NULL,
+            jql TEXT NOT NULL,
+            created_by INT,
+            is_public BOOLEAN DEFAULT FALSE,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (role_id) REFERENCES roles(id)
+            FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+        )
+    ''')
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS tracker_columns (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            tracker_id INT NOT NULL,
+            name VARCHAR(255) NOT NULL,
+            column_type ENUM('text', 'checkbox', 'select', 'user', 'rca') NOT NULL,
+            options TEXT,
+            order_index INT DEFAULT 0,
+            FOREIGN KEY (tracker_id) REFERENCES trackers_v2(id) ON DELETE CASCADE
+        )
+    ''')
+
+    # Ensure rca is in the enum if table already exists
+    try:
+        cursor.execute("ALTER TABLE tracker_columns MODIFY COLUMN column_type ENUM('text', 'checkbox', 'select', 'user', 'rca') NOT NULL")
+    except:
+        pass
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS tracker_data_v2 (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            tracker_id INT NOT NULL,
+            issue_key VARCHAR(50) NOT NULL,
+            column_id INT NOT NULL,
+            value TEXT,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY unique_cell (tracker_id, issue_key, column_id),
+            FOREIGN KEY (tracker_id) REFERENCES trackers_v2(id) ON DELETE CASCADE,
+            FOREIGN KEY (column_id) REFERENCES tracker_columns(id) ON DELETE CASCADE
+        )
+    ''')
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS tracker_rca (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            tracker_id INT NOT NULL,
+            issue_key VARCHAR(50) NOT NULL,
+            issue_details TEXT,
+            rca_text TEXT,
+            fix_text TEXT,
+            prevention_text TEXT,
+            token VARCHAR(100) UNIQUE,
+            submitted_at DATETIME,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY unique_rca (tracker_id, issue_key),
+            FOREIGN KEY (tracker_id) REFERENCES trackers_v2(id) ON DELETE CASCADE
         )
     ''')
 
     # Roles Table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS roles (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT UNIQUE NOT NULL,
-            permissions TEXT DEFAULT '{}'
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(255) UNIQUE NOT NULL,
+            permissions TEXT
+        )
+    ''')
+
+    # Users Table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            email VARCHAR(255) UNIQUE NOT NULL,
+            name VARCHAR(255),
+            google_id VARCHAR(255) UNIQUE,
+            password_hash VARCHAR(255),
+            role_id INT,
+            api_token VARCHAR(255) UNIQUE,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (role_id) REFERENCES roles(id)
         )
     ''')
 
@@ -447,15 +542,21 @@ def init_db():
             perms = json.loads(row[0]) if row[0] else {}
             if 'allowed_pages' not in perms:
                 perms['allowed_pages'] = ['dashboard']
-                cursor.execute("UPDATE roles SET permissions = ? WHERE name = 'Viewer'", (json.dumps(perms),))
+                cursor.execute("UPDATE roles SET permissions = %s WHERE name = 'Viewer'", (json.dumps(perms),))
     
-    # Seed Admin User if empty (Optional: Remove in prod or rely on first login)
-    cursor.execute("SELECT count(*) FROM users")
+    # App Config Table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS app_config (
+            config_key VARCHAR(255) PRIMARY KEY,
+            config_value TEXT,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        )
+    ''')
+
+    # Seed Default Header Title if empty
+    cursor.execute("SELECT count(*) FROM app_config WHERE config_key = 'header_title'")
     if cursor.fetchone()[0] == 0:
-        # Create a default admin user: admin@example.com / admin123 (hashed)
-        # Note: In a real scenario, we might want to force setup or rely on OAuth.
-        # Here we leave it empty or create a placeholder. 
-        pass
+        cursor.execute("INSERT INTO app_config (config_key, config_value) VALUES ('header_title', 'Jira Analytics')")
 
     conn.commit()
     conn.close()
@@ -477,8 +578,8 @@ def jira_settings_api():
     if request.method == "POST" and not current_user.has_permission("manage_settings") and current_user.role_name != 'Admin':
         return jsonify({"error": "Permission denied"}), 403
         
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+    conn, cursor = get_db_connection()
+    if not conn: return jsonify({"error": "Database error"}), 500
     
     if request.method == "POST":
         data = request.json
@@ -492,12 +593,12 @@ def jira_settings_api():
             
         cursor.execute("""
             INSERT INTO jira_config (id, email, api_token, project_key, jira_domain)
-            VALUES (1, ?, ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET
-                email=excluded.email,
-                api_token=excluded.api_token,
-                project_key=excluded.project_key,
-                jira_domain=excluded.jira_domain
+            VALUES (1, %s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+                email=VALUES(email),
+                api_token=VALUES(api_token),
+                project_key=VALUES(project_key),
+                jira_domain=VALUES(jira_domain)
         """, (email, token, project, domain))
         conn.commit()
         conn.close()
@@ -516,10 +617,50 @@ def jira_settings_api():
             })
         return jsonify({"email": "", "token": "", "project_key": "", "jira_domain": DEFAULT_JIRA_DOMAIN})
 
+@app.route("/api/settings/app_config", methods=["GET", "POST"])
+@login_required
+def app_config_settings_api():
+    if request.method == "POST" and current_user.role_name != 'Admin':
+        return jsonify({"error": "Permission denied"}), 403
+        
+    conn, cursor = get_db_connection(dictionary=True)
+    if not conn: return jsonify({"error": "Database error"}), 500
+    
+    if request.method == "POST":
+        data = request.json or {}
+        header_title = data.get("header_title", "").strip()
+        
+        if not header_title:
+            conn.close()
+            return jsonify({"error": "Header title is required"}), 400
+            
+        try:
+            cursor.execute("""
+                INSERT INTO app_config (config_key, config_value)
+                VALUES ('header_title', %s)
+                ON DUPLICATE KEY UPDATE config_value = VALUES(config_value)
+            """, (header_title,))
+            conn.commit()
+            return jsonify({"success": True})
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+        finally:
+            conn.close()
+    else: # GET
+        try:
+            cursor.execute("SELECT config_key, config_value FROM app_config")
+            rows = cursor.fetchall()
+            config = {row['config_key']: row['config_value'] for row in rows}
+            return jsonify(config)
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+        finally:
+            conn.close()
+
 @app.route("/api/settings/todo_tags", methods=["GET", "POST"])
 def todo_tags_settings_api():
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+    conn, cursor = get_db_connection(dictionary=True)
+    if not conn: return jsonify({"error": "Database error"}), 500
     
     if request.method == "POST":
         data = request.json or {}
@@ -530,7 +671,7 @@ def todo_tags_settings_api():
             conn.close()
             return jsonify({"error": "Tag name is required"}), 400
         
-        cursor.execute("INSERT INTO todo_tags (name, color) VALUES (?, ?)", (name, color))
+        cursor.execute("INSERT INTO todo_tags (name, color) VALUES (%s, %s)", (name, color))
         conn.commit()
         tag_id = cursor.lastrowid
         conn.close()
@@ -538,16 +679,17 @@ def todo_tags_settings_api():
         
     else:
         cursor.execute("SELECT id, name, color FROM todo_tags ORDER BY id ASC")
-        tags = [{"id": r[0], "name": r[1], "color": r[2]} for r in cursor.fetchall()]
+        # Use column names since we use dictionary=True
+        tags = [{"id": r['id'], "name": r['name'], "color": r['color']} for r in cursor.fetchall()]
         conn.close()
         return jsonify(tags)
 
 @app.route("/api/settings/todo_tags/<int:tag_id>", methods=["DELETE"])
 @login_required
 def delete_todo_tag(tag_id):
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM todo_tags WHERE id = ?", (tag_id,))
+    conn, cursor = get_db_connection()
+    if not conn: return jsonify({"error": "Database error"}), 500
+    cursor.execute("DELETE FROM todo_tags WHERE id = %s", (tag_id,))
     conn.commit()
     conn.close()
     return jsonify({"success": True})
@@ -574,26 +716,26 @@ def auth_callback():
         name = user_info.get('name')
         google_id = user_info.get('sub')
         
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
+        conn, cursor = get_db_connection()
+        if not conn: return "Database error", 500
         
         # Check if user exists
-        cursor.execute("SELECT id FROM users WHERE email = ?", (email,))
+        cursor.execute("SELECT id FROM users WHERE email = %s", (email,))
         row = cursor.fetchone()
         
         if row:
             user_id = row[0]
             # Update google_id if missing
-            cursor.execute("UPDATE users SET google_id = ?, name = ? WHERE id = ?", (google_id, name, user_id))
+            cursor.execute("UPDATE users SET google_id = %s, name = %s WHERE id = %s", (google_id, name, user_id))
         else:
             # Create new user
-            # Assign 'Viewer' role by default (assuming ID 3 is Viewer based on init order, but safer to lookup)
+            # Assign 'Viewer' role by default
             cursor.execute("SELECT id FROM roles WHERE name = 'Viewer'")
             role_row = cursor.fetchone()
             role_id = role_row[0] if role_row else 3
             
             api_token = secrets.token_hex(32)
-            cursor.execute("INSERT INTO users (email, name, google_id, role_id, api_token) VALUES (?, ?, ?, ?, ?)",
+            cursor.execute("INSERT INTO users (email, name, google_id, role_id, api_token) VALUES (%s, %s, %s, %s, %s)",
                            (email, name, google_id, role_id, api_token))
             user_id = cursor.lastrowid
             
@@ -622,9 +764,8 @@ def logout():
 @app.route("/admin/users")
 @admin_required
 def admin_users():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
+    conn, cursor = get_db_connection(dictionary=True)
+    if not conn: return jsonify({"error": "Database error"}), 500
     cursor.execute("""
         SELECT u.*, r.name as role_name 
         FROM users u 
@@ -642,9 +783,9 @@ def admin_users():
 @admin_required
 def update_user_role(user_id):
     role_id = request.json.get("role_id")
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("UPDATE users SET role_id = ? WHERE id = ?", (role_id, user_id))
+    conn, cursor = get_db_connection()
+    if not conn: return jsonify({"error": "Database error"}), 500
+    cursor.execute("UPDATE users SET role_id = %s WHERE id = %s", (role_id, user_id))
     conn.commit()
     conn.close()
     return jsonify({"success": True})
@@ -662,6 +803,7 @@ PAGE_PERMISSIONS = [
     {"key": "todo", "label": "Todo List"},
     {"key": "tracker", "label": "Tracker"},
     {"key": "status_tracker", "label": "Status Tracker"},
+    {"key": "trackers_v2", "label": "Custom Trackers"},
     {"key": "query_builder", "label": "Query Builder"},
     {"key": "bulk_update", "label": "Bulk Update"},
     {"key": "merge_pdf", "label": "Merge PDF"}
@@ -670,9 +812,8 @@ PAGE_PERMISSIONS = [
 @app.route("/admin/roles")
 @admin_required
 def admin_roles():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
+    conn, cursor = get_db_connection(dictionary=True)
+    if not conn: return jsonify({"error": "Database error"}), 500
     cursor.execute("SELECT * FROM roles ORDER BY id ASC")
     roles = []
     for row in cursor.fetchall():
@@ -702,23 +843,23 @@ def create_role():
     if not name:
         return jsonify({"error": "Role name is required"}), 400
     
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+    conn, cursor = get_db_connection()
+    if not conn: return jsonify({"error": "Database error"}), 500
     try:
-        cursor.execute("INSERT INTO roles (name, permissions) VALUES (?, '{}')", (name,))
+        cursor.execute("INSERT INTO roles (name, permissions) VALUES (%s, '{}')", (name,))
         conn.commit()
         role_id = cursor.lastrowid
         conn.close()
         return jsonify({"success": True, "id": role_id, "name": name})
-    except sqlite3.IntegrityError:
-        conn.close()
-        return jsonify({"error": "Role name already exists"}), 400
+    except Error:
+        if conn: conn.close()
+        return jsonify({"error": "Role name already exists or database error"}), 400
 
 @app.route("/api/admin/roles/<int:role_id>", methods=["PUT", "DELETE"])
 @admin_required
 def manage_role(role_id):
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+    conn, cursor = get_db_connection()
+    if not conn: return jsonify({"error": "Database error"}), 500
     
     if request.method == "DELETE":
         # Prevent deleting the last Admin role or system roles if necessary
@@ -727,9 +868,9 @@ def manage_role(role_id):
             conn.close()
             return jsonify({"error": "Cannot delete the default Admin role"}), 400
             
-        cursor.execute("DELETE FROM roles WHERE id = ?", (role_id,))
+        cursor.execute("DELETE FROM roles WHERE id = %s", (role_id,))
         # Optional: Reset users with this role to Viewer (ID 3) or NULL
-        cursor.execute("UPDATE users SET role_id = 3 WHERE role_id = ?", (role_id,))
+        cursor.execute("UPDATE users SET role_id = 3 WHERE role_id = %s", (role_id,))
         
         conn.commit()
         conn.close()
@@ -741,7 +882,7 @@ def manage_role(role_id):
         
         if permissions is not None:
             perm_json = json.dumps(permissions)
-            cursor.execute("UPDATE roles SET permissions = ? WHERE id = ?", (perm_json, role_id))
+            cursor.execute("UPDATE roles SET permissions = %s WHERE id = %s", (perm_json, role_id))
             conn.commit()
             conn.close()
             return jsonify({"success": True})
@@ -830,7 +971,7 @@ def jira_search():
     
     try:
         res = requests.get(
-            f"{JIRA_DOMAIN}/rest/api/3/search",
+            f"{JIRA_DOMAIN}/rest/api/3/search/jql",
             headers=headers_dict,
             params={
                 "jql": jql,
@@ -1037,18 +1178,29 @@ def scoreboard_data():
 @app.route("/api/dashboard/sprint_stats", methods=["POST"])
 def sprint_stats():
     data = request.json
-    team_id = data.get("team_id")
+    team_ids = data.get("team_id")
     sprint_id = data.get("sprint_id") # Optional Jira Sprint ID
     production_only = data.get("production_only", False)
     
-    if not team_id:
+    if not team_ids:
         return jsonify({"error": "Team is required"}), 400
         
-    # 1. Get Team Members
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("SELECT account_id, display_name, avatar_url FROM team_members WHERE team_id = ?", (team_id,))
-    members = [{"id": r[0], "name": r[1], "avatar": r[2]} for r in cursor.fetchall()]
+    if not isinstance(team_ids, list):
+        team_ids = [team_ids]
+
+    # 1. Get Team Members for all selected teams
+    conn, cursor = get_db_connection()
+    if not conn: return jsonify({"error": "Database error"}), 500
+    
+    placeholders = ', '.join(['%s'] * len(team_ids))
+    cursor.execute(f"SELECT account_id, display_name, avatar_url FROM team_members WHERE team_id IN ({placeholders})", tuple(team_ids))
+    
+    # Use a dictionary to ensure members are unique across multiple teams
+    members_map = {}
+    for r in cursor.fetchall():
+        members_map[r[0]] = {"id": r[0], "name": r[1], "avatar": r[2]}
+    
+    members = list(members_map.values())
     conn.close()
     
     if not members:
@@ -1092,8 +1244,20 @@ def sprint_stats():
         all_issues = res.get("issues", [])
         
         # 3. Calculate Stats
-        done_issues = [i for i in all_issues if i["fields"]["status"]["statusCategory"]["key"] == "done"]
-        active_issues = [i for i in all_issues if i["fields"]["status"]["statusCategory"]["key"] != "done"]
+        # A ticket is considered "done" if its status category is 'done' 
+        # OR if it's in a status that implies development is complete (like Ready for QA)
+        done_statuses = ["DONE", "RESOLVED", "DEPLOYED", "STAGED", "READY FOR QA", "READY FOR STAGING", "READY FOR INTERNAL DEMO", "CLOSED", "NOT A BUG", "UNABLE TO REPRODUCE"]
+        
+        done_issues = []
+        active_issues = []
+        for i in all_issues:
+            status_name = i["fields"]["status"]["name"].upper()
+            status_cat = i["fields"]["status"]["statusCategory"]["key"].lower()
+            
+            if status_cat == "done" or status_name in done_statuses:
+                done_issues.append(i)
+            else:
+                active_issues.append(i)
         
         total_solved = len(done_issues)
         bugs_solved = len([i for i in done_issues if i["fields"]["issuetype"]["name"].lower() == "bug"])
@@ -1108,7 +1272,10 @@ def sprint_stats():
             if assignee:
                 aid = assignee["accountId"]
                 if aid in performance:
-                    if i["fields"]["status"]["statusCategory"]["key"] == "done":
+                    status_name = i["fields"]["status"]["name"].upper()
+                    status_cat = i["fields"]["status"]["statusCategory"]["key"].lower()
+                    
+                    if status_cat == "done" or status_name in done_statuses:
                         performance[aid]["solved"] += 1
                     else:
                         performance[aid]["active"] += 1
@@ -1145,13 +1312,12 @@ def sprint_stats():
         # NEW: Fetch local tracking data for the table
         tracking_data = {}
         if sprint_id:
-            conn = sqlite3.connect(DB_PATH)
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
+            conn, cursor = get_db_connection(dictionary=True)
+            if not conn: return jsonify({"error": "Database error"}), 500
             cursor.execute("""
-                SELECT issue_key, pr_raised, pr_merged, deploy_status, qa_assignee, qa_status, bugs_found, requirements_clear, completed
+                SELECT issue_key, pr_raised, pr_merged, deploy_status, qa_assignee, qa_status, bugs_found, requirements_clear, completed, is_flagged
                 FROM sprint_tickets 
-                WHERE sprint_id = ?
+                WHERE sprint_id = %s
             """, (sprint_id,))
             rows = cursor.fetchall()
             for r in rows:
@@ -1163,12 +1329,14 @@ def sprint_stats():
                     "qa_status": r["qa_status"],
                     "bugs_found": r["bugs_found"],
                     "requirements_clear": r["requirements_clear"] or "No",
-                    "completed": bool(r["completed"])
+                    "completed": bool(r["completed"]),
+                    "is_flagged": bool(r["is_flagged"])
                 }
             conn.close()
 
         # Merge local data into all issues for the tracking table
         tracking_issues = []
+        extra_bug_keys = set()
         for i in all_issues:
             key = i["key"]
             local = tracking_data.get(key, {
@@ -1179,8 +1347,17 @@ def sprint_stats():
                 "qa_status": "Pending",
                 "bugs_found": "",
                 "requirements_clear": "No",
-                "completed": False
+                "completed": False,
+                "is_flagged": False
             })
+            
+            # Collect bug keys to fetch their status later if they are not in all_issues
+            if local["bugs_found"]:
+                for b_key in local["bugs_found"].split(","):
+                    b_key = b_key.strip()
+                    if b_key and b_key not in [iss["key"] for iss in all_issues]:
+                        extra_bug_keys.add(b_key)
+
             tracking_issues.append({
                 "key": key,
                 "summary": i["fields"]["summary"],
@@ -1190,6 +1367,29 @@ def sprint_stats():
                 "type_icon": i["fields"]["issuetype"].get("iconUrl"),
                 "local": local
             })
+
+        # Fetch status for extra bugs that are not in the main issue list
+        if extra_bug_keys:
+            try:
+                extra_jql = f"key IN ({','.join(extra_bug_keys)})"
+                extra_res = requests.get(
+                    f"{JIRA_DOMAIN}/rest/api/3/search/jql",
+                    headers=headers_dict,
+                    params={
+                        "jql": extra_jql,
+                        "fields": "status"
+                    }
+                ).json()
+                
+                for i in extra_res.get("issues", []):
+                    tracking_issues.append({
+                        "key": i["key"],
+                        "status": i["fields"]["status"]["name"],
+                        "status_category": i["fields"]["status"]["statusCategory"]["key"],
+                        "is_extra": True # Mark as extra info for frontend map
+                    })
+            except Exception as e:
+                print(f"Error fetching extra bug statuses: {e}")
 
         return jsonify({
             "total_solved": total_solved,
@@ -1223,21 +1423,21 @@ def update_sprint_ticket_field():
         return jsonify({"error": "Missing required fields"}), 400
         
     # Security: whitelist fields
-    allowed_fields = ['pr_raised', 'pr_merged', 'deploy_status', 'qa_assignee', 'qa_status', 'bugs_found', 'requirements_clear', 'completed', 'comment', 'demo_done']
+    allowed_fields = ['pr_raised', 'pr_merged', 'deploy_status', 'qa_assignee', 'qa_status', 'bugs_found', 'requirements_clear', 'completed', 'comment', 'demo_done', 'is_flagged']
     if field not in allowed_fields:
         return jsonify({"error": "Invalid field"}), 400
         
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+    conn, cursor = get_db_connection()
+    if not conn: return jsonify({"error": "Database error"}), 500
     
     # Check if record exists
-    cursor.execute("SELECT id FROM sprint_tickets WHERE sprint_id = ? AND issue_key = ?", (sprint_id, issue_key))
+    cursor.execute("SELECT id FROM sprint_tickets WHERE sprint_id = %s AND issue_key = %s", (sprint_id, issue_key))
     row = cursor.fetchone()
     
     if row:
-        cursor.execute(f"UPDATE sprint_tickets SET {field} = ? WHERE id = ?", (value, row[0]))
+        cursor.execute(f"UPDATE sprint_tickets SET {field} = %s WHERE id = %s", (value, row[0]))
     else:
-        cursor.execute(f"INSERT INTO sprint_tickets (sprint_id, issue_key, {field}) VALUES (?, ?, ?)", (sprint_id, issue_key, value))
+        cursor.execute(f"INSERT INTO sprint_tickets (sprint_id, issue_key, {field}) VALUES (%s, %s, %s)", (sprint_id, issue_key, value))
         
     conn.commit()
     conn.close()
@@ -1493,8 +1693,8 @@ def reports_page():
 
 @app.route("/api/reports", methods=["GET", "POST"])
 def manage_reports():
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+    conn, cursor = get_db_connection()
+    if not conn: return jsonify({"error": "Database error"}), 500
     
     if request.method == "POST":
         data = request.json
@@ -1504,7 +1704,7 @@ def manage_reports():
         if not name or not jql:
             return jsonify({"error": "Name and JQL are required"}), 400
             
-        cursor.execute("INSERT INTO custom_reports (name, jql) VALUES (?, ?)", (name, jql))
+        cursor.execute("INSERT INTO custom_reports (name, jql) VALUES (%s, %s)", (name, jql))
         conn.commit()
         report_id = cursor.lastrowid
         conn.close()
@@ -1518,11 +1718,11 @@ def manage_reports():
 
 @app.route("/api/reports/<int:report_id>", methods=["GET", "PUT", "DELETE"])
 def report_detail(report_id):
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+    conn, cursor = get_db_connection()
+    if not conn: return jsonify({"error": "Database error"}), 500
     
     if request.method == "GET":
-        cursor.execute("SELECT id, name, jql, created_at FROM custom_reports WHERE id = ?", (report_id,))
+        cursor.execute("SELECT id, name, jql, created_at FROM custom_reports WHERE id = %s", (report_id,))
         row = cursor.fetchone()
         conn.close()
         if row:
@@ -1537,16 +1737,395 @@ def report_detail(report_id):
         if not name or not jql:
             return jsonify({"error": "Name and JQL are required"}), 400
             
-        cursor.execute("UPDATE custom_reports SET name = ?, jql = ? WHERE id = ?", (name, jql, report_id))
+        cursor.execute("UPDATE custom_reports SET name = %s, jql = %s WHERE id = %s", (name, jql, report_id))
         conn.commit()
         conn.close()
         return jsonify({"success": True})
         
     elif request.method == "DELETE":
-        cursor.execute("DELETE FROM custom_reports WHERE id = ?", (report_id,))
+        cursor.execute("DELETE FROM custom_reports WHERE id = %s", (report_id,))
         conn.commit()
         conn.close()
         return jsonify({"success": True})
+
+# =========================
+# 📊 CUSTOM TRACKERS (V2)
+# =========================
+@app.route("/trackers_v2")
+@login_required
+def trackers_v2_page():
+    _, _, _, domain = _get_jira_config()
+    return render_template("trackers_v2.html", jira_domain=domain)
+
+@app.route("/api/trackers_v2", methods=["GET", "POST"])
+@login_required
+def manage_trackers_v2():
+    if request.method == "POST" and current_user.role_name == 'Viewer':
+        return jsonify({"error": "Permission denied"}), 403
+        
+    conn, cursor = get_db_connection(dictionary=True)
+    if not conn: return jsonify({"error": "Database error"}), 500
+    
+    if request.method == "POST":
+        data = request.json
+        name = data.get("name")
+        jql = data.get("jql")
+        columns = data.get("columns", [])
+        is_public = data.get("is_public", False)
+        
+        if not name or not jql:
+            return jsonify({"error": "Name and JQL are required"}), 400
+            
+        try:
+            # Create Tracker
+            cursor.execute("""
+                INSERT INTO trackers_v2 (name, jql, created_by, is_public)
+                VALUES (%s, %s, %s, %s)
+            """, (name, jql, current_user.id, is_public))
+            tracker_id = cursor.lastrowid
+            
+            # Create Columns
+            for idx, col in enumerate(columns):
+                cursor.execute("""
+                    INSERT INTO tracker_columns (tracker_id, name, column_type, options, order_index)
+                    VALUES (%s, %s, %s, %s, %s)
+                """, (tracker_id, col["name"], col["type"], json.dumps(col.get("options", [])), idx))
+                
+            conn.commit()
+            return jsonify({"id": tracker_id, "success": True})
+        except Exception as e:
+            conn.rollback()
+            return jsonify({"error": str(e)}), 500
+        finally:
+            conn.close()
+    
+    else:  # GET - List all trackers
+        cursor.execute("""
+            SELECT t.*, u.name as creator_name 
+            FROM trackers_v2 t
+            LEFT JOIN users u ON t.created_by = u.id
+            WHERE t.created_by = %s OR t.is_public = TRUE
+            ORDER BY t.created_at DESC
+        """, (current_user.id,))
+        trackers = cursor.fetchall()
+        conn.close()
+        return jsonify(trackers)
+
+@app.route("/api/trackers_v2/<int:tracker_id>", methods=["GET", "PUT", "DELETE"])
+@login_required
+def tracker_v2_detail(tracker_id):
+    if request.method in ["PUT", "DELETE"] and current_user.role_name == 'Viewer':
+        return jsonify({"error": "Permission denied"}), 403
+        
+    conn, cursor = get_db_connection(dictionary=True)
+    if not conn: return jsonify({"error": "Database error"}), 500
+    
+    if request.method == "DELETE":
+        # Check ownership
+        cursor.execute("SELECT created_by FROM trackers_v2 WHERE id = %s", (tracker_id,))
+        tracker = cursor.fetchone()
+        if not tracker:
+            conn.close()
+            return jsonify({"error": "Tracker not found"}), 404
+        if tracker["created_by"] != current_user.id and current_user.role_name != 'Admin':
+            conn.close()
+            return jsonify({"error": "Permission denied"}), 403
+            
+        cursor.execute("DELETE FROM trackers_v2 WHERE id = %s", (tracker_id,))
+        conn.commit()
+        conn.close()
+        return jsonify({"success": True})
+        
+    elif request.method == "PUT":
+        data = request.json
+        try:
+            # 1. Update Tracker Metadata
+            cursor.execute("""
+                UPDATE trackers_v2 
+                SET name = %s, jql = %s, is_public = %s
+                WHERE id = %s AND (created_by = %s OR %s = 'Admin')
+            """, (data["name"], data["jql"], data["is_public"], tracker_id, current_user.id, current_user.role_name))
+            
+            # 2. Update Columns
+            new_columns = data.get("columns", [])
+            existing_col_ids = []
+            
+            for idx, col in enumerate(new_columns):
+                col_name = col.get("name")
+                col_type = col.get("type")
+                col_options = json.dumps(col.get("options", []))
+                col_id = col.get("id")
+                
+                if col_id:
+                    # Update existing column
+                    cursor.execute("""
+                        UPDATE tracker_columns 
+                        SET name = %s, column_type = %s, options = %s, order_index = %s
+                        WHERE id = %s AND tracker_id = %s
+                    """, (col_name, col_type, col_options, idx, col_id, tracker_id))
+                    existing_col_ids.append(col_id)
+                else:
+                    # Insert new column
+                    cursor.execute("""
+                        INSERT INTO tracker_columns (tracker_id, name, column_type, options, order_index)
+                        VALUES (%s, %s, %s, %s, %s)
+                    """, (tracker_id, col_name, col_type, col_options, idx))
+                    existing_col_ids.append(cursor.lastrowid)
+            
+            # 3. Delete removed columns
+            if existing_col_ids:
+                format_strings = ','.join(['%s'] * len(existing_col_ids))
+                cursor.execute(f"DELETE FROM tracker_columns WHERE tracker_id = %s AND id NOT IN ({format_strings})", [tracker_id] + existing_col_ids)
+            else:
+                cursor.execute("DELETE FROM tracker_columns WHERE tracker_id = %s", (tracker_id,))
+                
+            conn.commit()
+            return jsonify({"success": True})
+        except Exception as e:
+            conn.rollback()
+            return jsonify({"error": str(e)}), 500
+        finally:
+            conn.close()
+
+    else: # GET
+        cursor.execute("SELECT * FROM trackers_v2 WHERE id = %s", (tracker_id,))
+        tracker = cursor.fetchone()
+        if not tracker:
+            conn.close()
+            return jsonify({"error": "Tracker not found"}), 404
+            
+        cursor.execute("SELECT * FROM tracker_columns WHERE tracker_id = %s ORDER BY order_index ASC", (tracker_id,))
+        columns = cursor.fetchall()
+        for col in columns:
+            col["options"] = json.loads(col["options"]) if col["options"] else []
+            
+        conn.close()
+        return jsonify({**tracker, "columns": columns})
+
+@app.route("/api/trackers_v2/<int:tracker_id>/data", methods=["GET", "POST"])
+@login_required
+def tracker_v2_data(tracker_id):
+    if request.method == "POST" and current_user.role_name == 'Viewer':
+        return jsonify({"error": "Permission denied"}), 403
+        
+    if request.method == "POST":
+        data = request.json
+        issue_key = data.get("issue_key")
+        column_id = data.get("column_id")
+        value = data.get("value")
+        
+        if not all([issue_key, column_id]):
+            return jsonify({"error": "Missing key data"}), 400
+            
+        conn, cursor = get_db_connection()
+        if not conn: return jsonify({"error": "Database error"}), 500
+        try:
+            cursor.execute("""
+                INSERT INTO tracker_data_v2 (tracker_id, issue_key, column_id, value)
+                VALUES (%s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE value = VALUES(value)
+            """, (tracker_id, issue_key, column_id, value))
+            conn.commit()
+            return jsonify({"success": True})
+        except Exception as e:
+            conn.rollback()
+            return jsonify({"error": str(e)}), 500
+        finally:
+            conn.close()
+            
+    else: # GET - Fetch Jira Data + Stored Data
+        conn, cursor = get_db_connection(dictionary=True)
+        if not conn: return jsonify({"error": "Database error"}), 500
+        
+        try:
+            cursor.execute("SELECT jql FROM trackers_v2 WHERE id = %s", (tracker_id,))
+            tracker = cursor.fetchone()
+            if not tracker:
+                return jsonify({"error": "Tracker not found"}), 404
+                
+            # Fetch Local Data
+            cursor.execute("SELECT issue_key, column_id, value FROM tracker_data_v2 WHERE tracker_id = %s", (tracker_id,))
+            stored_rows = cursor.fetchall()
+            stored_data = {}
+            for row in stored_rows:
+                if row["issue_key"] not in stored_data:
+                    stored_data[row["issue_key"]] = {}
+                stored_data[row["issue_key"]][row["column_id"]] = row["value"]
+
+            # Fetch RCA status
+            cursor.execute("SELECT issue_key, submitted_at FROM tracker_rca WHERE tracker_id = %s", (tracker_id,))
+            rca_rows = cursor.fetchall()
+            rca_status = {row["issue_key"]: (row["submitted_at"] is not None) for row in rca_rows}
+                
+        except Exception as e:
+            return jsonify({"error": f"Database Error: {str(e)}"}), 500
+        finally:
+            conn.close()
+
+        # Fetch Jira Data using JQL
+        email, token, _, domain = _get_jira_config()
+        if not email or not token:
+            return jsonify({"error": "Jira credentials not configured"}), 400
+            
+        auth_str = f"{email}:{token}"
+        auth_b64 = base64.b64encode(auth_str.encode()).decode()
+        headers = {
+            "Authorization": f"Basic {auth_b64}",
+            "Content-Type": "application/json"
+        }
+        
+        jira_issues = []
+        try:
+            params = {
+                "jql": tracker["jql"],
+                "maxResults": 100,
+                "fields": "summary,status,assignee,priority,issuetype"
+            }
+            # Use /search/jql as required by latest Jira Cloud API
+            res = requests.get(f"{domain.rstrip('/')}/rest/api/3/search/jql", headers=headers, params=params)
+            
+            if res.status_code == 200:
+                issues_data = res.json().get("issues", [])
+                for issue in issues_data:
+                    key = issue["key"]
+                    fields = issue.get("fields", {})
+                    jira_issues.append({
+                        "key": key,
+                        "summary": fields.get("summary", "No Summary"),
+                        "status": fields.get("status", {}).get("name", "Unknown"),
+                        "status_category": fields.get("status", {}).get("statusCategory", {}).get("key", "new"),
+                        "priority": fields.get("priority", {}).get("name", "Medium"),
+                        "type": fields.get("issuetype", {}).get("name", "Task"),
+                        "type_icon": fields.get("issuetype", {}).get("iconUrl"),
+                        "assignee": fields.get("assignee", {}).get("displayName", "Unassigned") if fields.get("assignee") else "Unassigned",
+                        "custom_data": stored_data.get(key, {}),
+                        "rca_filled": rca_status.get(key, False)
+                    })
+            else:
+                # Jira error (e.g. 400 Bad JQL)
+                error_msg = res.json().get("errorMessages", [res.text])[0]
+                return jsonify({"error": f"Jira API Error: {error_msg}"}), res.status_code
+                
+        except Exception as e:
+            return jsonify({"error": f"Jira Connection Error: {str(e)}"}), 500
+            
+        return jsonify({
+            "issues": jira_issues
+        })
+
+@app.route("/api/trackers_v2/<int:tracker_id>/rca/<issue_key>", methods=["GET", "POST"])
+@login_required
+def tracker_v2_rca(tracker_id, issue_key):
+    conn, cursor = get_db_connection(dictionary=True)
+    if not conn: return jsonify({"error": "Database error"}), 500
+    
+    if request.method == "POST":
+        if current_user.role_name == 'Viewer':
+            conn.close()
+            return jsonify({"error": "Permission denied"}), 403
+            
+        data = request.json
+        rca_text = data.get("rca_text")
+        fix_text = data.get("fix_text")
+        prevention_text = data.get("prevention_text")
+        issue_details = data.get("issue_details") # JSON
+        
+        try:
+            cursor.execute("""
+                INSERT INTO tracker_rca (tracker_id, issue_key, issue_details, rca_text, fix_text, prevention_text, submitted_at)
+                VALUES (%s, %s, %s, %s, %s, %s, NOW())
+                ON DUPLICATE KEY UPDATE 
+                    rca_text = VALUES(rca_text), 
+                    fix_text = VALUES(fix_text), 
+                    prevention_text = VALUES(prevention_text),
+                    submitted_at = NOW()
+            """, (tracker_id, issue_key, json.dumps(issue_details) if issue_details else None, rca_text, fix_text, prevention_text))
+            conn.commit()
+            return jsonify({"success": True})
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+        finally:
+            conn.close()
+    
+    else: # GET
+        cursor.execute("SELECT * FROM tracker_rca WHERE tracker_id = %s AND issue_key = %s", (tracker_id, issue_key))
+        row = cursor.fetchone()
+        conn.close()
+        return jsonify(row if row else {})
+
+@app.route("/api/trackers_v2/<int:tracker_id>/rca/link", methods=["POST"])
+@login_required
+def tracker_v2_rca_link(tracker_id, issue_key=None):
+    if current_user.role_name == 'Viewer':
+        return jsonify({"error": "Permission denied"}), 403
+        
+    data = request.json
+    issue_key = data.get("issue_key")
+    issue_details = data.get("issue_details") # Dict
+    
+    if not issue_key:
+        return jsonify({"error": "Issue key is required"}), 400
+        
+    token = secrets.token_urlsafe(32)
+    
+    conn, cursor = get_db_connection()
+    if not conn: return jsonify({"error": "Database error"}), 500
+    
+    try:
+        cursor.execute("""
+            INSERT INTO tracker_rca (tracker_id, issue_key, issue_details, token)
+            VALUES (%s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE token = VALUES(token), issue_details = VALUES(issue_details)
+        """, (tracker_id, issue_key, json.dumps(issue_details), token))
+        conn.commit()
+        
+        base_url = request.url_root.rstrip('/')
+        link = f"{base_url}/rca/form/{token}"
+        return jsonify({"link": link})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+# Public RCA Form Route
+@app.route("/rca/form/<token>")
+def rca_public_form(token):
+    conn, cursor = get_db_connection(dictionary=True)
+    if not conn: return "Database Error", 500
+    
+    cursor.execute("SELECT * FROM tracker_rca WHERE token = %s", (token,))
+    row = cursor.fetchone()
+    conn.close()
+    
+    if not row:
+        return "Invalid or expired link", 404
+        
+    issue = json.loads(row["issue_details"]) if row["issue_details"] else {"key": row["issue_key"]}
+    return render_template("rca_form.html", token=token, issue=issue, rca=row, jira_domain=JIRA_DOMAIN)
+
+# Public API for form submission
+@app.route("/api/rca/submit/<token>", methods=["POST"])
+def rca_public_submit(token):
+    data = request.json
+    rca_text = data.get("rca_text")
+    fix_text = data.get("fix_text")
+    prevention_text = data.get("prevention_text")
+    
+    conn, cursor = get_db_connection()
+    if not conn: return jsonify({"error": "Database error"}), 500
+    
+    try:
+        cursor.execute("""
+            UPDATE tracker_rca 
+            SET rca_text = %s, fix_text = %s, prevention_text = %s, submitted_at = NOW()
+            WHERE token = %s
+        """, (rca_text, fix_text, prevention_text, token))
+        conn.commit()
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
 
 @app.route("/tracker")
 @page_permission_required("tracker")
@@ -1619,14 +2198,14 @@ def execute_jql():
 
 @app.route("/api/trackers", methods=["GET", "POST"])
 def manage_trackers():
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+    conn, cursor = get_db_connection()
+    if not conn: return jsonify({"error": "Database error"}), 500
     
     if request.method == "POST":
         title = request.json.get("title")
         if not title:
             return jsonify({"error": "Title is required"}), 400
-        cursor.execute("INSERT INTO trackers (title) VALUES (?)", (title,))
+        cursor.execute("INSERT INTO trackers (title) VALUES (%s)", (title,))
         conn.commit()
         tracker_id = cursor.lastrowid
         conn.close()
@@ -1641,39 +2220,39 @@ def manage_trackers():
 @app.route("/api/trackers/<int:tracker_id>", methods=["DELETE"])
 @permission_required("manage_settings")
 def delete_tracker(tracker_id):
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM trackers WHERE id = ?", (tracker_id,))
-    cursor.execute("DELETE FROM tracker_tickets WHERE tracker_id = ?", (tracker_id,))
+    conn, cursor = get_db_connection()
+    if not conn: return jsonify({"error": "Database error"}), 500
+    cursor.execute("DELETE FROM trackers WHERE id = %s", (tracker_id,))
+    cursor.execute("DELETE FROM tracker_tickets WHERE tracker_id = %s", (tracker_id,))
     conn.commit()
     conn.close()
     return jsonify({"success": True})
 
 @app.route("/api/trackers/<int:tracker_id>/tickets", methods=["GET", "POST"])
 def tracker_tickets(tracker_id):
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+    conn, cursor = get_db_connection()
+    if not conn: return jsonify({"error": "Database error"}), 500
     
     if request.method == "POST":
         issue_key = request.json.get("issueKey")
         if not issue_key:
             return jsonify({"error": "Issue key is required"}), 400
-        cursor.execute("INSERT INTO tracker_tickets (tracker_id, issue_key) VALUES (?, ?)", (tracker_id, issue_key))
+        cursor.execute("INSERT INTO tracker_tickets (tracker_id, issue_key) VALUES (%s, %s)", (tracker_id, issue_key))
         conn.commit()
         conn.close()
         return jsonify({"success": True})
     
     else:
-        cursor.execute("SELECT issue_key, comment FROM tracker_tickets WHERE tracker_id = ?", (tracker_id,))
+        cursor.execute("SELECT issue_key, comment FROM tracker_tickets WHERE tracker_id = %s", (tracker_id,))
         tickets = [{"issue_key": r[0], "comment": r[1]} for r in cursor.fetchall()]
         conn.close()
         return jsonify(tickets)
 
 @app.route("/api/trackers/<int:tracker_id>/tickets/<string:issue_key>", methods=["DELETE"])
 def delete_tracker_ticket(tracker_id, issue_key):
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM tracker_tickets WHERE tracker_id = ? AND issue_key = ?", (tracker_id, issue_key))
+    conn, cursor = get_db_connection()
+    if not conn: return jsonify({"error": "Database error"}), 500
+    cursor.execute("DELETE FROM tracker_tickets WHERE tracker_id = %s AND issue_key = %s", (tracker_id, issue_key))
     conn.commit()
     conn.close()
     return jsonify({"success": True})
@@ -1687,9 +2266,9 @@ def update_ticket_comment(tracker_id):
     if not issue_key:
         return jsonify({"error": "Issue key is required"}), 400
         
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("UPDATE tracker_tickets SET comment = ? WHERE tracker_id = ? AND issue_key = ?", (comment, tracker_id, issue_key))
+    conn, cursor = get_db_connection()
+    if not conn: return jsonify({"error": "Database error"}), 500
+    cursor.execute("UPDATE tracker_tickets SET comment = %s WHERE tracker_id = %s AND issue_key = %s", (comment, tracker_id, issue_key))
     conn.commit()
     conn.close()
     return jsonify({"success": True})
@@ -1704,9 +2283,10 @@ def todo_page():
     return render_template("todo.html", project=PROJECT_KEY)
 
 @app.route("/api/todos", methods=["GET", "POST"])
+@login_required
 def manage_todos():
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+    conn, cursor = get_db_connection()
+    if not conn: return jsonify({"error": "Database error"}), 500
     
     if request.method == "POST":
         data = request.json
@@ -1722,9 +2302,9 @@ def manage_todos():
             return jsonify({"error": "Title and due date are required"}), 400
             
         cursor.execute('''
-            INSERT INTO todos (title, description, priority, due_date, tags)
-            VALUES (?, ?, ?, ?, ?)
-        ''', (title, description, priority, due_date, tags))
+            INSERT INTO todos (user_id, title, description, priority, due_date, tags)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        ''', (current_user.id, title, description, priority, due_date, tags))
         conn.commit()
         todo_id = cursor.lastrowid
         conn.close()
@@ -1733,9 +2313,9 @@ def manage_todos():
     else:
         date_filter = request.args.get("date")
         if date_filter:
-            cursor.execute("SELECT id, title, description, priority, due_date, status, tags FROM todos WHERE due_date = ? ORDER BY created_at DESC", (date_filter,))
+            cursor.execute("SELECT id, title, description, priority, due_date, status, tags FROM todos WHERE user_id = %s AND due_date = %s ORDER BY created_at DESC", (current_user.id, date_filter,))
         else:
-            cursor.execute("SELECT id, title, description, priority, due_date, status, tags FROM todos ORDER BY due_date ASC, created_at DESC")
+            cursor.execute("SELECT id, title, description, priority, due_date, status, tags FROM todos WHERE user_id = %s ORDER BY due_date ASC, created_at DESC", (current_user.id,))
             
         todos = []
         for r in cursor.fetchall():
@@ -1754,14 +2334,29 @@ def manage_todos():
 @app.route("/api/todos/<int:todo_id>", methods=["PUT", "DELETE"])
 @login_required
 def update_delete_todo(todo_id):
-    if request.method == "DELETE" and not current_user.has_permission("delete_tickets") and current_user.role_name != 'Admin':
-        return jsonify({"error": "Permission denied"}), 403
-        
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+    conn, cursor = get_db_connection()
+    if not conn: return jsonify({"error": "Database error"}), 500
     
+    # Check if the todo exists and belongs to the user (unless they are Admin)
+    cursor.execute("SELECT user_id FROM todos WHERE id = %s", (todo_id,))
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        return jsonify({"error": "Todo not found"}), 404
+    
+    todo_user_id = row[0]
+    is_admin = current_user.role_name == 'Admin'
+    
+    if todo_user_id != current_user.id and not is_admin:
+        conn.close()
+        return jsonify({"error": "Permission denied"}), 403
+
     if request.method == "DELETE":
-        cursor.execute("DELETE FROM todos WHERE id = ?", (todo_id,))
+        if not current_user.has_permission("delete_tickets") and not is_admin and todo_user_id != current_user.id:
+            conn.close()
+            return jsonify({"error": "Permission denied"}), 403
+            
+        cursor.execute("DELETE FROM todos WHERE id = %s", (todo_id,))
         conn.commit()
         conn.close()
         return jsonify({"success": True})
@@ -1780,27 +2375,27 @@ def update_delete_todo(todo_id):
         update_fields = []
         params = []
         if status:
-            update_fields.append("status = ?")
+            update_fields.append("status = %s")
             params.append(status)
         if title:
-            update_fields.append("title = ?")
+            update_fields.append("title = %s")
             params.append(title)
         if description is not None:
-            update_fields.append("description = ?")
+            update_fields.append("description = %s")
             params.append(description)
         if priority:
-            update_fields.append("priority = ?")
+            update_fields.append("priority = %s")
             params.append(priority)
         if due_date:
-            update_fields.append("due_date = ?")
+            update_fields.append("due_date = %s")
             params.append(due_date)
         if tags is not None:
-            update_fields.append("tags = ?")
+            update_fields.append("tags = %s")
             params.append(tags)
             
         if update_fields:
             params.append(todo_id)
-            cursor.execute(f"UPDATE todos SET {', '.join(update_fields)} WHERE id = ?", params)
+            cursor.execute(f"UPDATE todos SET {', '.join(update_fields)} WHERE id = %s", params)
             conn.commit()
             
         conn.close()
@@ -2183,13 +2778,13 @@ def manage_teams():
     if request.method == "POST" and not current_user.has_permission("manage_teams") and current_user.role_name != 'Admin':
         return jsonify({"error": "Permission denied"}), 403
         
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+    conn, cursor = get_db_connection()
+    if not conn: return jsonify({"error": "Database error"}), 500
     if request.method == "POST":
         name = request.json.get("name")
         if not name:
             return jsonify({"error": "Team name is required"}), 400
-        cursor.execute("INSERT INTO teams (name) VALUES (?)", (name,))
+        cursor.execute("INSERT INTO teams (name) VALUES (%s)", (name,))
         conn.commit()
         team_id = cursor.lastrowid
         conn.close()
@@ -2203,17 +2798,17 @@ def manage_teams():
 @app.route("/api/teams/<int:team_id>", methods=["DELETE"])
 @permission_required("manage_teams")
 def delete_team(team_id):
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM teams WHERE id = ?", (team_id,))
+    conn, cursor = get_db_connection()
+    if not conn: return jsonify({"error": "Database error"}), 500
+    cursor.execute("DELETE FROM teams WHERE id = %s", (team_id,))
     conn.commit()
     conn.close()
     return jsonify({"success": True})
 
 @app.route("/api/teams/<int:team_id>/members", methods=["GET", "POST"])
 def team_members(team_id):
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+    conn, cursor = get_db_connection()
+    if not conn: return jsonify({"error": "Database error"}), 500
     if request.method == "POST":
         data = request.json
         account_id = data.get("accountId")
@@ -2221,13 +2816,13 @@ def team_members(team_id):
         avatar_url = data.get("avatarUrl")
         if not account_id or not display_name:
             return jsonify({"error": "Account ID and Display Name are required"}), 400
-        cursor.execute("INSERT INTO team_members (team_id, account_id, display_name, avatar_url) VALUES (?, ?, ?, ?)",
+        cursor.execute("INSERT INTO team_members (team_id, account_id, display_name, avatar_url) VALUES (%s, %s, %s, %s)",
                        (team_id, account_id, display_name, avatar_url))
         conn.commit()
         conn.close()
         return jsonify({"success": True})
     else:
-        cursor.execute("SELECT id, account_id, display_name, avatar_url FROM team_members WHERE team_id = ?", (team_id,))
+        cursor.execute("SELECT id, account_id, display_name, avatar_url FROM team_members WHERE team_id = %s", (team_id,))
         members = [
             {"id": r[0], "accountId": r[1], "account_id": r[1], "displayName": r[2], "avatarUrl": r[3]}
             for r in cursor.fetchall()
@@ -2237,9 +2832,9 @@ def team_members(team_id):
 
 @app.route("/api/teams/<int:team_id>/members/<int:member_id>", methods=["DELETE"])
 def delete_team_member(team_id, member_id):
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM team_members WHERE id = ? AND team_id = ?", (member_id, team_id))
+    conn, cursor = get_db_connection()
+    if not conn: return jsonify({"error": "Database error"}), 500
+    cursor.execute("DELETE FROM team_members WHERE id = %s AND team_id = %s", (member_id, team_id))
     conn.commit()
     conn.close()
     return jsonify({"success": True})
@@ -2255,87 +2850,87 @@ def planning_page(team_id):
 
 @app.route("/api/teams/<int:team_id>/sprints", methods=["GET", "POST"])
 def team_sprints(team_id):
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+    conn, cursor = get_db_connection()
+    if not conn: return jsonify({"error": "Database error"}), 500
     if request.method == "POST":
         name = request.json.get("name")
         if not name:
             return jsonify({"error": "Sprint name is required"}), 400
-        cursor.execute("INSERT INTO sprints (team_id, name) VALUES (?, ?)", (team_id, name))
+        cursor.execute("INSERT INTO sprints (team_id, name) VALUES (%s, %s)", (team_id, name))
         conn.commit()
         sprint_id = cursor.lastrowid
         conn.close()
         return jsonify({"id": sprint_id, "name": name})
     else:
-        cursor.execute("SELECT id, name, state, created_at FROM sprints WHERE team_id = ? ORDER BY created_at DESC", (team_id,))
+        cursor.execute("SELECT id, name, state, created_at FROM sprints WHERE team_id = %s ORDER BY created_at DESC", (team_id,))
         sprints = [{"id": r[0], "name": r[1], "state": r[2], "created_at": r[3]} for r in cursor.fetchall()]
         conn.close()
         return jsonify(sprints)
 
 @app.route("/api/sprints/<int:sprint_id>/weeks", methods=["GET", "POST"])
 def sprint_weeks(sprint_id):
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+    conn, cursor = get_db_connection()
+    if not conn: return jsonify({"error": "Database error"}), 500
     if request.method == "POST":
         data = request.json
         week_number = data.get("weekNumber")
         goal = data.get("goal", "")
-        cursor.execute("INSERT INTO sprint_weeks (sprint_id, week_number, goal) VALUES (?, ?, ?)",
+        cursor.execute("INSERT INTO sprint_weeks (sprint_id, week_number, goal) VALUES (%s, %s, %s)",
                        (sprint_id, week_number, goal))
         conn.commit()
         week_id = cursor.lastrowid
         conn.close()
         return jsonify({"id": week_id, "weekNumber": week_number})
     else:
-        cursor.execute("SELECT id, week_number, goal FROM sprint_weeks WHERE sprint_id = ? ORDER BY week_number ASC", (sprint_id,))
+        cursor.execute("SELECT id, week_number, goal FROM sprint_weeks WHERE sprint_id = %s ORDER BY week_number ASC", (sprint_id,))
         weeks = [{"id": r[0], "weekNumber": r[1], "goal": r[2]} for r in cursor.fetchall()]
         conn.close()
         return jsonify(weeks)
 
 @app.route("/api/sprint_weeks/<int:week_id>", methods=["PUT", "DELETE"])
 def manage_sprint_week(week_id):
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+    conn, cursor = get_db_connection()
+    if not conn: return jsonify({"error": "Database error"}), 500
     if request.method == "DELETE":
-        cursor.execute("DELETE FROM sprint_weeks WHERE id = ?", (week_id,))
+        cursor.execute("DELETE FROM sprint_weeks WHERE id = %s", (week_id,))
         conn.commit()
         conn.close()
         return jsonify({"success": True})
     elif request.method == "PUT":
         data = request.json
         goal = data.get("goal")
-        cursor.execute("UPDATE sprint_weeks SET goal = ? WHERE id = ?", (goal, week_id))
+        cursor.execute("UPDATE sprint_weeks SET goal = %s WHERE id = %s", (goal, week_id))
         conn.commit()
         conn.close()
         return jsonify({"success": True})
 
 @app.route("/api/sprints/<int:sprint_id>/tickets", methods=["GET", "POST"])
 def sprint_tickets_api(sprint_id):
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+    conn, cursor = get_db_connection()
+    if not conn: return jsonify({"error": "Database error"}), 500
     if request.method == "POST":
         data = request.json
         week_id = data.get("weekId")
         issue_key = data.get("issueKey")
         if not issue_key:
             return jsonify({"error": "Issue key is required"}), 400
-        cursor.execute("INSERT INTO sprint_tickets (sprint_id, week_id, issue_key) VALUES (?, ?, ?)",
+        cursor.execute("INSERT INTO sprint_tickets (sprint_id, week_id, issue_key) VALUES (%s, %s, %s)",
                        (sprint_id, week_id, issue_key))
         conn.commit()
         conn.close()
         return jsonify({"success": True})
     else:
-        cursor.execute("SELECT id, week_id, issue_key, comment, pr_raised, demo_done, pr_merged FROM sprint_tickets WHERE sprint_id = ?", (sprint_id,))
+        cursor.execute("SELECT id, week_id, issue_key, comment, pr_raised, demo_done, pr_merged FROM sprint_tickets WHERE sprint_id = %s", (sprint_id,))
         tickets = [{"id": r[0], "weekId": r[1], "issueKey": r[2], "comment": r[3], "prRaised": bool(r[4]), "demoDone": bool(r[5]), "prMerged": bool(r[6])} for r in cursor.fetchall()]
         conn.close()
         return jsonify(tickets)
 
 @app.route("/api/sprint_tickets/<int:ticket_id>", methods=["PUT", "DELETE"])
 def manage_sprint_ticket(ticket_id):
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+    conn, cursor = get_db_connection()
+    if not conn: return jsonify({"error": "Database error"}), 500
     if request.method == "DELETE":
-        cursor.execute("DELETE FROM sprint_tickets WHERE id = ?", (ticket_id,))
+        cursor.execute("DELETE FROM sprint_tickets WHERE id = %s", (ticket_id,))
         conn.commit()
         conn.close()
         return jsonify({"success": True})
@@ -2348,11 +2943,11 @@ def manage_sprint_ticket(ticket_id):
         week_id = data.get("weekId") # New field for moving tickets
         
         # Build dynamic query
-        fields = ["comment = ?", "pr_raised = ?", "demo_done = ?", "pr_merged = ?"]
+        fields = ["comment = %s", "pr_raised = %s", "demo_done = %s", "pr_merged = %s"]
         params = [comment, pr_raised, demo_done, pr_merged]
         
         if week_id is not None:
-            fields.append("week_id = ?")
+            fields.append("week_id = %s")
             params.append(week_id)
             
         params.append(ticket_id)
@@ -2360,7 +2955,7 @@ def manage_sprint_ticket(ticket_id):
         cursor.execute(f"""
             UPDATE sprint_tickets 
             SET {', '.join(fields)}
-            WHERE id = ?
+            WHERE id = %s
         """, params)
         
         conn.commit()
@@ -2598,8 +3193,8 @@ def fetch_jira_ticket(key):
 
 @app.route("/api/scrum_notes", methods=["GET", "POST"])
 def scrum_notes():
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+    conn, cursor = get_db_connection()
+    if not conn: return jsonify({"error": "Database error"}), 500
 
     if request.method == "POST":
         data = request.json
@@ -2622,8 +3217,8 @@ def scrum_notes():
                 """
                 SELECT account_id
                 FROM team_members
-                WHERE team_id = ?
-                  AND lower(trim(display_name)) = lower(trim(?))
+                WHERE team_id = %s
+                  AND lower(trim(display_name)) = lower(trim(%s))
                 LIMIT 1
                 """,
                 (team_id, member_name),
@@ -2642,7 +3237,7 @@ def scrum_notes():
 
         cursor.execute("""
             INSERT INTO scrum_notes (date, team_id, member_id, member_name, ticket_key, comment, deadline, tags)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         """, (date, team_id, member_id, member_name, ticket_key, comment, deadline, data.get("tags", "")))
         conn.commit()
         new_id = cursor.lastrowid
@@ -2658,7 +3253,7 @@ def scrum_notes():
         cursor.execute("""
             SELECT id, date, team_id, member_id, member_name, ticket_key, comment, deadline, status, tags
             FROM scrum_notes
-            WHERE date = ? AND team_id = ?
+            WHERE date = %s AND team_id = %s
             ORDER BY member_name, created_at
         """, (date, team_id))
         rows = [{
@@ -2672,11 +3267,11 @@ def scrum_notes():
 
 @app.route("/api/scrum_notes/<int:note_id>", methods=["PUT", "DELETE"])
 def scrum_note_item(note_id):
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+    conn, cursor = get_db_connection()
+    if not conn: return jsonify({"error": "Database error"}), 500
 
     if request.method == "DELETE":
-        cursor.execute("DELETE FROM scrum_notes WHERE id = ?", (note_id,))
+        cursor.execute("DELETE FROM scrum_notes WHERE id = %s", (note_id,))
         conn.commit()
         conn.close()
         return jsonify({"success": True})
@@ -2685,22 +3280,22 @@ def scrum_note_item(note_id):
         data = request.json
         fields, params = [], []
         if "comment" in data:
-            fields.append("comment = ?")
+            fields.append("comment = %s")
             params.append(data["comment"])
         if "deadline" in data:
-            fields.append("deadline = ?")
+            fields.append("deadline = %s")
             params.append(data["deadline"] or None)
         if "status" in data:
-            fields.append("status = ?")
+            fields.append("status = %s")
             params.append(data["status"])
         if "tags" in data:
-            fields.append("tags = ?")
+            fields.append("tags = %s")
             params.append(data["tags"])
         if not fields:
             conn.close()
             return jsonify({"error": "No fields to update"}), 400
         params.append(note_id)
-        cursor.execute(f"UPDATE scrum_notes SET {', '.join(fields)} WHERE id = ?", params)
+        cursor.execute(f"UPDATE scrum_notes SET {', '.join(fields)} WHERE id = %s", params)
         conn.commit()
         conn.close()
         return jsonify({"success": True})
@@ -2715,25 +3310,22 @@ def scrum_notes_summary():
     if not start_date or not end_date:
         return jsonify({"error": "start and end dates are required"}), 400
         
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+    conn, cursor = get_db_connection()
+    if not conn: return jsonify({"error": "Database error"}), 500
     
     # Logic: Get unique tickets from scrum_notes for the range, 
     # Aggregate member names, and pick the latest non-empty comment/tags
-    # Note: Using subqueries to get the latest comment/tags for that specific key
     query = """
         SELECT ticket_key, 
                GROUP_CONCAT(DISTINCT member_name) as members,
-               GROUP_CONCAT(DISTINCT member_id) as member_ids,
-               (SELECT comment FROM scrum_notes sn2 WHERE sn2.ticket_key = sn1.ticket_key AND sn2.comment != '' ORDER BY date DESC, created_at DESC LIMIT 1) as latest_comment,
-               (SELECT tags FROM scrum_notes sn2 WHERE sn2.ticket_key = sn1.ticket_key AND sn2.tags != '' ORDER BY date DESC, created_at DESC LIMIT 1) as latest_tags
-        FROM scrum_notes sn1
-        WHERE date >= ? AND date <= ?
+               GROUP_CONCAT(DISTINCT member_id) as member_ids
+        FROM scrum_notes
+        WHERE date >= %s AND date <= %s
     """
     params = [start_date, end_date]
     
     if team_id:
-        query += " AND team_id = ?"
+        query += " AND team_id = %s"
         params.append(team_id)
         
     query += " GROUP BY ticket_key"
@@ -2744,53 +3336,68 @@ def scrum_notes_summary():
         
         results = []
         for r in rows:
+            # For each ticket, fetch the latest non-empty comment and tags
+            # MySQL doesn't support the subquery in the same way SQLite did in the SELECT list easily without performance issues or specific syntax, 
+            # but we can do it separately or use a join. For simplicity, we'll do it separately or keep the subquery if MySQL likes it.
+            # MySQL supports subqueries in SELECT.
+            
+            cursor.execute("SELECT comment FROM scrum_notes WHERE ticket_key = %s AND comment != '' ORDER BY date DESC, created_at DESC LIMIT 1", (r[0],))
+            c_row = cursor.fetchone()
+            latest_comment = c_row[0] if c_row else ""
+            
+            cursor.execute("SELECT tags FROM scrum_notes WHERE ticket_key = %s AND tags != '' ORDER BY date DESC, created_at DESC LIMIT 1", (r[0],))
+            t_row = cursor.fetchone()
+            latest_tags = t_row[0] if t_row else ""
+
             results.append({
                 "ticket_key": r[0],
                 "members": (r[1].split(",") if r[1] else []),
                 "member_ids": (r[2].split(",") if r[2] else []),
-                "comment": r[3] or "",
-                "tags": r[4] or ""
+                "comment": latest_comment,
+                "tags": latest_tags
             })
             
         conn.close()
         return jsonify(results)
     except Exception as e:
-        conn.close()
+        if conn: conn.close()
         return jsonify({"error": str(e)}), 500
 
 @app.route("/api/scrum_notes/ticket/<key>", methods=["PUT"])
 def scrum_note_by_ticket(key):
     """Update tags or comment for all notes of a specific ticket."""
     data = request.json
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+    conn, cursor = get_db_connection()
+    if not conn: return jsonify({"error": "Database error"}), 500
     
     fields, params = [], []
     if "comment" in data:
-        fields.append("comment = ?")
+        fields.append("comment = %s")
         params.append(data["comment"])
     if "tags" in data:
-        fields.append("tags = ?")
+        fields.append("tags = %s")
         params.append(data["tags"])
         
     if not fields:
         conn.close()
         return jsonify({"error": "No fields to update"}), 400
         
-    params.append(key)
     try:
-        # Update the LATEST note for this ticket to preserve history but update the tracker view
-        # The summary API picks the latest comment/tags, so we update the latest entry.
-        cursor.execute(f"""
-            UPDATE scrum_notes 
-            SET {', '.join(fields)} 
-            WHERE id = (SELECT id FROM scrum_notes WHERE ticket_key = ? ORDER BY date DESC, created_at DESC LIMIT 1)
-        """, params)
-        conn.commit()
+        # Update the LATEST note for this ticket
+        # MySQL syntax for UPDATE with subquery on same table is tricky, using a temporary table or joining.
+        # Simplest: Get the ID first.
+        cursor.execute("SELECT id FROM scrum_notes WHERE ticket_key = %s ORDER BY date DESC, created_at DESC LIMIT 1", (key,))
+        row = cursor.fetchone()
+        if row:
+            note_id = row[0]
+            params.append(note_id)
+            cursor.execute(f"UPDATE scrum_notes SET {', '.join(fields)} WHERE id = %s", params)
+            conn.commit()
+        
         conn.close()
         return jsonify({"success": True})
     except Exception as e:
-        conn.close()
+        if conn: conn.close()
         return jsonify({"error": str(e)}), 500
 
 @app.route("/api/scrum_notes/report", methods=["GET"])
@@ -2806,21 +3413,21 @@ def scrum_notes_report():
     query = """
         SELECT id, date, team_id, member_id, member_name, ticket_key, comment, deadline, status
         FROM scrum_notes
-        WHERE date BETWEEN ? AND ?
+        WHERE date BETWEEN %s AND %s
     """
     params = [start, end]
 
     if team_id:
-        query += " AND team_id = ?"
+        query += " AND team_id = %s"
         params.append(team_id)
     if member_id:
-        query += " AND member_id = ?"
+        query += " AND member_id = %s"
         params.append(member_id)
 
     query += " ORDER BY date DESC, member_name, ticket_key"
 
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+    conn, cursor = get_db_connection()
+    if not conn: return jsonify({"error": "Database error"}), 500
     cursor.execute(query, params)
     rows = [{
         "id": r[0], "date": r[1], "team_id": r[2],
