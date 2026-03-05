@@ -312,6 +312,46 @@ def init_db():
     if not conn:
         return
 
+    # Roles Table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS roles (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(255) UNIQUE NOT NULL,
+            permissions TEXT
+        )
+    ''')
+
+    # Users Table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            email VARCHAR(255) UNIQUE NOT NULL,
+            name VARCHAR(255),
+            google_id VARCHAR(255) UNIQUE,
+            password_hash VARCHAR(255),
+            role_id INT,
+            api_token VARCHAR(255) UNIQUE,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (role_id) REFERENCES roles(id)
+        )
+    ''')
+
+    # Seed Roles if empty
+    cursor.execute("SELECT count(*) FROM roles")
+    if cursor.fetchone()[0] == 0:
+        cursor.execute("INSERT INTO roles (name, permissions) VALUES ('Admin', '{\"all\": true}')")
+        cursor.execute("INSERT INTO roles (name, permissions) VALUES ('Editor', '{\"view\": true, \"edit\": true}')")
+        cursor.execute("INSERT INTO roles (name, permissions) VALUES ('Viewer', '{\"view\": true, \"allowed_pages\": [\"dashboard\"]}')")
+    else:
+        # Ensure Viewer role is restricted to dashboard if it was previously seeded without allowed_pages
+        cursor.execute("SELECT permissions FROM roles WHERE name = 'Viewer'")
+        row = cursor.fetchone()
+        if row:
+            perms = json.loads(row[0]) if row[0] else {}
+            if 'allowed_pages' not in perms:
+                perms['allowed_pages'] = ['dashboard']
+                cursor.execute("UPDATE roles SET permissions = %s WHERE name = 'Viewer'", (json.dumps(perms),))
+
     # Trackers Table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS trackers (
@@ -530,45 +570,6 @@ def init_db():
         )
     ''')
 
-    # Roles Table
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS roles (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            name VARCHAR(255) UNIQUE NOT NULL,
-            permissions TEXT
-        )
-    ''')
-
-    # Users Table
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            email VARCHAR(255) UNIQUE NOT NULL,
-            name VARCHAR(255),
-            google_id VARCHAR(255) UNIQUE,
-            password_hash VARCHAR(255),
-            role_id INT,
-            api_token VARCHAR(255) UNIQUE,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (role_id) REFERENCES roles(id)
-        )
-    ''')
-
-    # Seed Roles if empty
-    cursor.execute("SELECT count(*) FROM roles")
-    if cursor.fetchone()[0] == 0:
-        cursor.execute("INSERT INTO roles (name, permissions) VALUES ('Admin', '{\"all\": true}')")
-        cursor.execute("INSERT INTO roles (name, permissions) VALUES ('Editor', '{\"view\": true, \"edit\": true}')")
-        cursor.execute("INSERT INTO roles (name, permissions) VALUES ('Viewer', '{\"view\": true, \"allowed_pages\": [\"dashboard\"]}')")
-    else:
-        # Ensure Viewer role is restricted to dashboard if it was previously seeded without allowed_pages
-        cursor.execute("SELECT permissions FROM roles WHERE name = 'Viewer'")
-        row = cursor.fetchone()
-        if row:
-            perms = json.loads(row[0]) if row[0] else {}
-            if 'allowed_pages' not in perms:
-                perms['allowed_pages'] = ['dashboard']
-                cursor.execute("UPDATE roles SET permissions = %s WHERE name = 'Viewer'", (json.dumps(perms),))
     
     # App Config Table
     cursor.execute('''
