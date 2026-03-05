@@ -155,6 +155,24 @@ def _decode_value(value):
     except Exception:
         return value.strip()
 
+def add_audit_log(page, item_key, field_name, new_value, old_value=None):
+    """Adds a record to the audit_logs table."""
+    conn, cursor = get_db_connection()
+    if not conn:
+        return False
+    try:
+        cursor.execute("""
+            INSERT INTO audit_logs (user_id, user_name, page, item_key, field_name, old_value, new_value)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """, (current_user.id, current_user.name, page, item_key, field_name, str(old_value) if old_value is not None else None, str(new_value)))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Audit Log Error: {e}")
+        return False
+    finally:
+        conn.close()
+
 def _get_jira_config():
     """Fetch Jira config from DB. Returns (email, token, project_key, domain)."""
     try:
@@ -391,15 +409,23 @@ def init_db():
             bugs_found TEXT,
             requirements_clear VARCHAR(50) DEFAULT 'No',
             completed INT DEFAULT 0,
-            is_flagged INT DEFAULT 0,
-            FOREIGN KEY (sprint_id) REFERENCES sprints(id) ON DELETE CASCADE,
-            FOREIGN KEY (week_id) REFERENCES sprint_weeks(id) ON DELETE CASCADE
+            is_flagged INT DEFAULT 0
         )
     ''')
 
     # Ensure is_flagged exists if table already exists
     try:
         cursor.execute("ALTER TABLE sprint_tickets ADD COLUMN is_flagged INT DEFAULT 0")
+    except:
+        pass
+
+    # Drop legacy foreign keys that cause issues with Jira Sprint IDs
+    try:
+        cursor.execute("ALTER TABLE sprint_tickets DROP FOREIGN KEY sprint_tickets_ibfk_1")
+    except:
+        pass
+    try:
+        cursor.execute("ALTER TABLE sprint_tickets DROP FOREIGN KEY sprint_tickets_ibfk_2")
     except:
         pass
 
@@ -553,6 +579,22 @@ def init_db():
         )
     ''')
 
+    # Audit Logs Table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS audit_logs (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT,
+            user_name VARCHAR(255),
+            page VARCHAR(100),
+            item_key VARCHAR(255),
+            field_name VARCHAR(255),
+            old_value TEXT,
+            new_value TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+        )
+    ''')
+
     # Seed Default Header Title if empty
     cursor.execute("SELECT count(*) FROM app_config WHERE config_key = 'header_title'")
     if cursor.fetchone()[0] == 0:
@@ -699,7 +741,15 @@ def delete_todo_tag(tag_id):
 # =========================
 @app.route("/login")
 def login_page():
-    return render_template("login.html")
+    conn, cursor = get_db_connection(dictionary=True)
+    if not conn: return render_template("login.html", header_title="Reports Dashboard")
+    
+    cursor.execute("SELECT config_value FROM app_config WHERE config_key = 'header_title'")
+    row = cursor.fetchone()
+    conn.close()
+    
+    header_title = row['config_value'] if row else "Reports Dashboard"
+    return render_template("login.html", header_title=header_title)
 
 @app.route("/login/google")
 def login_google():
@@ -831,7 +881,9 @@ def admin_roles():
         {"key": "edit_tickets", "label": "Edit Tickets/Todos"},
         {"key": "delete_tickets", "label": "Delete Tickets/Todos"},
         {"key": "manage_settings", "label": "Manage Settings"},
-        {"key": "manage_teams", "label": "Manage Teams"}
+        {"key": "manage_teams", "label": "Manage Teams"},
+        {"key": "manage_trackers", "label": "Manage Custom Trackers (Create/Edit Structure)"},
+        {"key": "edit_tracker_data", "label": "Edit Tracker Data (Update Status/Fields)"}
     ]
     
     return render_template("admin_roles.html", roles=roles, permissions=available_permissions, page_permissions=PAGE_PERMISSIONS)
@@ -1431,16 +1483,22 @@ def update_sprint_ticket_field():
     if not conn: return jsonify({"error": "Database error"}), 500
     
     # Check if record exists
-    cursor.execute("SELECT id FROM sprint_tickets WHERE sprint_id = %s AND issue_key = %s", (sprint_id, issue_key))
+    cursor.execute(f"SELECT id, {field} FROM sprint_tickets WHERE sprint_id = %s AND issue_key = %s", (sprint_id, issue_key))
     row = cursor.fetchone()
     
+    old_value = None
     if row:
+        old_value = row[1]
         cursor.execute(f"UPDATE sprint_tickets SET {field} = %s WHERE id = %s", (value, row[0]))
     else:
         cursor.execute(f"INSERT INTO sprint_tickets (sprint_id, issue_key, {field}) VALUES (%s, %s, %s)", (sprint_id, issue_key, value))
         
     conn.commit()
     conn.close()
+
+    # Add Audit Log
+    add_audit_log(page="Dashboard", item_key=issue_key, field_name=field, new_value=value, old_value=old_value)
+
     return jsonify({"success": True})
 
 # =========================
@@ -1920,12 +1978,25 @@ def tracker_v2_data(tracker_id):
         conn, cursor = get_db_connection()
         if not conn: return jsonify({"error": "Database error"}), 500
         try:
+            # Get old value and column name for audit log
+            cursor.execute("SELECT name FROM tracker_columns WHERE id = %s", (column_id,))
+            col_row = cursor.fetchone()
+            col_name = col_row[0] if col_row else f"Column {column_id}"
+
+            cursor.execute("SELECT value FROM tracker_data_v2 WHERE tracker_id = %s AND issue_key = %s AND column_id = %s", (tracker_id, issue_key, column_id))
+            old_val_row = cursor.fetchone()
+            old_value = old_val_row[0] if old_val_row else None
+
             cursor.execute("""
                 INSERT INTO tracker_data_v2 (tracker_id, issue_key, column_id, value)
                 VALUES (%s, %s, %s, %s)
                 ON DUPLICATE KEY UPDATE value = VALUES(value)
             """, (tracker_id, issue_key, column_id, value))
             conn.commit()
+
+            # Add Audit Log
+            add_audit_log(page=f"Tracker #{tracker_id}", item_key=issue_key, field_name=col_name, new_value=value, old_value=old_value)
+
             return jsonify({"success": True})
         except Exception as e:
             conn.rollback()
@@ -3786,6 +3857,40 @@ def pdf_merge_api():
         )
     except Exception as e:
         return jsonify({"error": f"Merge failed: {str(e)}"}), 500
+
+@app.route("/api/audit_logs", methods=["GET"])
+@login_required
+def get_audit_logs():
+    if current_user.role_name != 'Admin':
+        return jsonify({"error": "Permission denied"}), 403
+        
+    page = int(request.args.get('page', 1))
+    per_page = int(request.args.get('per_page', 20))
+    offset = (page - 1) * per_page
+
+    conn, cursor = get_db_connection(dictionary=True)
+    if not conn: return jsonify({"error": "Database error"}), 500
+    
+    try:
+        # Get total count
+        cursor.execute("SELECT COUNT(*) as total FROM audit_logs")
+        total = cursor.fetchone()['total']
+
+        # Get paginated logs
+        cursor.execute("SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT %s OFFSET %s", (per_page, offset))
+        logs = cursor.fetchall()
+        
+        return jsonify({
+            "logs": logs,
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+            "total_pages": (total + per_page - 1) // per_page
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
 
 if __name__ == "__main__":
     app.run(debug=True)

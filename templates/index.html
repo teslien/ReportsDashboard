@@ -198,6 +198,11 @@
             color: #bfdbfe !important;
         }
 
+        select.deploy-qa {
+            background-color: #4c1d95 !important;
+            color: #ede9fe !important;
+        }
+
         select.deploy-staged {
             background-color: #854d0e !important;
             color: #fef9c3 !important;
@@ -614,14 +619,14 @@
         </div>
 
         <!-- Second Row: User Performance & Today's Work -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8 items-stretch">
             <!-- User Performance -->
-            <div class="glass p-6 rounded-2xl border border-gray-700">
+            <div class="glass p-6 rounded-2xl border border-gray-700 flex flex-col">
                 <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
                     <span class="w-2 h-6 bg-green-500 rounded-full"></span>
                     User Performance
                 </h3>
-                <div class="overflow-x-auto">
+                <div class="overflow-x-auto flex-1">
                     <table class="w-full text-left">
                         <thead>
                             <tr class="text-gray-400 text-xs uppercase tracking-wider border-b border-gray-700">
@@ -642,12 +647,12 @@
             </div>
 
             <!-- Today's Work -->
-            <div class="glass p-6 rounded-2xl border border-gray-700">
+            <div class="glass p-6 rounded-2xl border border-gray-700 flex flex-col">
                 <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
                     <span class="w-2 h-6 bg-blue-500 rounded-full"></span>
                     Sprint Goals (Important Items)
                 </h3>
-                <div class="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar" id="goalsList">
+                <div class="space-y-3 overflow-y-auto pr-2 custom-scrollbar flex-1" id="goalsList" style="max-height: 450px;">
                     <p class="text-center text-gray-500 italic text-sm py-4">No goals flagged yet</p>
                 </div>
             </div>
@@ -741,7 +746,12 @@
                 <table class="w-full text-left border-collapse">
                     <thead>
                         <tr class="text-gray-400 text-xs uppercase tracking-wider border-b border-gray-800">
-                            <th class="pb-4 px-2" data-track-col="ticket">Ticket</th>
+                            <th class="pb-4 px-2 group cursor-pointer" data-track-col="ticket" onclick="toggleImportantSort()">
+                                <div class="flex items-center gap-1">
+                                    Ticket
+                                    <i id="importantSortIcon" class="fas fa-sort text-gray-600 group-hover:text-blue-400 transition-colors"></i>
+                                </div>
+                            </th>
                             <th class="pb-4 px-2 text-center" data-track-col="requirements_clear">Req Clear</th>
                             <th class="pb-4 px-2 text-center" data-track-col="pr_raised">PR Raised</th>
                             <th class="pb-4 px-2 text-center" data-track-col="pr_merged">PR Merged</th>
@@ -876,6 +886,7 @@
         let lastStatusMap = {};
         let trackingSearchQuery = "";
         let trackingAssigneeFilter = "All";
+        let trackingSortImportant = false; // Add sort state
         let lastFilteredTrackingIssues = [];
         const trackingColumnDefs = [
             { key: "ticket", label: "Ticket" },
@@ -1259,6 +1270,17 @@
             applyTrackingFiltersAndRender();
         }
 
+        function toggleImportantSort() {
+            trackingSortImportant = !trackingSortImportant;
+            const icon = document.getElementById("importantSortIcon");
+            if (trackingSortImportant) {
+                icon.className = "fas fa-sort-amount-down text-blue-400";
+            } else {
+                icon.className = "fas fa-sort text-gray-600";
+            }
+            applyTrackingFiltersAndRender();
+        }
+
         function applyTrackingFiltersAndRender() {
             const body = document.getElementById("trackingTableBody");
             body.innerHTML = "";
@@ -1292,6 +1314,15 @@
             }
             if (assignee !== "All") {
                 filtered = filtered.filter(i => (i.assignee || "Unassigned") === assignee);
+            }
+
+            // Sort by Important (Flagged) first if enabled
+            if (trackingSortImportant) {
+                filtered.sort((a, b) => {
+                    const aFlag = (a.local && a.local.is_flagged) ? 1 : 0;
+                    const bFlag = (b.local && b.local.is_flagged) ? 1 : 0;
+                    return bFlag - aFlag; // 1 (flagged) comes before 0 (unflagged)
+                });
             }
 
             lastFilteredTrackingIssues = filtered;
@@ -1413,7 +1444,7 @@
                     <td class="py-4 px-2" data-track-col="deployment">
                         <select onchange="updateTicketField('${issue.key}', 'deploy_status', this.value); updateSelectColor(this, 'deploy')"
                             class="bg-gray-800 text-xs text-gray-200 border border-gray-700 rounded p-1 outline-none transition-colors ${getDeployClass(local.deploy_status)}">
-                            ${['N/A', 'Dev', 'Staged', 'Prod'].map(v => `<option value="${v}" ${local.deploy_status === v ? 'selected' : ''}>${v}</option>`).join('')}
+                            ${['N/A', 'Dev', 'QA', 'Staged', 'Prod'].map(v => `<option value="${v}" ${local.deploy_status === v ? 'selected' : ''}>${v}</option>`).join('')}
                         </select>
                     </td>`;
                 } else {
@@ -1913,6 +1944,7 @@
         function getDeployClass(val) {
             switch (val) {
                 case 'Dev': return 'deploy-dev';
+                case 'QA': return 'deploy-qa';
                 case 'Staged': return 'deploy-staged';
                 case 'Prod': return 'deploy-prod';
                 default: return 'deploy-na';
@@ -1930,7 +1962,7 @@
 
         function updateSelectColor(select, type) {
             const val = select.value;
-            select.classList.remove('deploy-dev', 'deploy-staged', 'deploy-prod', 'deploy-na', 'qa-testing', 'qa-ready', 'qa-done', 'qa-pending');
+            select.classList.remove('deploy-dev', 'deploy-qa', 'deploy-staged', 'deploy-prod', 'deploy-na', 'qa-testing', 'qa-ready', 'qa-done', 'qa-pending');
             const newClass = type === 'deploy' ? getDeployClass(val) : getQaClass(val);
             select.classList.add(newClass);
         }

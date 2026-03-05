@@ -107,8 +107,15 @@
 
 
 [data-theme="light"] nav a.text-blue-400,
-[data-theme="light"] nav a.text-white {
+[data-theme="light"] nav a.text-white,
+[data-theme="light"] nav button.text-white,
+[data-theme="light"] nav .text-white {
     color: #2563eb !important;
+    font-weight: 700 !important;
+}
+
+[data-theme="light"] nav .navbar-link.text-white {
+    color: #1e40af !important;
 }
 
 [data-theme="light"] .text-xs.text-gray-500.font-mono {
@@ -504,15 +511,18 @@
 }
 
 /* ─── Button Overrides ───────────────────────────────────────── */
-[data-theme="light"] .bg-blue-600 {
+[data-theme="light"] .bg-blue-600,
+[data-theme="light"] .bg-blue-600 button,
+[data-theme="light"] .bg-blue-600 span {
     background-color: #2563eb !important;
+    color: #ffffff !important;
 }
 
 [data-theme="light"] .bg-blue-600:hover {
     background-color: #1d4ed8 !important;
 }
 
-[data-theme="light"] button.text-white {
+[data-theme="light"] button.text-white:not(nav button) {
     color: #ffffff !important;
 }
 

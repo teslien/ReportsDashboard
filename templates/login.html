@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - Reports Dashboard</title>
+    <title>Login - {{ header_title }}</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
 <body class="bg-gray-100 flex items-center justify-center h-screen">
 
     <div class="bg-white p-8 rounded-lg shadow-lg w-full max-w-md text-center">
-        <h1 class="text-3xl font-bold text-gray-800 mb-2">Reports Dashboard</h1>
+        <h1 class="text-3xl font-bold text-gray-800 mb-2">{{ header_title }}</h1>
         <p class="text-gray-500 mb-8">Please sign in to continue</p>
 
         <a href="{{ url_for('login_google') }}" class="flex items-center justify-center w-full px-4 py-3 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition duration-150 ease-in-out">

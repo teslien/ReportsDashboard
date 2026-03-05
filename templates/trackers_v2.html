@@ -50,6 +50,41 @@
     }
 
     /* Custom Scrollbar */
+    select.status-done, select.status-progress, select.status-blocked, select.status-default {
+        padding: 4px 24px 4px 8px !important;
+        border-radius: 6px !important;
+        font-size: 11px !important;
+        font-weight: bold !important;
+        border: none !important;
+        cursor: pointer !important;
+        width: 100% !important;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23ffffff' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e") !important;
+        background-repeat: no-repeat !important;
+        background-position: right 4px center !important;
+        background-size: 16px !important;
+        appearance: none !important;
+        text-align: center !important;
+        transition: all 0.2s ease !important;
+    }
+
+    select.status-done { background-color: #14532d !important; color: #dcfce7 !important; }
+    select.status-progress { background-color: #1e3a8a !important; color: #bfdbfe !important; }
+    select.status-blocked { background-color: #7f1d1d !important; color: #fecaca !important; }
+    select.status-default { background-color: #374151 !important; color: #9ca3af !important; }
+
+    select.status-done:hover, select.status-progress:hover, select.status-blocked:hover, select.status-default:hover {
+        filter: brightness(1.2);
+    }
+
+    .jira-badge {
+        padding: 2px 8px;
+        border-radius: 9999px;
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        display: inline-block;
+    }
+
     .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
     .custom-scrollbar::-webkit-scrollbar-track { background: rgba(0,0,0,0.1); }
     .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
@@ -217,7 +252,7 @@
             </h1>
             <p class="text-gray-400 mt-1">Create and manage dynamic ticket tracking boards</p>
         </div>
-        <button v-if="!isViewer" @click="openCreateModal" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition flex items-center gap-2 shadow-lg shadow-blue-900/20">
+        <button v-if="canCreateTracker" @click="openCreateModal" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition flex items-center gap-2 shadow-lg shadow-blue-900/20">
             <i class="fas fa-plus"></i> New Tracker
         </button>
     </div>
@@ -259,7 +294,7 @@
                             <i class="fas" :class="showJql ? 'fa-eye-slash' : 'fa-code'"></i>
                             [[ showJql ? 'Hide JQL' : 'JQL' ]]
                         </button>
-                        <div v-if="showJql" class="absolute left-0 top-full mt-2 z-50 bg-gray-900 border border-gray-700 p-4 rounded-xl shadow-2xl min-w-[350px] animate-in slide-in-from-top-1 duration-200">
+                        <div v-if="showJql" class="absolute left-0 top-full mt-2 z-[100] bg-gray-900 border border-gray-700 p-4 rounded-xl shadow-2xl min-w-[350px] animate-in slide-in-from-top-1 duration-200">
                             <div class="text-[10px] uppercase font-bold text-gray-500 mb-2 tracking-widest flex justify-between">
                                 Query Parameters
                                 <button @click="showJql = false" class="text-gray-600 hover:text-white"><i class="fas fa-times"></i></button>
@@ -311,7 +346,7 @@
                         <button @click="showColumnToggle = !showColumnToggle" class="bg-gray-800 hover:bg-gray-700 text-white font-bold h-[42px] px-6 rounded-xl border border-gray-700 transition flex items-center gap-2">
                             <i class="fas fa-columns"></i> Columns
                         </button>
-                        <div v-if="showColumnToggle" class="absolute right-0 mt-2 w-56 bg-gray-800 border border-gray-700 rounded-xl shadow-2xl p-4 z-50 animate-in zoom-in-95 duration-200">
+                        <div v-if="showColumnToggle" class="absolute right-0 mt-2 w-56 bg-gray-800 border border-gray-700 rounded-xl shadow-2xl p-4 z-[100] animate-in zoom-in-95 duration-200">
                             <div class="text-[10px] uppercase font-bold text-gray-500 mb-3 tracking-widest">Show/Hide Columns</div>
                             <div class="space-y-2">
                                 <label v-for="col in activeTracker.columns" :key="col.id" class="flex items-center justify-between cursor-pointer group">
@@ -331,12 +366,12 @@
                 <table class="w-full text-left border-collapse">
                     <thead>
                         <tr class="bg-gray-900/50 border-b border-gray-700/50">
-                            <th class="px-6 py-4 text-[10px] font-bold text-gray-500 uppercase tracking-widest">Ticket</th>
+                            <th class="px-4 py-3 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Ticket</th>
                             <!-- Dynamic Columns -->
                             <th v-for="col in activeTracker.columns" 
                                 v-show="visibleColumns.includes(col.id)" 
                                 :key="col.id" 
-                                class="px-6 py-4 text-[10px] font-bold text-gray-500 uppercase tracking-widest">
+                                class="px-4 py-3 text-[10px] font-bold text-gray-400 uppercase tracking-widest text-center">
                                 [[ col.name ]]
                             </th>
                         </tr>
@@ -344,22 +379,22 @@
                     <tbody class="divide-y divide-gray-700/50">
                         <tr v-for="issue in filteredIssues" :key="issue.key" class="hover:bg-gray-700/20 transition-colors group">
                             <!-- Enhanced Ticket Column -->
-                            <td class="px-6 py-5 min-w-[300px]">
+                            <td class="px-4 py-3 min-w-[280px] max-w-[400px]">
                                 <div class="flex items-start gap-3">
                                     <img :src="issue.type_icon" class="w-4 h-4 mt-1 opacity-80" :title="issue.type">
-                                    <div class="flex flex-col gap-1">
+                                    <div class="flex flex-col gap-0.5">
                                         <div class="flex items-center gap-2">
                                             <a :href="'{{ jira_domain }}/browse/' + issue.key" target="_blank" 
-                                               class="text-blue-400 hover:text-blue-300 font-bold text-xs font-mono uppercase transition-colors underline decoration-blue-500/30">
+                                               class="text-blue-400 hover:text-blue-300 font-bold text-[11px] font-mono uppercase transition-colors underline decoration-blue-500/30">
                                                 [[ issue.key ]]
                                             </a>
                                             <span class="jira-badge" :style="getJiraStatusStyle(issue.status, issue.status_category)">
                                                 [[ issue.status ]]
                                             </span>
                                         </div>
-                                        <span class="text-sm text-gray-200 font-medium line-clamp-1" :title="issue.summary">[[ issue.summary ]]</span>
+                                        <span class="text-[13px] text-gray-200 font-medium line-clamp-1" :title="issue.summary">[[ issue.summary ]]</span>
                                         <div class="flex items-center gap-2 text-[10px] text-gray-500 uppercase font-bold tracking-tighter">
-                                            <i class="fas fa-code"></i> Dev: [[ issue.assignee ]]
+                                            <i class="fas fa-code"></i> [[ issue.assignee ]]
                                         </div>
                                     </div>
                                 </div>
@@ -369,7 +404,7 @@
                             <td v-for="col in activeTracker.columns" 
                                 v-show="visibleColumns.includes(col.id)" 
                                 :key="col.id" 
-                                class="px-6 py-5">
+                                class="px-2 py-3">
                                 
                                 <!-- Text Input -->
                                 <input v-if="col.column_type === 'text'" 
@@ -377,8 +412,8 @@
                                        :value="issue.custom_data[col.id]" 
                                        @change="updateData(issue.key, col.id, $event.target.value)"
                                        :disabled="isViewer"
-                                       placeholder="Add comment..."
-                                       class="bg-gray-900/50 border border-gray-700 text-gray-200 text-xs rounded-lg px-3 py-2 w-full focus:border-blue-500 outline-none transition placeholder:text-gray-600">
+                                       placeholder="..."
+                                       class="bg-gray-900/50 border border-gray-700 text-gray-200 text-xs rounded px-3 py-1.5 w-full focus:border-blue-500 outline-none transition placeholder:text-gray-600">
                                 
                                 <!-- Checkbox -->
                                 <div v-else-if="col.column_type === 'checkbox'" class="flex justify-center">
@@ -386,7 +421,7 @@
                                            :checked="issue.custom_data[col.id] === 'true'" 
                                            @change="updateData(issue.key, col.id, $event.target.checked.toString())"
                                            :disabled="isViewer"
-                                           class="w-5 h-5 rounded-lg border-gray-700 bg-gray-900 text-blue-600 focus:ring-0 cursor-pointer">
+                                           class="w-4 h-4 rounded border-gray-700 bg-gray-900 text-blue-600 focus:ring-0 cursor-pointer">
                                 </div>
 
                                 <!-- Select Dropdown (with colors) -->
@@ -394,8 +429,7 @@
                                         :value="issue.custom_data[col.id]"
                                         @change="updateData(issue.key, col.id, $event.target.value)"
                                         :disabled="isViewer"
-                                        :class="getSelectClass(issue.custom_data[col.id])"
-                                        class="bg-gray-900 border border-gray-700 text-white text-xs font-bold rounded-lg px-3 py-2 w-full outline-none transition-colors cursor-pointer">
+                                        :class="getSelectClass(issue.custom_data[col.id])">
                                     <option value="" class="bg-gray-800 text-gray-400">Select...</option>
                                     <option v-for="opt in col.options" :value="opt" class="bg-gray-800 text-white">[[ opt ]]</option>
                                 </select>
@@ -406,7 +440,8 @@
                                             :data-value="issue.custom_data[col.id]"
                                             :disabled="isViewer"
                                             @change="updateData(issue.key, col.id, $event.target.value)"
-                                            class="qa-assignee-select w-full">
+                                            class="qa-assignee-select w-full"
+                                            style="height: 28px !important;">
                                         <option v-if="issue.custom_data[col.id]" :value="issue.custom_data[col.id]" selected>
                                             [[ issue.custom_data[col.id] ]]
                                         </option>
@@ -663,12 +698,23 @@
         },
         computed: {
             isViewer() {
-                return this.currentUser.role_name === 'Viewer';
+                // Admin can always edit data
+                if (this.currentUser.role_name === 'Admin') return false;
+                // Otherwise check for specific permission
+                return !this.currentUser.permissions.edit_tracker_data;
             },
             isAdminOrCreator() {
                 if (!this.activeTracker) return false;
-                if (this.isViewer) return false;
-                return this.currentUser.role_name === 'Admin' || this.activeTracker.created_by === this.currentUser.id;
+                // Admin can always manage
+                if (this.currentUser.role_name === 'Admin') return true;
+                // Creator can always manage their own tracker
+                if (this.activeTracker.created_by === this.currentUser.id) return true;
+                // Otherwise check for specific permission
+                return !!this.currentUser.permissions.manage_trackers;
+            },
+            canCreateTracker() {
+                if (this.currentUser.role_name === 'Admin') return true;
+                return !!this.currentUser.permissions.manage_trackers;
             },
             uniqueAssignees() {
                 const names = new Set(this.issues.map(i => i.assignee).filter(n => n && n !== 'Unassigned'));
@@ -814,26 +860,26 @@
                 const cat = (category || "").toLowerCase();
                 
                 // Specific Status Name Colors
-                if (s.includes("closed") || s.includes("done") || s.includes("resolved")) 
-                    return "background: rgba(34, 197, 94, 0.15); color: #4ade80;";
-                if (s.includes("progress") || s.includes("development") || s.includes("testing")) 
-                    return "background: rgba(59, 130, 246, 0.15); color: #60a5fa;";
+                if (s.includes("closed") || s.includes("done") || s.includes("resolved") || s.includes("deployed") || s.includes("staged") || s.includes("qa done")) 
+                    return "background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.2);";
+                if (s.includes("progress") || s.includes("development") || s.includes("testing") || s.includes("qa")) 
+                    return "background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.2);";
                 if (s.includes("open") || s.includes("to do") || s.includes("backlog")) 
-                    return "background: rgba(156, 163, 175, 0.15); color: #d1d5db;";
-                if (s.includes("blocked") || s.includes("hold") || s.includes("reject")) 
-                    return "background: rgba(239, 68, 68, 0.15); color: #f87171;";
+                    return "background: rgba(156, 163, 175, 0.15); color: #d1d5db; border: 1px solid rgba(156, 163, 175, 0.2);";
+                if (s.includes("blocked") || s.includes("hold") || s.includes("reject") || s.includes("bug")) 
+                    return "background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.2);";
 
                 // Fallback to category
-                if (cat === "done") return "background: rgba(34, 197, 94, 0.15); color: #4ade80;";
-                if (cat === "indeterminate") return "background: rgba(59, 130, 246, 0.15); color: #60a5fa;";
-                return "background: rgba(156, 163, 175, 0.15); color: #d1d5db;";
+                if (cat === "done") return "background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.2);";
+                if (cat === "indeterminate") return "background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.2);";
+                return "background: rgba(156, 163, 175, 0.15); color: #d1d5db; border: 1px solid rgba(156, 163, 175, 0.2);";
             },
             getSelectClass(val) {
                 if (!val) return 'status-default';
                 const v = val.toLowerCase();
-                if (v.includes('done') || v.includes('yes') || v.includes('prod') || v.includes('ready')) return 'status-done';
-                if (v.includes('progress') || v.includes('testing') || v.includes('staged') || v.includes('dev')) return 'status-progress';
-                if (v.includes('blocked') || v.includes('no') || v.includes('hold') || v.includes('pending')) return 'status-blocked';
+                if (v.includes('done') || v.includes('yes') || v.includes('prod') || v.includes('ready') || v.includes('resolved') || v.includes('complete')) return 'status-done';
+                if (v.includes('progress') || v.includes('testing') || v.includes('staged') || v.includes('dev') || v.includes('active')) return 'status-progress';
+                if (v.includes('blocked') || v.includes('no') || v.includes('hold') || v.includes('pending') || v.includes('fail')) return 'status-blocked';
                 return 'status-default';
             },
             async copyToExcel() {

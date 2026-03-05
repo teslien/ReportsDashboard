@@ -14,10 +14,20 @@
 
                 <!-- Desktop Menu -->
                 <div class="hidden md:flex items-baseline space-x-4">
+                    {% if current_user.can_view_page('dashboard') %}
                     <a href="/"
                         class="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-colors navbar-link">Dashboard</a>
+                    {% endif %}
 
                     <!-- Tracking Dropdown -->
+                    {% set nav = namespace(has_tracking=false, has_analysis=false, has_tools=false) %}
+                    
+                    {% set tracking_pages = ['scoreboard', 'tracker', 'status_tracker', 'trackers_v2', 'todo', 'scrum_notes'] %}
+                    {% for p in tracking_pages %}
+                        {% if current_user.can_view_page(p) %}{% set nav.has_tracking = true %}{% endif %}
+                    {% endfor %}
+
+                    {% if nav.has_tracking %}
                     <div class="relative group">
                         <button
                             class="text-gray-300 group-hover:text-white px-3 py-2 rounded-md text-sm font-medium inline-flex items-center transition-colors navbar-link">
@@ -31,29 +41,48 @@
                         <div
                             class="absolute left-0 mt-2 w-48 rounded-md shadow-lg bg-gray-800 ring-1 ring-black ring-opacity-5 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 transform origin-top-left z-50 border border-gray-700 navbar-dropdown">
                             <div class="py-1" role="menu" aria-orientation="vertical">
+                                {% if current_user.can_view_page('scoreboard') %}
                                 <a href="/scoreboard"
                                     class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white"
                                     role="menuitem">Scoreboard</a>
+                                {% endif %}
+                                {% if current_user.can_view_page('tracker') %}
                                 <a href="/tracker"
                                     class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white"
                                     role="menuitem">Tracker</a>
+                                {% endif %}
+                                {% if current_user.can_view_page('status_tracker') %}
                                 <a href="/status_tracker"
                                     class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white"
                                     role="menuitem">Status Tracker</a>
+                                {% endif %}
+                                {% if current_user.can_view_page('trackers_v2') %}
                                 <a href="/trackers_v2"
                                     class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white"
                                     role="menuitem">Custom Trackers</a>
+                                {% endif %}
+                                {% if current_user.can_view_page('todo') %}
                                 <a href="/todo"
                                     class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white"
                                     role="menuitem">Todo</a>
+                                {% endif %}
+                                {% if current_user.can_view_page('scrum_notes') %}
                                 <a href="/scrum_notes"
                                     class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white"
                                     role="menuitem">Scrum Notes</a>
+                                {% endif %}
                             </div>
                         </div>
                     </div>
+                    {% endif %}
 
                     <!-- Analysis Dropdown -->
+                    {% set analysis_pages = ['custom_reports', 'explorer', 'query_builder', 'teams', 'work_report'] %}
+                    {% for p in analysis_pages %}
+                        {% if current_user.can_view_page(p) %}{% set nav.has_analysis = true %}{% endif %}
+                    {% endfor %}
+
+                    {% if nav.has_analysis %}
                     <div class="relative group">
                         <button
                             class="text-gray-300 group-hover:text-white px-3 py-2 rounded-md text-sm font-medium inline-flex items-center transition-colors navbar-link">
@@ -67,26 +96,43 @@
                         <div
                             class="absolute left-0 mt-2 w-48 rounded-md shadow-lg bg-gray-800 ring-1 ring-black ring-opacity-5 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 transform origin-top-left z-50 border border-gray-700 navbar-dropdown">
                             <div class="py-1" role="menu" aria-orientation="vertical">
+                                {% if current_user.can_view_page('custom_reports') %}
                                 <a href="/reports"
                                     class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white"
                                     role="menuitem">Reports</a>
+                                {% endif %}
+                                {% if current_user.can_view_page('explorer') %}
                                 <a href="/explorer"
                                     class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white"
                                     role="menuitem">Explorer</a>
+                                {% endif %}
+                                {% if current_user.can_view_page('query_builder') %}
                                 <a href="/query_builder"
                                     class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white"
                                     role="menuitem">Query Builder</a>
+                                {% endif %}
+                                {% if current_user.can_view_page('teams') %}
                                 <a href="/teams"
                                     class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white"
                                     role="menuitem">Teams</a>
+                                {% endif %}
+                                {% if current_user.can_view_page('work_report') %}
                                 <a href="/work_report"
                                     class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white"
                                     role="menuitem">Work Report</a>
+                                {% endif %}
                             </div>
                         </div>
                     </div>
+                    {% endif %}
 
                     <!-- Tools Dropdown -->
+                    {% set tools_pages = ['bulk_update', 'merge_pdf', 'settings'] %}
+                    {% for p in tools_pages %}
+                        {% if current_user.can_view_page(p) %}{% set nav.has_tools = true %}{% endif %}
+                    {% endfor %}
+
+                    {% if nav.has_tools %}
                     <div class="relative group">
                         <button
                             class="text-gray-300 group-hover:text-white px-3 py-2 rounded-md text-sm font-medium inline-flex items-center transition-colors navbar-link">
@@ -100,18 +146,25 @@
                         <div
                             class="absolute left-0 mt-2 w-48 rounded-md shadow-lg bg-gray-800 ring-1 ring-black ring-opacity-5 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 transform origin-top-left z-50 border border-gray-700 navbar-dropdown">
                             <div class="py-1" role="menu" aria-orientation="vertical">
+                                {% if current_user.can_view_page('bulk_update') %}
                                 <a href="/bulk_update"
                                     class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white"
                                     role="menuitem">Bulk Update</a>
+                                {% endif %}
+                                {% if current_user.can_view_page('merge_pdf') %}
                                 <a href="/merge_pdf"
                                     class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white"
                                     role="menuitem">PDF Merger</a>
+                                {% endif %}
+                                {% if current_user.can_view_page('settings') %}
                                 <a href="/settings"
                                     class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white"
                                     role="menuitem">Settings</a>
+                                {% endif %}
                             </div>
                         </div>
                     </div>
+                    {% endif %}
                 </div>
             </div>
 
@@ -217,42 +270,82 @@
     <!-- Mobile Menu -->
     <div class="hidden md:hidden bg-gray-900 border-b border-gray-800" id="mobile-menu">
         <div class="px-2 pt-2 pb-3 space-y-1 sm:px-3">
+            {% if current_user.can_view_page('dashboard') %}
             <a href="/" class="block px-3 py-2 rounded-md text-base font-medium text-white bg-gray-800">Dashboard</a>
+            {% endif %}
 
+            {% if nav.has_tracking %}
             <div class="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">Tracking</div>
+            {% if current_user.can_view_page('scoreboard') %}
             <a href="/scoreboard"
                 class="block px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:text-white hover:bg-gray-700">Scoreboard</a>
+            {% endif %}
+            {% if current_user.can_view_page('tracker') %}
             <a href="/tracker"
                 class="block px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:text-white hover:bg-gray-700">Tracker</a>
+            {% endif %}
+            {% if current_user.can_view_page('status_tracker') %}
             <a href="/status_tracker"
                 class="block px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:text-white hover:bg-gray-700">Status
                 Tracker</a>
+            {% endif %}
+            {% if current_user.can_view_page('trackers_v2') %}
+            <a href="/trackers_v2"
+                class="block px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:text-white hover:bg-gray-700">Custom Trackers</a>
+            {% endif %}
+            {% if current_user.can_view_page('todo') %}
             <a href="/todo"
                 class="block px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:text-white hover:bg-gray-700">Todo</a>
+            {% endif %}
+            {% if current_user.can_view_page('scrum_notes') %}
             <a href="/scrum_notes"
                 class="block px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:text-white hover:bg-gray-700">Scrum
                 Notes</a>
+            {% endif %}
+            {% endif %}
 
+            {% if nav.has_analysis %}
             <div class="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider mt-2">Analysis</div>
+            {% if current_user.can_view_page('custom_reports') %}
             <a href="/reports"
                 class="block px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:text-white hover:bg-gray-700">Reports</a>
+            {% endif %}
+            {% if current_user.can_view_page('explorer') %}
             <a href="/explorer"
                 class="block px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:text-white hover:bg-gray-700">Explorer</a>
+            {% endif %}
+            {% if current_user.can_view_page('query_builder') %}
             <a href="/query_builder"
                 class="block px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:text-white hover:bg-gray-700">Query
                 Builder</a>
+            {% endif %}
+            {% if current_user.can_view_page('teams') %}
             <a href="/teams"
                 class="block px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:text-white hover:bg-gray-700">Teams</a>
+            {% endif %}
+            {% if current_user.can_view_page('work_report') %}
+            <a href="/work_report"
+                class="block px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:text-white hover:bg-gray-700">Work Report</a>
+            {% endif %}
+            {% endif %}
 
+            {% if nav.has_tools %}
             <div class="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider mt-2">Tools</div>
+            {% if current_user.can_view_page('bulk_update') %}
             <a href="/bulk_update"
                 class="block px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:text-white hover:bg-gray-700">Bulk
                 Update</a>
+            {% endif %}
+            {% if current_user.can_view_page('merge_pdf') %}
             <a href="/merge_pdf"
                 class="block px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:text-white hover:bg-gray-700">PDF
                 Merger</a>
+            {% endif %}
+            {% if current_user.can_view_page('settings') %}
             <a href="/settings"
                 class="block px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:text-white hover:bg-gray-700">Settings</a>
+            {% endif %}
+            {% endif %}
         </div>
         <div class="pt-4 pb-4 border-t border-gray-700">
             <div class="flex items-center px-5">
