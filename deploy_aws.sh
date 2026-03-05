@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# AWS EC2 Ubuntu Deployment Script for ReportsDashboard
+# AWS EC2 Ubuntu 24.04 Deployment Script for ReportsDashboard
 # This script sets up a Python environment, installs dependencies, and configures Gunicorn.
 
 set -e
@@ -13,7 +13,7 @@ sudo apt-get update -y
 sudo apt-get upgrade -y
 
 echo "--- Installing Python and Dependencies ---"
-sudo apt-get install -y python3-pip python3-venv nginx git libpango-1.0-0 libpangoft2-1.0-0 libjpeg-dev libopenjp2-7-dev libffi-dev
+sudo apt-get install -y python3-pip python3-venv nginx git libpango-1.0-0 libpangoft2-1.0-0 libjpeg-dev libopenjp2-7-dev libffi-dev pkg-config libcairo2-dev
 
 # Clone the repository (User will need to provide their own Git URL if not already cloned)
 # git clone https://github.com/teslien/ReportsDashboard.git

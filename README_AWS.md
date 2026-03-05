@@ -3,7 +3,7 @@
 This guide provides step-by-step instructions to host your dashboard on an AWS EC2 instance.
 
 ## 1. Launch EC2 Instance
-- **OS**: Ubuntu 22.04 LTS (Amazon Machine Image)
+- **OS**: Ubuntu 24.04 LTS (Amazon Machine Image)
 - **Instance Type**: `t2.micro` (Free Tier eligible)
 - **Key Pair**: Create or select an existing `.pem` key.
 - **Network Settings**:
@@ -24,14 +24,20 @@ cd ReportsDashboard
 ```
 
 ## 4. Run the Deployment Script
+The script handles the creation of a Virtual Environment to avoid "externally-managed-environment" errors.
+
 Make the script executable and run it:
 ```bash
 chmod +x deploy_aws.sh
 ./deploy_aws.sh
 ```
 
-## 5. Post-Deployment Steps
-- **Environment Variables**: The script creates a `.env` file if it doesn't exist. You **must** edit it to include your actual Jira credentials, database connection strings, and other secrets.
+## 5. Post-Deployment & Manual Updates
+If you need to install packages manually, you **must** activate the virtual environment first:
+```bash
+source venv/bin/activate
+pip install -r requirements.txt
+```
   ```bash
   nano .env
   ```
