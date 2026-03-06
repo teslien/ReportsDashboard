@@ -6,6 +6,7 @@
     <meta charset="UTF-8">
     <title>Scrum Notes - {{ project }}</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
         .glass {
             background: rgba(31, 41, 55, 0.75);
@@ -134,8 +135,7 @@
         <!-- Header -->
         <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6 sm:mb-8">
             <div class="space-y-1">
-                <h1
-                    class="text-2xl sm:text-3xl font-black text-blue-500">
+                <h1 class="text-2xl sm:text-3xl font-black text-blue-500">
                     Scrum Notes
                 </h1>
                 <p class="text-gray-400 text-xs sm:text-sm">Your daily standup tracker — log tickets per teammate, per
@@ -259,8 +259,16 @@
             <div id="reportTableWrap" class="hidden glass rounded-2xl overflow-hidden">
                 <div class="p-4 border-b border-gray-700 flex items-center justify-between">
                     <span class="font-bold text-sm" id="reportCount">0 notes found</span>
-                    <button onclick="exportReport()"
-                        class="text-xs text-blue-400 hover:text-blue-300 transition font-semibold">↓ Export CSV</button>
+                    <div class="flex gap-4">
+                        <button onclick="copyReportToClipboard()"
+                            class="text-xs text-purple-400 hover:text-purple-300 transition font-semibold flex items-center gap-1">
+                            <i class="fas fa-copy"></i> Copy to Clipboard
+                        </button>
+                        <button onclick="exportReport()"
+                            class="text-xs text-blue-400 hover:text-blue-300 transition font-semibold flex items-center gap-1">
+                            <i class="fas fa-file-csv"></i> Export CSV
+                        </button>
+                    </div>
                 </div>
                 <div class="report-table-wrap">
                     <table class="w-full text-sm" id="reportTable">
@@ -338,8 +346,16 @@
             <div id="trackerTableWrap" class="hidden glass rounded-2xl overflow-hidden">
                 <div class="p-4 border-b border-gray-700 flex items-center justify-between">
                     <span class="font-bold text-sm" id="trackerCount">0 tickets tracked</span>
-                    <button onclick="exportTracker()"
-                        class="text-xs text-blue-400 hover:text-blue-300 transition font-semibold">↓ Export CSV</button>
+                    <div class="flex gap-4">
+                        <button onclick="copyTrackerToClipboard()"
+                            class="text-xs text-purple-400 hover:text-purple-300 transition font-semibold flex items-center gap-1">
+                            <i class="fas fa-copy"></i> Copy to Clipboard
+                        </button>
+                        <button onclick="exportTracker()"
+                            class="text-xs text-blue-400 hover:text-blue-300 transition font-semibold flex items-center gap-1">
+                            <i class="fas fa-file-csv"></i> Export CSV
+                        </button>
+                    </div>
                 </div>
                 <div class="report-table-wrap">
                     <table class="w-full text-sm">
@@ -648,7 +664,8 @@
         let reportData = [];
         let currentModalMemberId = '';  // set when opening Add Ticket modal, never from DOM
         let currentModalMemberName = '';
-        const TRACKER_TAGS = ["PR Raised", "PR Merged", "PR Delayed", "Demo Done", "Blocked", "Staged", "Production", "Hot Fix", "Previous Sprint"];
+        const TRACKER_TAGS = ["PR Raised", "PR Merged", "PR Delayed", "Demo Done", "Blocked", "Staged", "Production", "Hot Fix", "Previous Sprint", "Waiting for Demo"];
+
 
         function getTagColorClass(tag, isActive) {
             if (!isActive) return 'bg-gray-800/50 text-gray-500 border-gray-700 hover:border-gray-500';
@@ -660,7 +677,9 @@
                 'PR Merged': 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 shadow-sm',
                 'PR Delayed': 'bg-rose-500/20 text-rose-400 border-rose-500/40 shadow-sm',
                 'Demo Done': 'bg-purple-500/20 text-purple-400 border-purple-500/40 shadow-sm',
+                'Waiting for Demo': 'bg-yellow-500/20 text-yellow-400 border-yellow-500/40 shadow-sm',
                 'Hot Fix': 'bg-orange-500/20 text-orange-400 border-orange-500/40 shadow-sm',
+
                 'Staged': 'bg-indigo-500/20 text-indigo-400 border-indigo-500/40 shadow-sm'
             };
 
@@ -827,8 +846,11 @@
                         return `
                 <tr class="ticket-row transition" data-note-id="${n.id}">
                     <td class="px-4 py-3">
-                        <a href="javascript:void(0)" onclick="viewTicketDetails('${n.ticket_key}')"
-                           class="font-mono text-blue-400 hover:text-blue-300 font-bold text-xs transition">${n.ticket_key}</a>
+                        <div class="flex items-center gap-1.5 overflow-hidden">
+                            ${jira.type_icon ? `<img src="${jira.type_icon}" class="w-3.5 h-3.5 flex-shrink-0" title="${jira.type || ''}">` : ''}
+                            <a href="javascript:void(0)" onclick="viewTicketDetails('${n.ticket_key}')"
+                               class="font-mono text-blue-400 hover:text-blue-300 font-bold text-xs transition truncate">${n.ticket_key}</a>
+                        </div>
                     </td>
                     <td class="px-4 py-3 text-gray-200 text-xs max-w-xs truncate" title="${jira.summary || ''}">${summary}</td>
                     <td class="px-4 py-3">
@@ -1205,8 +1227,11 @@
             <td class="px-4 py-3 text-xs text-gray-400 font-mono whitespace-nowrap">${n.date}</td>
             <td class="px-4 py-3 text-sm font-semibold">${n.member_name}</td>
             <td class="px-4 py-3">
-                <a href="javascript:void(0)" onclick="viewTicketDetails('${n.ticket_key}')"
-                   class="font-mono text-blue-400 hover:text-blue-300 font-bold text-xs transition">${n.ticket_key}</a>
+                <div class="flex items-center gap-1.5 overflow-hidden">
+                    ${jira.type_icon ? `<img src="${jira.type_icon}" class="w-3.5 h-3.5 flex-shrink-0" title="${jira.type || ''}">` : ''}
+                    <a href="javascript:void(0)" onclick="viewTicketDetails('${n.ticket_key}')"
+                       class="font-mono text-blue-400 hover:text-blue-300 font-bold text-xs transition truncate">${n.ticket_key}</a>
+                </div>
             </td>
             <td class="px-4 py-3 text-xs text-gray-300 max-w-xs truncate" title="${jira.summary || ''}">${jira.summary || '—'}</td>
             <td class="px-4 py-3"><span class="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">${jira.status || '—'}</span></td>
@@ -1220,16 +1245,104 @@
 
         function exportReport() {
             if (!reportData.length) return;
-            const headers = ['Date', 'Member', 'Ticket', 'Summary', 'Jira Status', 'Priority', 'Deadline', 'Comment', 'Note Status'];
-            const rows = reportData.map(n => {
+            const headers = ['Issue Type', 'Ticket', 'Summary', 'Priority', 'Assigned To', 'Jira Status', 'Deadline', 'Comment', 'Tags', 'Note Status', 'Date'];
+
+            const typePriority = { 'Bug': 1, 'Story': 2, 'Task': 3, 'Sub-task': 4 };
+            const getPriority = (t) => typePriority[t] || 5;
+
+            const sortedData = [...reportData].sort((a, b) => {
+                const typeA = (jiraCache[a.ticket_key] || {}).type || '';
+                const typeB = (jiraCache[b.ticket_key] || {}).type || '';
+                return getPriority(typeA) - getPriority(typeB);
+            });
+
+            const rows = sortedData.map(n => {
                 const jira = jiraCache[n.ticket_key] || {};
-                return [n.date, n.member_name, n.ticket_key, jira.summary || '', jira.status || '', jira.priority || '', n.deadline || '', n.comment || '', n.status];
+                return [
+                    jira.type || '',
+                    n.ticket_key,
+                    jira.summary || '',
+                    jira.priority || '',
+                    jira.assignee || '',
+                    jira.status || '',
+                    n.deadline || '',
+                    n.comment || '',
+                    n.tags || '',
+                    n.status,
+                    n.date
+                ];
             });
             const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
             const a = document.createElement('a');
             a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
             a.download = `scrum_notes_${document.getElementById('reportStart').value}_to_${document.getElementById('reportEnd').value}.csv`;
             a.click();
+        }
+
+        async function copyHtmlToClipboard(html, btn) {
+            try {
+                const blob = new Blob([html], { type: 'text/html' });
+                const item = new ClipboardItem({ 'text/html': blob });
+                await navigator.clipboard.write([item]);
+
+                const originalText = btn.innerHTML;
+                btn.innerHTML = '<i class="fas fa-check"></i> Copied!';
+                btn.style.color = '#34d399'; // Green-400
+                setTimeout(() => {
+                    btn.innerHTML = originalText;
+                    btn.style.color = '';
+                }, 2000);
+            } catch (err) {
+                console.error('Unable to copy', err);
+                alert('Failed to copy. Make sure you are using a modern browser and the site is in a secure context.');
+            }
+        }
+
+        function copyReportToClipboard() {
+            const btn = window.event.currentTarget;
+            if (!reportData.length) return;
+            const headers = ['Issue Type', 'Ticket', 'Summary', 'Priority', 'Assigned To', 'Jira Status', 'Deadline', 'Comment', 'Tags', 'Note Status', 'Date'];
+            const typePriority = { 'Bug': 1, 'Story': 2, 'Task': 3, 'Sub-task': 4 };
+            const getPriority = (t) => typePriority[t] || 5;
+            const sortedData = [...reportData].sort((a, b) => {
+                const typeA = (jiraCache[a.ticket_key] || {}).type || '';
+                const typeB = (jiraCache[b.ticket_key] || {}).type || '';
+                return getPriority(typeA) - getPriority(typeB);
+            });
+
+            let html = '<table border="1" style="border-collapse: collapse; font-family: Arial, sans-serif; font-size: 10pt; width: 100%; border: 1px solid #ddd;">';
+            html += '<tr style="background-color: #1e3a8a; color: #ffffff; font-weight: bold; text-transform: uppercase; font-size: 8pt; letter-spacing: 0.5px;">';
+            headers.forEach(h => html += `<th style="padding: 10px 8px; border: 1px solid #4b5563; text-align: left;">${h}</th>`);
+            html += '</tr>';
+
+            sortedData.forEach(n => {
+                const jira = jiraCache[n.ticket_key] || {};
+                const isBug = (jira.type || '').toLowerCase() === 'bug';
+                const rowStyle = isBug ? 'background-color: #fef2f2;' : '';
+                const typeStyle = isBug ? 'color: #dc2626; font-weight: bold;' : '';
+
+                const jiraLink = `{{ jira_domain }}/browse/${n.ticket_key}`;
+                const row = [
+                    `<span style="${typeStyle}">${escapeHtml(jira.type)}</span>`,
+                    `<a href="${jiraLink}" style="color: #2563eb; text-decoration: none; font-weight: bold;">${escapeHtml(n.ticket_key)}</a>`,
+                    escapeHtml(jira.summary),
+                    escapeHtml(jira.priority),
+                    escapeHtml(jira.assignee),
+                    escapeHtml(jira.status),
+                    escapeHtml(n.deadline),
+                    escapeHtml(n.comment),
+                    escapeHtml(n.tags),
+                    escapeHtml(n.status),
+                    escapeHtml(n.date)
+                ];
+                html += `<tr style="${rowStyle}">`;
+                row.forEach(cell => {
+                    html += `<td style="padding: 8px; border: 1px solid #e5e7eb;">${cell}</td>`;
+                });
+                html += '</tr>';
+            });
+            html += '</table>';
+            copyHtmlToClipboard(html, btn);
         }
 
         // ─── Helpers ─────────────────────────────────────────────────────
@@ -1241,6 +1354,12 @@
             let h = 0;
             for (let i = 0; i < name.length; i++) h = name.charCodeAt(i) + ((h << 5) - h);
             return colors[Math.abs(h) % colors.length];
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text || '';
+            return div.innerHTML;
         }
 
         // ─── Offcanvas Logic ─────────────────────────────────────────────
@@ -1462,8 +1581,11 @@
                 <tr class="hover:bg-blue-500/5 transition-colors group">
                     <td class="px-4 py-4 align-top">
                         <div class="flex flex-col gap-1">
-                            <a href="javascript:void(0)" onclick="viewTicketDetails('${n.ticket_key}')"
-                               class="font-black text-blue-400 hover:text-blue-300 text-sm tracking-tight transition">${n.ticket_key}</a>
+                            <div class="flex items-center gap-2">
+                                ${jira.type_icon ? `<img src="${jira.type_icon}" class="w-4 h-4 flex-shrink-0" title="${jira.type || ''}">` : ''}
+                                <a href="javascript:void(0)" onclick="viewTicketDetails('${n.ticket_key}')"
+                                   class="font-black text-blue-400 hover:text-blue-300 text-sm tracking-tight transition">${n.ticket_key}</a>
+                            </div>
                             <span class="text-[10px] px-2 py-0.5 rounded-full bg-gray-800 text-gray-400 border border-gray-700 w-fit font-bold">${jira.status || '—'}</span>
                         </div>
                     </td>
@@ -1664,16 +1786,28 @@
 
         function exportTracker() {
             if (!trackerData.length) return;
-            const headers = ['Ticket', 'Summary', 'Status', 'Worked By', 'Tags', 'Comments'];
-            const rows = trackerData.map(n => {
+            const headers = ['Issue Type', 'Ticket', 'Summary', 'Priority', 'Assigned To', 'Jira Status', 'Comments', 'Pipeline Status'];
+
+            const typePriority = { 'Bug': 1, 'Story': 2, 'Task': 3, 'Sub-task': 4 };
+            const getPriority = (t) => typePriority[t] || 5;
+
+            const sortedData = [...trackerData].sort((a, b) => {
+                const typeA = (jiraCache[a.ticket_key] || {}).type || '';
+                const typeB = (jiraCache[b.ticket_key] || {}).type || '';
+                return getPriority(typeA) - getPriority(typeB);
+            });
+
+            const rows = sortedData.map(n => {
                 const jira = jiraCache[n.ticket_key] || {};
                 return [
+                    jira.type || '',
                     n.ticket_key,
                     jira.summary || '',
+                    jira.priority || '',
+                    jira.assignee || '',
                     jira.status || '',
-                    n.members.join(', '),
-                    n.tags || '',
-                    n.comment || ''
+                    n.comment || '',
+                    n.tags || ''
                 ];
             });
             const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
@@ -1683,6 +1817,50 @@
             const end = document.getElementById('trackerEnd').value;
             a.download = `scrum_status_tracker_${start}_to_${end}.csv`;
             a.click();
+        }
+
+        function copyTrackerToClipboard() {
+            const btn = window.event.currentTarget;
+            if (!trackerData.length) return;
+            const headers = ['Issue Type', 'Ticket', 'Summary', 'Priority', 'Assigned To', 'Jira Status', 'Comments', 'Pipeline Status'];
+            const typePriority = { 'Bug': 1, 'Story': 2, 'Task': 3, 'Sub-task': 4 };
+            const getPriority = (t) => typePriority[t] || 5;
+            const sortedData = [...trackerData].sort((a, b) => {
+                const typeA = (jiraCache[a.ticket_key] || {}).type || '';
+                const typeB = (jiraCache[b.ticket_key] || {}).type || '';
+                return getPriority(typeA) - getPriority(typeB);
+            });
+
+            let html = '<table border="1" style="border-collapse: collapse; font-family: Arial, sans-serif; font-size: 10pt; width: 100%; border: 1px solid #ddd;">';
+            html += '<tr style="background-color: #1e3a8a; color: #ffffff; font-weight: bold; text-transform: uppercase; font-size: 8pt; letter-spacing: 0.5px;">';
+            headers.forEach(h => html += `<th style="padding: 10px 8px; border: 1px solid #4b5563; text-align: left;">${h}</th>`);
+            html += '</tr>';
+
+            sortedData.forEach(n => {
+                const jira = jiraCache[n.ticket_key] || {};
+                const isBug = (jira.type || '').toLowerCase() === 'bug';
+                const rowStyle = isBug ? 'background-color: #fef2f2;' : '';
+                const typeStyle = isBug ? 'color: #dc2626; font-weight: bold;' : '';
+
+                const jiraLink = `{{ jira_domain }}/browse/${n.ticket_key}`;
+                const row = [
+                    `<span style="${typeStyle}">${escapeHtml(jira.type)}</span>`,
+                    `<a href="${jiraLink}" style="color: #2563eb; text-decoration: none; font-weight: bold;">${escapeHtml(n.ticket_key)}</a>`,
+                    escapeHtml(jira.summary),
+                    escapeHtml(jira.priority),
+                    escapeHtml(jira.assignee),
+                    escapeHtml(jira.status),
+                    escapeHtml(n.comment),
+                    escapeHtml(n.tags)
+                ];
+                html += `<tr style="${rowStyle}">`;
+                row.forEach(cell => {
+                    html += `<td style="padding: 8px; border: 1px solid #e5e7eb;">${cell}</td>`;
+                });
+                html += '</tr>';
+            });
+            html += '</table>';
+            copyHtmlToClipboard(html, btn);
         }
     </script>
 </body>

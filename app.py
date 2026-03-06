@@ -3182,7 +3182,7 @@ def ticket_history(key):
 @app.route("/scrum_notes")
 @page_permission_required("scrum_notes")
 def scrum_notes_page():
-    resp = make_response(render_template("scrum_notes.html", project=PROJECT_KEY))
+    resp = make_response(render_template("scrum_notes.html", project=PROJECT_KEY, jira_domain=JIRA_DOMAIN))
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     resp.headers["Pragma"] = "no-cache"
     resp.headers["Expires"] = "0"
