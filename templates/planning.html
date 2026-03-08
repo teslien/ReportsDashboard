@@ -79,7 +79,7 @@
 <body class="min-h-screen font-sans selection:bg-blue-500/30 flex flex-col">
     {% include 'navbar.html' %}
 
-    <main class="flex-grow pt-20 pb-4 px-6 w-full max-w-[1920px] mx-auto flex flex-col h-[calc(100vh-5rem)]">
+    <main class="flex-grow pt-20 pb-4 px-6 w-full max-w-7xl mx-auto flex flex-col h-[calc(100vh-5rem)]">
         <!-- Header Section (Compact & Collapsible) -->
         <div id="planningHeader" class="transition-all duration-300 overflow-hidden flex-shrink-0">
             <div class="flex flex-wrap justify-between items-center gap-4 mb-4">
@@ -194,7 +194,7 @@
             </div>
 
             <!-- Weeks Board -->
-            <div id="weeksGrid" class="flex gap-6 overflow-x-auto overflow-y-hidden pb-4 h-full items-start pr-4">
+            <div id="weeksGrid" class="space-y-5 overflow-y-auto overflow-x-hidden pb-4 h-full pr-1">
                 <!-- Columns injected here -->
             </div>
         </div>
@@ -374,6 +374,33 @@
         </div>
     </div>
 
+    <div id="addTicketsModal" class="fixed inset-0 z-50 hidden">
+        <div class="fixed inset-0 bg-gray-900 bg-opacity-75 transition-opacity backdrop-blur-sm"
+            onclick="closeAddTicketsModal()"></div>
+        <div class="fixed inset-0 z-10 overflow-y-auto">
+            <div class="flex min-h-full items-center justify-center p-4">
+                <div
+                    class="relative transform overflow-hidden rounded-2xl bg-gray-800 border border-gray-700 shadow-xl transition-all w-full max-w-xl p-6">
+                    <h3 class="text-xl font-bold text-white mb-2">Add Tickets</h3>
+                    <p class="text-gray-400 text-sm mb-4">Paste Jira keys separated by commas, spaces, or new lines.</p>
+                    <textarea id="addTicketsInput" rows="5"
+                        class="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-white focus:ring-2 focus:ring-blue-500 outline-none mb-5 font-mono text-xs"
+                        placeholder="TIM-1234, TIM-2345"></textarea>
+                    <div class="flex justify-between items-center">
+                        <button onclick="openJqlFromAddModal()"
+                            class="px-3 py-2 text-emerald-400 hover:text-emerald-300 text-sm font-medium">Use JQL Instead</button>
+                        <div class="flex gap-3 ml-auto">
+                            <button onclick="closeAddTicketsModal()"
+                                class="px-4 py-2 text-gray-400 hover:text-white text-sm font-medium">Cancel</button>
+                            <button onclick="submitAddTickets()"
+                                class="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium shadow-lg transition">Add Tickets</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         const teamId = {{ team_id }};
         let currentSprintId = null;
@@ -381,6 +408,7 @@
         let searchQuery = '';
         let allTickets = [];
         let sortables = [];
+        let targetAddWeekId = null;
 
         // --- Init ---
         async function init() {
@@ -445,7 +473,7 @@
 
             tab.innerHTML = sprints.map(s => `
                 <button onclick='switchSprint(${s.id}, ${JSON.stringify(s.name).replace(/'/g, "&#39;")})' 
-                    class="px-5 py-2.5 rounded-t-lg border-b-2 whitespace-nowrap transition text-sm font-medium ${currentSprintId === s.id ? 'border-blue-500 text-white bg-gray-800' : 'border-transparent text-gray-400 hover:text-gray-200 hover:bg-gray-800/50'}">
+                    class="px-5 py-2.5 rounded-t-lg border-b-2 whitespace-nowrap transition text-sm font-medium ${currentSprintId === s.id ? 'border-blue-500 text-white bg-gray-800' : 'border-transparent text-gray-400 hover:text-blue-400 hover:bg-blue-500/10'}">
                     ${s.name}
                 </button>
             `).join('');
@@ -470,62 +498,65 @@
             sortables = [];
 
             grid.innerHTML = weeks.map(w => `
-                <div class="flex-shrink-0 w-[350px] flex flex-col h-full bg-gray-800/50 rounded-xl border border-gray-700/50 max-h-full">
-                    <!-- Header -->
-                    <div class="p-3 border-b border-gray-700/50 bg-gray-800/80 rounded-t-xl backdrop-blur-sm sticky top-0 z-10">
-                        <div class="flex justify-between items-center mb-1">
+                <section class="w-full bg-gray-800/50 rounded-xl border border-gray-700/50 overflow-hidden">
+                    <div class="px-4 py-3 border-b border-gray-700/50 bg-gray-800/80">
+                        <div class="flex justify-between items-center gap-3">
                             <div class="flex items-center gap-2">
-                                <h3 class="font-bold text-[11px] text-gray-400 uppercase tracking-widest">Week ${w.weekNumber}</h3>
-                                <span id="count-${w.id}" class="bg-gray-700 text-gray-300 text-[10px] px-1.5 py-0.5 rounded-full font-mono">0</span>
+                                <h3 class="font-bold text-sm text-gray-300 uppercase tracking-wider">Week ${w.weekNumber}</h3>
+                                <span id="count-${w.id}" class="bg-gray-700 text-gray-300 text-[11px] px-2 py-0.5 rounded-full font-mono">0</span>
                             </div>
                             <div class="flex items-center gap-1">
-                                <button onclick="expandWeek(${w.id})"
-                                    class="text-gray-500 hover:text-blue-400 p-1 rounded hover:bg-gray-700 transition"
-                                    title="Expand Table View">
-                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path>
+                                <button onclick="openAddTicketsModal(${w.id})"
+                                    class="text-blue-400 hover:text-white p-1.5 rounded hover:bg-blue-500/20 transition"
+                                    title="Add Tickets">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                                    </svg>
+                                </button>
+                                <button onclick="openJqlModal(${w.id})"
+                                    class="text-emerald-400 hover:text-white p-1.5 rounded hover:bg-emerald-500/20 transition"
+                                    title="Add via JQL">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
                                     </svg>
                                 </button>
                                 <button onclick="deleteWeek(${w.id})"
-                                    class="text-gray-600 hover:text-red-400 p-1 rounded hover:bg-gray-700 transition"
-                                    title="Delete Week">
-                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                class="text-gray-600 hover:text-red-400 p-1.5 rounded hover:bg-gray-700 transition"
+                                title="Delete Week">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
                                     </svg>
                                 </button>
                             </div>
                         </div>
-                        <div onclick="editWeekGoal(${w.id}, '${(w.goal || '').replace(/'/g, "\\'")}')" 
-                             class="flex items-center justify-between text-[10px] text-gray-400 italic cursor-pointer hover:text-blue-400 group min-h-[1.25rem]">
-                            <span class="truncate pr-2">${w.goal || 'Set week goal...'}</span>
-                            <svg class="w-2.5 h-2.5 opacity-0 group-hover:opacity-100 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" stroke-width="2"></path>
-                            </svg>
+                        <div onclick="editWeekGoal(${w.id}, '${(w.goal || '').replace(/'/g, "\\'")}')"
+                             class="mt-1 text-xs text-gray-400 italic cursor-pointer hover:text-blue-400">
+                            ${w.goal || 'Set week goal...'}
                         </div>
                     </div>
 
-                    <!-- Tickets Container (Sortable) -->
-                    <div class="p-3 flex-grow overflow-y-auto space-y-3 min-h-[100px] custom-scrollbar" id="week-container-${w.id}" data-week-id="${w.id}">
-                        <!-- Tickets injected here -->
+                    <div class="overflow-x-auto">
+                        <table class="w-full min-w-[980px]">
+                            <thead class="bg-gray-900/70 border-b border-gray-700/50">
+                                <tr>
+                                    <th class="px-3 py-2 text-left text-xs font-bold uppercase tracking-wider text-gray-400">Type</th>
+                                    <th class="px-3 py-2 text-left text-xs font-bold uppercase tracking-wider text-gray-400">Ticket</th>
+                                    <th class="px-3 py-2 text-left text-xs font-bold uppercase tracking-wider text-gray-400">Summary</th>
+                                    <th class="px-3 py-2 text-left text-xs font-bold uppercase tracking-wider text-gray-400">Assignee</th>
+                                    <th class="px-3 py-2 text-left text-xs font-bold uppercase tracking-wider text-gray-400">Status</th>
+                                    <th class="px-3 py-2 text-center text-xs font-bold uppercase tracking-wider text-gray-400">PR</th>
+                                    <th class="px-3 py-2 text-center text-xs font-bold uppercase tracking-wider text-gray-400">Demo</th>
+                                    <th class="px-3 py-2 text-center text-xs font-bold uppercase tracking-wider text-gray-400">Merge</th>
+                                    <th class="px-3 py-2 text-left text-xs font-bold uppercase tracking-wider text-gray-400">Comment</th>
+                                    <th class="px-3 py-2 text-center text-xs font-bold uppercase tracking-wider text-gray-400">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="week-container-${w.id}" data-week-id="${w.id}" class="divide-y divide-gray-700/40">
+                            </tbody>
+                        </table>
                     </div>
 
-                    <!-- Input Footer -->
-                    <div class="p-3 border-t border-gray-700/50 bg-gray-800/30 rounded-b-xl">
-                        <div class="flex gap-2">
-                            <div class="relative flex-grow">
-                                <input type="text" placeholder="+ Add tickets (e.g. KEY-1)" 
-                                    class="w-full bg-gray-900 border border-gray-700 rounded-lg py-2 pl-3 pr-10 text-sm text-white placeholder-gray-500 focus:border-blue-500 outline-none transition shadow-sm"
-                                    onkeydown="if(event.key==='Enter') addTicket(${w.id}, this)">
-                                 <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-gray-500">
-                                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-                                </div>
-                            </div>
-                            <button onclick="openJqlModal(${w.id})" class="p-2 bg-gray-900 border border-gray-700 hover:bg-gray-800 rounded-lg text-gray-400 hover:text-white transition shadow-sm" title="Add via JQL">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-                            </button>
-                        </div>
-                    </div>
-                </div>
+                </section>
             `).join('');
 
             // Initialize Sortable for each column
@@ -591,10 +622,21 @@
             allTickets.forEach(t => {
                 const container = document.getElementById(`week-container-${t.weekId}`);
                 if (container) {
-                    const div = document.createElement('div');
+                    const div = document.createElement('tr');
                     div.id = `ticket-row-${t.id}`;
-                    div.className = "ticket-placeholder bg-gray-800/20 border border-gray-700/30 rounded-lg p-3 animate-pulse h-24 mb-3";
-                    div.innerHTML = `<div class="h-4 bg-gray-700 w-24 mb-2 rounded"></div><div class="h-3 bg-gray-700 w-full rounded"></div>`;
+                    div.className = "ticket-placeholder animate-pulse";
+                    div.innerHTML = `
+                        <td class="px-3 py-3"><div class="h-3 bg-gray-700/60 rounded w-10"></div></td>
+                        <td class="px-3 py-3"><div class="h-3 bg-gray-700/60 rounded w-16"></div></td>
+                        <td class="px-3 py-3"><div class="h-3 bg-gray-700/60 rounded w-64"></div></td>
+                        <td class="px-3 py-3"><div class="h-3 bg-gray-700/60 rounded w-24"></div></td>
+                        <td class="px-3 py-3"><div class="h-3 bg-gray-700/60 rounded w-16"></div></td>
+                        <td class="px-3 py-3"></td>
+                        <td class="px-3 py-3"></td>
+                        <td class="px-3 py-3"></td>
+                        <td class="px-3 py-3"><div class="h-3 bg-gray-700/60 rounded w-28"></div></td>
+                        <td class="px-3 py-3"></td>
+                    `;
                     div.setAttribute('data-ticket-id', t.id);
                     container.appendChild(div);
                 }
@@ -701,8 +743,19 @@
         function renderTicketNotFound(dbId, key) {
             const div = document.getElementById(`ticket-row-${dbId}`);
             if (div) {
-                div.className = "ticket-card bg-red-900/20 border border-red-500/30 p-3 rounded-lg";
-                div.innerHTML = `<span class="text-red-400 font-bold">${key}</span> <span class="text-xs text-red-500">Not Found in Jira</span>`;
+                div.className = "";
+                div.innerHTML = `
+                    <td class="px-3 py-3 text-xs text-gray-400">-</td>
+                    <td class="px-3 py-3"><span class="text-red-400 font-bold text-xs">${key}</span></td>
+                    <td class="px-3 py-3 text-xs text-red-500">Not Found in Jira</td>
+                    <td class="px-3 py-3 text-xs text-gray-400">-</td>
+                    <td class="px-3 py-3 text-xs text-gray-400">-</td>
+                    <td class="px-3 py-3"></td>
+                    <td class="px-3 py-3"></td>
+                    <td class="px-3 py-3"></td>
+                    <td class="px-3 py-3"></td>
+                    <td class="px-3 py-3 text-center"></td>
+                `;
             }
         }
 
@@ -734,41 +787,53 @@
             if (!t) return false;
 
             div.classList.remove('hidden');
-            div.className = 'ticket-card bg-gray-700/40 hover:bg-gray-700/70 p-2 rounded-lg border border-gray-600/30 hover:border-gray-500/50 transition-all shadow-sm relative group overflow-hidden';
+            div.className = 'ticket-card hover:bg-gray-700/20 transition-all';
 
             const doneStatuses = ["DEPLOYED", "DONE", "NOT A BUG", "READY FOR STAGING", "RESOLVED", "STAGED", "UNABLE TO REPRODUCE", "READY FOR QA", "READY FOR INTERNAL DEMO"];
             const isDone = doneStatuses.includes(statusName.toUpperCase());
             const statusClass = isDone ? 'bg-emerald-900/40 text-emerald-400 border-emerald-500/20 status-done' : 'bg-blue-900/40 text-blue-400 border-blue-500/20';
 
             div.innerHTML = `
-                <div class="flex justify-between items-start gap-1 pb-1">
-                    <div class="min-w-0 flex-1">
-                        <div class="flex items-center gap-1 mb-0.5">
-                            ${typeUrl ? `<img src="${typeUrl}" class="w-3 h-3 flex-shrink-0" title="${fields.issuetype.name}">` : ''}
-                            <a href="${JIRA_DOMAIN}/browse/${t.issueKey}" target="_blank" class="text-blue-400 hover:text-blue-300 font-bold text-[10px] tracking-tight hover:underline flex-shrink-0">${t.issueKey}</a>
-                        </div>
-                        <p class="text-[10px] text-gray-100 truncate leading-tight opacity-90" title="${summaryText}">${summaryText}</p>
+                <td class="px-3 py-2">
+                    <div class="flex items-center gap-1">
+                        ${typeUrl ? `<img src="${typeUrl}" class="w-3.5 h-3.5 flex-shrink-0" title="${fields.issuetype.name}">` : ''}
+                        <span class="text-xs text-gray-400">${fields.issuetype?.name || '-'}</span>
                     </div>
-                    <div class="flex flex-col items-end gap-1">
-                         <div class="w-4 h-4 rounded-full flex items-center justify-center text-[7px] font-bold text-white shadow-sm ring-1 ring-gray-600 ${getAvatarColor(assignee)}" title="${assignee}">
+                </td>
+                <td class="px-3 py-2">
+                    <a href="${JIRA_DOMAIN}/browse/${t.issueKey}" target="_blank" class="text-blue-400 hover:text-blue-300 font-bold text-sm hover:underline">${t.issueKey}</a>
+                </td>
+                <td class="px-3 py-2 text-sm text-gray-100 max-w-[380px] truncate" title="${summaryText}">${summaryText}</td>
+                <td class="px-3 py-2">
+                    <div class="flex items-center gap-2">
+                        <div class="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold text-white shadow-sm ring-1 ring-gray-600 ${getAvatarColor(assignee)}" title="${assignee}">
                             ${getInitials(assignee)}
                         </div>
-                        <button onclick="removeTicket(${t.id})" class="text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition duration-150">
-                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                        </button>
+                        <span class="text-sm text-gray-300 truncate max-w-[130px]" title="${assignee}">${assignee}</span>
                     </div>
-                </div>
-
-                <div class="flex items-center justify-between border-t border-gray-600/30 pt-1 mt-0.5">
-                    <span class="text-[8px] px-1.5 py-0 rounded border ${statusClass} font-bold uppercase tracking-tighter status-badge truncate max-w-[70px]">${statusName}</span>
-                    <div class="flex items-center gap-1">
-                        <input type="checkbox" ${t.prRaised ? 'checked' : ''} onchange="updateTicketMeta(${t.id}, {prRaised: this.checked})" class="w-2.5 h-2.5 rounded bg-gray-800 border-gray-600 text-blue-600 focus:ring-0 cursor-pointer" title="PR">
-                        <input type="checkbox" ${t.demoDone ? 'checked' : ''} onchange="updateTicketMeta(${t.id}, {demoDone: this.checked})" class="w-2.5 h-2.5 rounded bg-gray-800 border-gray-600 text-emerald-600 focus:ring-0 cursor-pointer" title="Demo">
-                        <input type="checkbox" ${t.prMerged ? 'checked' : ''} onchange="updateTicketMeta(${t.id}, {prMerged: this.checked})" class="w-2.5 h-2.5 rounded bg-gray-800 border-gray-600 text-purple-600 focus:ring-0 cursor-pointer" title="Merged">
-                    </div>
-                </div>
-                ${t.comment ? `<div class="mt-1 text-[9px] text-gray-400 italic truncate border-l-2 border-gray-700 pl-1.5" title="${t.comment}">${t.comment}</div>` : ''}
-                <div class="absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-gray-700/0 to-transparent pointer-events-none group-hover:from-gray-700/20"></div>
+                </td>
+                <td class="px-3 py-2">
+                    <span class="text-[10px] px-2 py-0.5 rounded border ${statusClass} font-bold uppercase tracking-wider status-badge">${statusName}</span>
+                </td>
+                <td class="px-3 py-2 text-center">
+                    <input type="checkbox" ${t.prRaised ? 'checked' : ''} onchange="updateTicketMeta(${t.id}, {prRaised: this.checked})" class="w-3.5 h-3.5 rounded bg-gray-800 border-gray-600 text-blue-600 focus:ring-0 cursor-pointer" title="PR">
+                </td>
+                <td class="px-3 py-2 text-center">
+                    <input type="checkbox" ${t.demoDone ? 'checked' : ''} onchange="updateTicketMeta(${t.id}, {demoDone: this.checked})" class="w-3.5 h-3.5 rounded bg-gray-800 border-gray-600 text-emerald-600 focus:ring-0 cursor-pointer" title="Demo">
+                </td>
+                <td class="px-3 py-2 text-center">
+                    <input type="checkbox" ${t.prMerged ? 'checked' : ''} onchange="updateTicketMeta(${t.id}, {prMerged: this.checked})" class="w-3.5 h-3.5 rounded bg-gray-800 border-gray-600 text-purple-600 focus:ring-0 cursor-pointer" title="Merged">
+                </td>
+                <td class="px-3 py-2">
+                    <input type="text" value="${t.comment || ''}" onblur="updateTicketMeta(${t.id}, {comment: this.value})"
+                        class="w-full bg-gray-800/50 border border-gray-700 rounded px-2 py-1 text-[11px] text-gray-300 placeholder-gray-600 focus:ring-1 focus:ring-blue-500 focus:bg-gray-800 transition"
+                        placeholder="Add note...">
+                </td>
+                <td class="px-3 py-2 text-center">
+                    <button onclick="removeTicket(${t.id})" class="text-gray-600 hover:text-red-400 transition duration-150">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                </td>
             `;
 
             return isDone;
@@ -797,14 +862,14 @@
             });
         }
 
-        async function addTicket(weekId, input) {
-            const rawValue = input.value.trim();
+        async function addTicket(weekId, inputOrText) {
+            const rawValue = typeof inputOrText === 'string' ? inputOrText.trim() : inputOrText.value.trim();
             if (!rawValue) return;
 
             const keys = rawValue.split(/[\s,]+/).filter(k => k.length > 0).map(k => k.toUpperCase());
             if (keys.length === 0) return;
 
-            input.value = '';
+            if (typeof inputOrText !== 'string') inputOrText.value = '';
 
             // Show loading or temp state if needed? 
             // For now, simple await
@@ -904,6 +969,32 @@
         function closeMemberModal() { document.getElementById('memberModal').classList.add('hidden'); }
         function openSprintModal() { document.getElementById('sprintModal').classList.remove('hidden'); }
         function closeSprintModal() { document.getElementById('sprintModal').classList.add('hidden'); }
+
+        function openAddTicketsModal(weekId) {
+            targetAddWeekId = weekId;
+            document.getElementById('addTicketsInput').value = '';
+            document.getElementById('addTicketsModal').classList.remove('hidden');
+        }
+
+        function closeAddTicketsModal() {
+            document.getElementById('addTicketsModal').classList.add('hidden');
+            document.getElementById('addTicketsInput').value = '';
+            targetAddWeekId = null;
+        }
+
+        async function submitAddTickets() {
+            if (!targetAddWeekId) return;
+            const raw = document.getElementById('addTicketsInput').value;
+            await addTicket(targetAddWeekId, raw);
+            closeAddTicketsModal();
+        }
+
+        function openJqlFromAddModal() {
+            if (!targetAddWeekId) return;
+            const wk = targetAddWeekId;
+            closeAddTicketsModal();
+            openJqlModal(wk);
+        }
 
         let targetJqlWeekId = null;
         function openJqlModal(weekId) {
