@@ -850,14 +850,13 @@
                             <th class="pb-4 px-2" data-track-col="deployment">Deployment</th>
                             <th class="pb-4 px-2" data-track-col="qa_assignee">QA Assignee</th>
                             <th class="pb-4 px-2" data-track-col="qa_status">QA Status</th>
-                            <th class="pb-4 px-2 text-center" data-track-col="add_bugs">Add Bugs</th>
                             <th class="pb-4 px-2 text-center" data-track-col="bugs">Bugs</th>
                             <th class="pb-4 px-2 text-center" data-track-col="completed">Completed</th>
                         </tr>
                     </thead>
                     <tbody id="trackingTableBody">
                         <tr>
-                            <td colspan="10" class="py-12 text-center text-gray-500 italic">
+                            <td colspan="9" class="py-12 text-center text-gray-500 italic">
                                 Run analysis to see ticket tracking data
                             </td>
                         </tr>
@@ -988,7 +987,6 @@
             { key: "qa_assignee", label: "QA Assignee" },
             { key: "qa_status", label: "QA Status" },
             { key: "requirements_clear", label: "Req Clear" },
-            { key: "add_bugs", label: "Add Bugs" },
             { key: "bugs", label: "Bugs" },
             { key: "completed", label: "Completed" }
         ];
@@ -1427,7 +1425,7 @@
 
             if (!sprintId) {
                 lastFilteredTrackingIssues = [];
-                body.innerHTML = '<tr><td colspan="10" class="py-8 text-center text-gray-500 italic">Select a sprint to enable local tracking</td></tr>';
+                body.innerHTML = '<tr><td colspan="9" class="py-8 text-center text-gray-500 italic">Select a sprint to enable local tracking</td></tr>';
                 return;
             }
 
@@ -1436,7 +1434,7 @@
 
             if (!allIssues || allIssues.length === 0) {
                 lastFilteredTrackingIssues = [];
-                body.innerHTML = '<tr><td colspan="10" class="py-8 text-center text-gray-500 italic">No tickets found in this sprint</td></tr>';
+                body.innerHTML = '<tr><td colspan="9" class="py-8 text-center text-gray-500 italic">No tickets found in this sprint</td></tr>';
                 return;
             }
 
@@ -1467,7 +1465,7 @@
             lastFilteredTrackingIssues = filtered;
 
             if (filtered.length === 0) {
-                body.innerHTML = '<tr><td colspan="10" class="py-8 text-center text-gray-500 italic">No tickets match current filters</td></tr>';
+                body.innerHTML = '<tr><td colspan="9" class="py-8 text-center text-gray-500 italic">No tickets match current filters</td></tr>';
                 return;
             }
 
@@ -1639,40 +1637,28 @@
                     </td>`;
                 }
 
-                // 8. Add Bugs
-                let addBugsCell = "";
-                if (USER_CAN_EDIT) {
-                    addBugsCell = `
-                    <td class="py-4 px-2 text-center" data-track-col="add_bugs">
-                        <button onclick="openBugManager('${issue.key}')" 
-                                class="text-[10px] bg-blue-600/20 text-blue-400 border border-blue-500/30 px-2 py-1 rounded hover:bg-blue-600/40 transition">
-                            Add Bugs
-                        </button>
-                    </td>`;
-                } else {
-                     addBugsCell = `
-                    <td class="py-4 px-2 text-center" data-track-col="add_bugs">
-                        <button disabled 
-                                class="text-[10px] bg-blue-600/10 text-blue-400 border border-blue-500/20 px-2 py-1 rounded cursor-not-allowed opacity-80">
-                            Add Bugs
-                        </button>
-                    </td>`;
-                }
-
                 // 9. Bugs List (View Only)
                 const doneStatuses = ["DONE", "RESOLVED", "DEPLOYED", "STAGED", "READY FOR QA", "READY FOR STAGING", "READY FOR INTERNAL DEMO", "CLOSED", "NOT A BUG", "UNABLE TO REPRODUCE"];
                 
                 const bugsCell = `
-                    <td class="py-4 px-2 text-center" data-track-col="bugs">
-                        <div id="bugBadges-${issue.key}" class="flex flex-wrap gap-1 justify-center">
-                             ${(local.bugs_found || "").split(",").filter(b => b).map(b => {
-                                const info = lastStatusMap[b];
-                                let isDone = false;
-                                if (info) {
-                                    isDone = (info.category === 'done' || doneStatuses.includes(info.status));
-                                }
-                                return `<button type="button" onclick="showTicketDetails('${b}')" class="bug-badge ${isDone ? 'bug-done' : ''} transition">${b}</button>`;
-                             }).join('')}
+                    <td class="py-4 px-2 text-center group/bugs" data-track-col="bugs">
+                        <div class="flex flex-col items-center gap-1">
+                            <div id="bugBadges-${issue.key}" class="flex flex-wrap gap-1 justify-center">
+                                 ${(local.bugs_found || "").split(",").filter(b => b).map(b => {
+                                    const info = lastStatusMap[b];
+                                    let isDone = false;
+                                    if (info) {
+                                        isDone = (info.category === 'done' || doneStatuses.includes(info.status));
+                                    }
+                                    return `<button type="button" onclick="showTicketDetails('${b}')" class="bug-badge ${isDone ? 'bug-done' : ''} transition">${b}</button>`;
+                                 }).join('')}
+                            </div>
+                            ${USER_CAN_EDIT ? `
+                            <button onclick="openBugManager('${issue.key}')" 
+                                    class="opacity-0 group-hover/bugs:opacity-100 transition-opacity text-blue-400 hover:text-white bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-full w-5 h-5 flex items-center justify-center mt-1"
+                                    title="Add Bug">
+                                <i class="fas fa-plus text-xs"></i>
+                            </button>` : ''}
                         </div>
                     </td>`;
 
@@ -1701,7 +1687,7 @@
                     </td>`;
                 }
 
-                tr.innerHTML = ticketCell + reqCell + prRaisedCell + prMergedCell + deployCell + qaAssigneeCell + qaStatusCell + addBugsCell + bugsCell + completedCell;
+                tr.innerHTML = ticketCell + reqCell + prRaisedCell + prMergedCell + deployCell + qaAssigneeCell + qaStatusCell + bugsCell + completedCell;
                 body.appendChild(tr);
             });
 
