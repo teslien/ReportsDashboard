@@ -1750,60 +1750,138 @@
                 return;
             }
 
-            const sanitize = (v) => (v == null ? "" : String(v)).replace(/\t/g, " ").replace(/\r?\n/g, " ").trim();
-            const excelHyperlink = (url, text) => {
-                const u = sanitize(url).replace(/"/g, '""');
-                const t = sanitize(text).replace(/"/g, '""');
-                return `=HYPERLINK("${u}","${t}")`;
+            // Define columns matching the table render order
+            // 1. Ticket (Key, Summary, Status, Assignee)
+            // 2. Req Clear
+            // 3. PR Raised
+            // 4. PR Merged
+            // 5. Deployment
+            // 6. QA Assignee
+            // 7. QA Status
+            // 8. Bugs
+            // 9. Completed
+            const exportConfig = [
+                { 
+                    key: "ticket", 
+                    subCols: [
+                        { header: "Key", val: i => ({ text: i.key, href: jiraBrowseUrl(i.key) }) },
+                        { header: "Summary", val: i => i.summary },
+                        { header: "Status", val: i => i.status },
+                        { header: "Assignee", val: i => i.assignee || "Unassigned" }
+                    ]
+                },
+                { key: "requirements_clear", header: "Req Clear", val: i => (i.local || {}).requirements_clear || "No" },
+                { key: "pr_raised", header: "PR Raised", val: i => (i.local || {}).pr_raised ? "YES" : "NO" },
+                { key: "pr_merged", header: "PR Merged", val: i => (i.local || {}).pr_merged ? "YES" : "NO" },
+                { key: "deployment", header: "Deployment", val: i => (i.local || {}).deploy_status || "N/A" },
+                { key: "qa_assignee", header: "QA Assignee", val: i => (i.local || {}).qa_assignee || "" },
+                { key: "qa_status", header: "QA Status", val: i => (i.local || {}).qa_status || "Pending" },
+                { key: "bugs", header: "Bugs", val: i => (i.local || {}).bugs_found || "" },
+                { key: "completed", header: "Completed", val: i => (i.local || {}).completed ? "YES" : "NO" },
+                { key: "comment", header: "Comment", val: i => (i.local || {}).comment || "" }
+            ];
+
+            // Filter visible columns
+            const visibleCols = exportConfig.filter(c => !trackingHiddenCols.has(c.key));
+            
+            // Helper to escape HTML
+            const escapeHtml = (text) => {
+                if (text == null) return "";
+                return String(text)
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;")
+                    .replace(/"/g, "&quot;")
+                    .replace(/'/g, "&#039;");
             };
-            const rows = issues.map(i => {
-                const local = i.local || {};
-                const jiraUrl = jiraBrowseUrl(i.key);
-                return [
-                    excelHyperlink(jiraUrl, i.key),
-                    sanitize(i.summary),
-                    sanitize(local.requirements_clear || "No"),
-                    sanitize(i.assignee || "Unassigned"),
-                    sanitize(i.status),
-                    sanitize(local.deploy_status || "N/A"),
-                    sanitize(local.qa_assignee || ""),
-                    sanitize(local.qa_status || "Pending"),
-                    sanitize(local.pr_raised ? "YES" : "NO"),
-                    sanitize(local.pr_merged ? "YES" : "NO"),
-                    sanitize(local.bugs_found || ""),
-                    sanitize(local.completed ? "YES" : "NO")
-                ].join("\t");
+
+            // Build HTML Table for Clipboard
+            let html = '<table border="1" style="border-collapse: collapse; font-family: sans-serif;"><thead><tr>';
+            
+            // Header
+            visibleCols.forEach(c => {
+                if (c.subCols) {
+                    c.subCols.forEach(sc => {
+                        html += `<th style="background-color: #1f2937; color: white; padding: 8px; border: 1px solid #4b5563;">${escapeHtml(sc.header)}</th>`;
+                    });
+                } else {
+                    html += `<th style="background-color: #1f2937; color: white; padding: 8px; border: 1px solid #4b5563;">${escapeHtml(c.header)}</th>`;
+                }
             });
-            const header = ["Jira #", "Summary", "Req Clear", "Dev", "Jira Status", "Deployment", "QA Assignee", "QA Status", "PR Raised", "PR Merged", "Bugs", "Completed"].join("\t");
-            const tsv = [header, ...rows].join("\n");
+            html += '</tr></thead><tbody>';
+
+            // Rows
+            issues.forEach(i => {
+                html += '<tr>';
+                visibleCols.forEach(c => {
+                    if (c.subCols) {
+                        c.subCols.forEach(sc => {
+                            const v = sc.val(i);
+                            if (typeof v === 'object' && v.href) {
+                                html += `<td style="border: 1px solid #d1d5db; padding: 4px;"><a href="${v.href}">${escapeHtml(v.text)}</a></td>`;
+                            } else {
+                                html += `<td style="border: 1px solid #d1d5db; padding: 4px;">${escapeHtml(v)}</td>`;
+                            }
+                        });
+                    } else {
+                        html += `<td style="border: 1px solid #d1d5db; padding: 4px;">${escapeHtml(c.val(i))}</td>`;
+                    }
+                });
+                html += '</tr>';
+            });
+            html += '</tbody></table>';
 
             const original = btn.innerHTML;
             const onCopied = () => {
-                btn.innerHTML = "Copied!";
+                btn.innerHTML = `<i class="fas fa-check"></i> Copied!`;
                 setTimeout(() => { btn.innerHTML = original; }, 1500);
             };
 
-            const fallback = () => {
-                const ta = document.createElement("textarea");
-                ta.value = tsv;
-                ta.style.position = "fixed";
-                ta.style.left = "-999999px";
-                ta.style.top = "-999999px";
-                document.body.appendChild(ta);
-                ta.focus();
-                ta.select();
+            // Helper to copy HTML
+            const fallbackCopy = (htmlString) => {
+                const div = document.createElement("div");
+                div.innerHTML = htmlString;
+                div.style.position = "fixed";
+                div.style.left = "-9999px";
+                div.style.top = "0";
+                document.body.appendChild(div);
+                
+                const range = document.createRange();
+                range.selectNode(div);
+                window.getSelection().removeAllRanges();
+                window.getSelection().addRange(range);
+                
                 try {
                     document.execCommand("copy");
                     onCopied();
+                } catch (e) {
+                    console.error(e);
+                    alert("Failed to copy to clipboard");
                 } finally {
-                    document.body.removeChild(ta);
+                    document.body.removeChild(div);
+                    window.getSelection().removeAllRanges();
                 }
             };
 
-            if (navigator.clipboard && window.isSecureContext) {
-                navigator.clipboard.writeText(tsv).then(onCopied).catch(fallback);
+            if (navigator.clipboard && navigator.clipboard.write && window.ClipboardItem) {
+                try {
+                    const blobHtml = new Blob([html], { type: "text/html" });
+                    const blobText = new Blob(["Table copied. Paste in Excel to view."], { type: "text/plain" });
+                    const data = [new ClipboardItem({ 
+                        "text/html": blobHtml, 
+                        "text/plain": blobText 
+                    })];
+                    
+                    navigator.clipboard.write(data).then(onCopied).catch(err => {
+                        console.warn("Clipboard API failed, trying fallback...", err);
+                        fallbackCopy(html);
+                    });
+                } catch (e) {
+                    console.warn("ClipboardItem error, trying fallback...", e);
+                    fallbackCopy(html);
+                }
             } else {
-                fallback();
+                fallbackCopy(html);
             }
         }
 
