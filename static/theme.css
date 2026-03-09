@@ -968,3 +968,15 @@
     background-color: #f8fafc !important;
     border-top-color: #e2e8f0 !important;
 }
+
+[data-theme="light"] .ticket-note-badge {
+    background: #fef3c7 !important;
+    border: 1px solid #f59e0b !important;
+    color: #b45309 !important;
+    box-shadow: 0 3px 8px rgba(148, 64, 0, 0.2) !important;
+}
+
+[data-theme="light"] .ticket-note-badge i {
+    color: #b45309 !important;
+    -webkit-text-fill-color: #b45309 !important;
+}

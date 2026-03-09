@@ -1368,7 +1368,7 @@ def sprint_stats():
             conn, cursor = get_db_connection(dictionary=True)
             if not conn: return jsonify({"error": "Database error"}), 500
             cursor.execute("""
-                SELECT issue_key, pr_raised, pr_merged, deploy_status, qa_assignee, qa_status, bugs_found, requirements_clear, completed, is_flagged
+                SELECT issue_key, pr_raised, pr_merged, deploy_status, qa_assignee, qa_status, bugs_found, requirements_clear, completed, is_flagged, comment
                 FROM sprint_tickets 
                 WHERE sprint_id = %s
             """, (sprint_id,))
@@ -1383,7 +1383,8 @@ def sprint_stats():
                     "bugs_found": r["bugs_found"],
                     "requirements_clear": r["requirements_clear"] or "No",
                     "completed": bool(r["completed"]),
-                    "is_flagged": bool(r["is_flagged"])
+                    "is_flagged": bool(r["is_flagged"]),
+                    "comment": r["comment"] or ""
                 }
             conn.close()
 
@@ -1401,7 +1402,8 @@ def sprint_stats():
                 "bugs_found": "",
                 "requirements_clear": "No",
                 "completed": False,
-                "is_flagged": False
+                "is_flagged": False,
+                "comment": ""
             })
             
             # Collect bug keys to fetch their status later if they are not in all_issues

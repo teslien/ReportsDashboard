@@ -254,6 +254,26 @@
             opacity: 0.8;
         }
 
+        .ticket-note-badge {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            width: 22px;
+            height: 22px;
+            border-radius: 9999px;
+            background: rgba(250, 204, 21, 0.26);
+            border: 1px solid rgba(234, 179, 8, 0.75);
+            color: #fef08a;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transform: rotate(10deg);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+            z-index: 20;
+            line-height: 1;
+            font-size: 11px;
+        }
+
         /* Custom Offcanvas System */
         .custom-offcanvas-backdrop {
             position: fixed;
@@ -1361,18 +1381,25 @@
                 // 1. Ticket (Always visible)
                 const ticketCell = `
                     <td class="py-4 px-2 min-w-[200px]" data-track-col="ticket">
-                        <div class="flex items-start gap-2">
+                        <div class="flex items-start gap-2 group">
                             <img src="${issue.type_icon}" class="w-4 h-4 mt-1">
                             <div class="flex flex-col">
                                 <div class="flex items-center gap-2">
                                     <a href="${jiraBrowseUrl(issue.key)}" target="_blank" rel="noopener noreferrer" class="text-blue-400 font-bold text-xs hover:underline">${issue.key}</a>
-                                    <button type="button" onclick="showTicketDetails('${issue.key}')" class="text-[10px] px-2 py-0.5 rounded bg-gray-700/50 text-gray-200 border border-gray-600 hover:bg-gray-700 transition">Details</button>
+                                    <button type="button" onclick="showTicketDetails('${issue.key}')" class="text-[10px] px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 transition">Details</button>
                                     <button type="button" 
                                             onclick="${USER_CAN_EDIT ? `toggleFlag(this, '${issue.key}')` : ''}"
-                                            class="text-sm transition-colors ${local.is_flagged ? 'text-yellow-500' : 'text-gray-600 hover:text-yellow-500/50'} ${!USER_CAN_EDIT ? 'cursor-default' : ''}"
+                                            class="text-sm transition-colors ${local.is_flagged ? 'text-yellow-500' : 'text-gray-400 hover:text-yellow-500'} ${!USER_CAN_EDIT ? 'cursor-default' : ''}"
                                             title="${local.is_flagged ? 'Important' : 'Mark as Important'}">
                                         <i class="${local.is_flagged ? 'fas' : 'far'} fa-flag"></i>
                                     </button>
+                                    ${USER_CAN_EDIT ? `
+                                    <button type="button"
+                                            onclick="openNoteModal('${issue.key}')"
+                                            class="opacity-0 group-hover:opacity-100 text-xs text-blue-400 hover:text-white bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-full w-5 h-5 inline-flex items-center justify-center transition"
+                                            title="Add Note">
+                                        <i class="fas fa-plus"></i>
+                                    </button>` : ''}
                                 </div>
                                 <span class="text-sm text-gray-300 font-medium truncate max-w-[200px]" title="${issue.summary}">${issue.summary}</span>
                                 <div class="flex items-center gap-2">
@@ -1532,9 +1559,14 @@
 
                 // 10. Completed
                 let completedCell = "";
+                const hasTicketNote = !!((local.comment || "").trim());
+                const noteBadge = hasTicketNote
+                    ? `<button type="button" onclick="openNoteModal('${issue.key}')" class="ticket-note-badge hover:bg-yellow-400/35 transition" title="Ticket note"><i class="fas fa-pen-to-square"></i></button>`
+                    : "";
                 if (USER_CAN_EDIT) {
                     completedCell = `
-                    <td class="py-4 px-2 text-center" data-track-col="completed">
+                    <td class="py-4 px-2 text-center relative overflow-visible" data-track-col="completed">
+                        ${noteBadge}
                         <button onclick="toggleCompleted(this, '${issue.key}')" 
                                 class="px-3 py-1 rounded-full text-[10px] font-bold uppercase transition ${local.completed ? 'bg-green-500/20 text-green-400 border border-green-500/50' : 'bg-gray-700 text-gray-400 border border-gray-600'}">
                             ${local.completed ? 'YES' : 'NO'}
@@ -1542,7 +1574,8 @@
                     </td>`;
                 } else {
                      completedCell = `
-                    <td class="py-4 px-2 text-center" data-track-col="completed">
+                    <td class="py-4 px-2 text-center relative overflow-visible" data-track-col="completed">
+                        ${noteBadge}
                         <span class="px-3 py-1 rounded-full text-[10px] font-bold uppercase transition ${local.completed ? 'bg-green-500/20 text-green-400 border border-green-500/50' : 'bg-gray-700 text-gray-400 border border-gray-600'}">
                             ${local.completed ? 'YES' : 'NO'}
                         </span>
@@ -1912,7 +1945,10 @@
         }
 
         document.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape') closeOffcanvas();
+            if (e.key === 'Escape') {
+                closeOffcanvas();
+                closeNoteModal();
+            }
         });
 
         function initTrackingAssigneeSelects(teamMembers) {
@@ -1972,6 +2008,41 @@
             btn.innerText = isCompleted ? "YES" : "NO";
             btn.className = `px-3 py-1 rounded-full text-[10px] font-bold uppercase transition ${isCompleted ? 'bg-green-500/20 text-green-400 border border-green-500/50' : 'bg-gray-700 text-gray-400 border border-gray-600'}`;
             updateTicketField(issueKey, 'completed', isCompleted ? 1 : 0);
+        }
+
+        let activeNoteIssueKey = null;
+
+        function openNoteModal(issueKey) {
+            activeNoteIssueKey = issueKey;
+            const issue = (lastDashboardData?.tracking_issues || []).find(i => i.key === issueKey);
+            const local = issue?.local || {};
+            const textarea = document.getElementById("ticketNoteInput");
+            const title = document.getElementById("ticketNoteTitle");
+            const saveBtn = document.getElementById("saveTicketNoteBtn");
+            title.innerText = `Ticket Note: ${issueKey}`;
+            textarea.value = local.comment || "";
+            textarea.readOnly = !USER_CAN_EDIT;
+            saveBtn.style.display = USER_CAN_EDIT ? "inline-flex" : "none";
+            document.getElementById("ticketNoteModal").classList.remove("hidden");
+            textarea.focus();
+        }
+
+        function closeNoteModal() {
+            document.getElementById("ticketNoteModal").classList.add("hidden");
+            activeNoteIssueKey = null;
+        }
+
+        async function saveTicketNote() {
+            if (!activeNoteIssueKey) return;
+            const note = (document.getElementById("ticketNoteInput").value || "").trim();
+            await updateTicketField(activeNoteIssueKey, 'comment', note);
+            const issue = (lastDashboardData?.tracking_issues || []).find(i => i.key === activeNoteIssueKey);
+            if (issue) {
+                issue.local = issue.local || {};
+                issue.local.comment = note;
+            }
+            closeNoteModal();
+            applyTrackingFiltersAndRender();
         }
 
         function renderTypeChart(counts) {
@@ -2075,6 +2146,27 @@
             </button>
         </div>
         <div class="custom-offcanvas-body" id="offcanvasBody"></div>
+    </div>
+
+    <div id="ticketNoteModal" class="fixed inset-0 z-[2100] hidden">
+        <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" onclick="closeNoteModal()"></div>
+        <div class="relative flex min-h-screen items-center justify-center p-4">
+            <div class="w-full max-w-lg bg-gray-800 border border-gray-700 rounded-2xl shadow-2xl p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 id="ticketNoteTitle" class="text-lg font-bold text-white">Ticket Note</h3>
+                    <button type="button" onclick="closeNoteModal()" class="text-gray-400 hover:text-white transition">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <textarea id="ticketNoteInput" rows="6"
+                    class="w-full bg-gray-900 border border-gray-700 rounded-xl p-3 text-sm text-gray-200 placeholder-gray-500 focus:ring-2 focus:ring-blue-500 outline-none"
+                    placeholder="Write note for this ticket..."></textarea>
+                <div class="mt-5 flex justify-end gap-3">
+                    <button type="button" onclick="closeNoteModal()" class="px-4 py-2 text-gray-400 hover:text-white text-sm">Cancel</button>
+                    <button id="saveTicketNoteBtn" type="button" onclick="saveTicketNote()" class="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-bold">Save Note</button>
+                </div>
+            </div>
+        </div>
     </div>
 </body>
 
