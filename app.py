@@ -276,8 +276,8 @@ AUTH = base64.b64encode(f"{DEFAULT_JIRA_EMAIL}:{DEFAULT_JIRA_API_TOKEN}".encode(
 MYSQL_CONFIG = {
     'host': 'localhost',
     'user': 'rohit',
-    'password': 'rohit',
-    'database': 'reports_dashboard'
+    'password': 'Rohit',
+    'database': 'rb_win'
 }
 
 def get_db_connection(dictionary=False):
