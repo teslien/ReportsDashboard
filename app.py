@@ -276,8 +276,8 @@ AUTH = base64.b64encode(f"{DEFAULT_JIRA_EMAIL}:{DEFAULT_JIRA_API_TOKEN}".encode(
 MYSQL_CONFIG = {
     'host': 'localhost',
     'user': 'rohit',
-    'password': 'rohit',
-    'database': 'reports_dashboard'
+    'password': 'Rohit',
+    'database': 'rb_win'
 }
 
 def get_db_connection(dictionary=False):
@@ -2791,43 +2791,53 @@ def get_sprints():
     headers_dict = dict(HEADERS)
     project_key_str = str(PROJECT_KEY)
     
-    # Use JQL to find issues for this project to extract sprint data
+    # Use JQL and paginate through results to collect all sprint references
     jql = f'project = "{project_key_str}"'
-    
     url = f"{JIRA_DOMAIN}/rest/api/3/search/jql"
-    params = {
-        "jql": jql,
-        "maxResults": 100, # Assuming 100 issues specify most open sprints
-        "fields": "customfield_10020" # The sprint field
-    }
     
     try:
         query = request.args.get("q", "").lower()
-        res = requests.get(url, headers=headers_dict, params=params)
-        if res.status_code != 200:
-            return jsonify({"error": f"Jira error: {res.text}"}), res.status_code
-        
-        data = res.json()
-        issues = data.get("issues", [])
-        
         all_sprints_map = {}
-        for issue in issues:
-            sprints = issue["fields"].get("customfield_10020")
-            if sprints and isinstance(sprints, list):
-                for s in sprints:
-                    s_id = s.get("id")
-                    s_name = s.get("name", "")
-                    s_state = s.get("state", "unknown")
-                    
-                    # Only include active or future sprints (openSprints normally does this, but being safe)
-                    if s_state in ["active", "future"]:
-                        if query and query not in s_name.lower():
+        start_at = 0
+        max_results = 100
+
+        while True:
+            params = {
+                "jql": jql,
+                "maxResults": max_results,
+                "startAt": start_at,
+                "fields": "customfield_10020"
+            }
+            res = requests.get(url, headers=headers_dict, params=params)
+            if res.status_code != 200:
+                return jsonify({"error": f"Jira error: {res.text}"}), res.status_code
+
+            data = res.json()
+            issues = data.get("issues", [])
+            if not issues:
+                break
+
+            for issue in issues:
+                sprints = issue["fields"].get("customfield_10020")
+                if sprints and isinstance(sprints, list):
+                    for s in sprints:
+                        s_id = s.get("id")
+                        s_name = s.get("name", "")
+                        s_state = s.get("state", "unknown")
+                        if not s_id:
+                            continue
+                        if query and query not in s_name.lower() and query not in str(s_id):
                             continue
                         all_sprints_map[s_id] = {
                             "id": s_id,
                             "name": s_name,
                             "state": s_state
                         }
+
+            total = data.get("total", 0)
+            start_at += len(issues)
+            if start_at >= total:
+                break
         
         final_sprints = list(all_sprints_map.values())
         # Sort by ID descending (newest first)

@@ -980,3 +980,25 @@
     color: #b45309 !important;
     -webkit-text-fill-color: #b45309 !important;
 }
+
+[data-theme="light"] .toast-item {
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12) !important;
+}
+
+[data-theme="light"] .toast-item.toast-success {
+    background: #ecfdf5 !important;
+    border-color: #86efac !important;
+    color: #166534 !important;
+}
+
+[data-theme="light"] .toast-item.toast-error {
+    background: #fef2f2 !important;
+    border-color: #fca5a5 !important;
+    color: #991b1b !important;
+}
+
+[data-theme="light"] .toast-item.toast-info {
+    background: #eff6ff !important;
+    border-color: #93c5fd !important;
+    color: #1e40af !important;
+}

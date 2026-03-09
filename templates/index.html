@@ -274,6 +274,78 @@
             font-size: 11px;
         }
 
+        .toast-stack {
+            position: fixed;
+            top: 88px;
+            right: 16px;
+            z-index: 2200;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: none;
+        }
+
+        .toast-item {
+            min-width: 260px;
+            max-width: 360px;
+            border-radius: 12px;
+            padding: 10px 12px;
+            font-size: 13px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+            border: 1px solid transparent;
+            opacity: 0;
+            transform: translateY(-8px);
+            animation: toast-in 180ms ease-out forwards;
+        }
+
+        .toast-item.toast-success {
+            background: rgba(16, 185, 129, 0.15);
+            border-color: rgba(16, 185, 129, 0.45);
+            color: #6ee7b7;
+        }
+
+        .toast-item.toast-error {
+            background: rgba(239, 68, 68, 0.16);
+            border-color: rgba(239, 68, 68, 0.48);
+            color: #fca5a5;
+        }
+
+        .toast-item.toast-info {
+            background: rgba(59, 130, 246, 0.15);
+            border-color: rgba(59, 130, 246, 0.45);
+            color: #93c5fd;
+        }
+
+        .toast-item.toast-out {
+            animation: toast-out 180ms ease-in forwards;
+        }
+
+        @keyframes toast-in {
+            from {
+                opacity: 0;
+                transform: translateY(-8px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes toast-out {
+            from {
+                opacity: 1;
+                transform: translateY(0);
+            }
+            to {
+                opacity: 0;
+                transform: translateY(-8px);
+            }
+        }
+
         /* Custom Offcanvas System */
         .custom-offcanvas-backdrop {
             position: fixed;
@@ -1213,14 +1285,14 @@
             if (newValue === 1) {
                 icon.classList.remove('far');
                 icon.classList.add('fas');
-                btn.classList.remove('text-gray-600', 'hover:text-yellow-500/50');
+                btn.classList.remove('text-gray-400', 'hover:text-yellow-500');
                 btn.classList.add('text-yellow-500');
                 btn.title = "Important";
             } else {
                 icon.classList.remove('fas');
                 icon.classList.add('far');
                 btn.classList.remove('text-yellow-500');
-                btn.classList.add('text-gray-600', 'hover:text-yellow-500/50');
+                btn.classList.add('text-gray-400', 'hover:text-yellow-500');
                 btn.title = "Mark as Important";
             }
 
@@ -1235,6 +1307,10 @@
                         value: newValue
                     })
                 });
+                if (!response.ok) {
+                    const errData = await response.json().catch(() => ({}));
+                    throw new Error(errData.error || "Failed to update important flag");
+                }
                 
                 // Update lastDashboardData
                 if (lastDashboardData && lastDashboardData.tracking_issues) {
@@ -1245,22 +1321,24 @@
                     // Update the goals list dynamically
                     updateGoalsList(lastDashboardData);
                 }
+                showToast(newValue === 1 ? "Marked as important" : "Removed from important", "success");
             } catch (err) {
                 console.error("Error toggling flag:", err);
                 // Revert on error - manually toggle back
                 if (newValue === 0) {
                     icon.classList.remove('far');
                     icon.classList.add('fas');
-                    btn.classList.remove('text-gray-600', 'hover:text-yellow-500/50');
+                    btn.classList.remove('text-gray-400', 'hover:text-yellow-500');
                     btn.classList.add('text-yellow-500');
                     btn.title = "Important";
                 } else {
                     icon.classList.remove('fas');
                     icon.classList.add('far');
                     btn.classList.remove('text-yellow-500');
-                    btn.classList.add('text-gray-600', 'hover:text-yellow-500/50');
+                    btn.classList.add('text-gray-400', 'hover:text-yellow-500');
                     btn.title = "Mark as Important";
                 }
+                showToast(err.message || "Failed to update important flag", "error");
             }
         }
 
@@ -1279,9 +1357,50 @@
                         value: value
                     })
                 });
+                if (!res.ok) {
+                    const errData = await res.json().catch(() => ({}));
+                    throw new Error(errData.error || "Failed to save changes");
+                }
+                showToast(`Saved ${getTrackingFieldLabel(field)}`, "success");
             } catch (err) {
                 console.error("Error updating field:", err);
+                showToast(err.message || "Failed to save changes", "error");
             }
+        }
+
+        function getTrackingFieldLabel(field) {
+            const labels = {
+                requirements_clear: "Req Clear",
+                pr_raised: "PR Raised",
+                pr_merged: "PR Merged",
+                deploy_status: "Deployment",
+                qa_assignee: "QA Assignee",
+                qa_status: "QA Status",
+                bugs_found: "Bugs",
+                completed: "Completed",
+                comment: "Note",
+                demo_done: "Demo",
+                is_flagged: "Important"
+            };
+            return labels[field] || "changes";
+        }
+
+        function showToast(message, type = "info") {
+            const stack = document.getElementById("toastStack");
+            if (!stack) return;
+            const icon = type === "success"
+                ? '<i class="fas fa-circle-check"></i>'
+                : type === "error"
+                    ? '<i class="fas fa-circle-exclamation"></i>'
+                    : '<i class="fas fa-circle-info"></i>';
+            const toast = document.createElement("div");
+            toast.className = `toast-item toast-${type}`;
+            toast.innerHTML = `${icon}<span>${message}</span>`;
+            stack.appendChild(toast);
+            setTimeout(() => {
+                toast.classList.add("toast-out");
+                setTimeout(() => toast.remove(), 180);
+            }, 2200);
         }
 
         function renderTrackingTable(data) {
@@ -2168,6 +2287,7 @@
             </div>
         </div>
     </div>
+    <div id="toastStack" class="toast-stack"></div>
 </body>
 
 </html>
