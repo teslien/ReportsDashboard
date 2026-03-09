@@ -30,6 +30,51 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev_secret_key_change_in_production")
 
+import time
+
+# =========================
+# SIMPLE IN-MEMORY CACHE
+# =========================
+JIRA_CACHE = {}
+CACHE_TTL = 300 # 5 minutes default
+
+def get_jira_cached(url, headers, params, ttl=CACHE_TTL, force_refresh=False):
+    """
+    Simple caching wrapper for Jira GET requests.
+    Keys are based on URL + sorted params.
+    """
+    # Create a unique key for this request
+    # Convert params to a sorted tuple of items to be hashable
+    param_key = tuple(sorted(params.items())) if params else ()
+    cache_key = (url, param_key)
+    
+    now = time.time()
+    
+    if not force_refresh and cache_key in JIRA_CACHE:
+        timestamp, data = JIRA_CACHE[cache_key]
+        if now - timestamp < ttl:
+            print(f"DEBUG: Serving from cache: {url}")
+            return data
+            
+    # Fetch fresh data
+    try:
+        resp = requests.get(url, headers=headers, params=params)
+        if resp.status_code == 200:
+            data = resp.json()
+            JIRA_CACHE[cache_key] = (now, data)
+            return data
+        else:
+            # If error, try to return stale cache if available, otherwise return error
+            if cache_key in JIRA_CACHE:
+                print(f"DEBUG: Fetch failed ({resp.status_code}), serving stale cache.")
+                return JIRA_CACHE[cache_key][1]
+            return resp.json() # Return the error response
+    except Exception as e:
+        if cache_key in JIRA_CACHE:
+            print(f"DEBUG: Exception {e}, serving stale cache.")
+            return JIRA_CACHE[cache_key][1]
+        raise e
+
 # =========================
 # 🔐 AUTH & SECURITY SETUP
 # =========================
@@ -1234,6 +1279,7 @@ def sprint_stats():
     team_ids = data.get("team_id")
     sprint_id = data.get("sprint_id") # Optional Jira Sprint ID
     production_only = data.get("production_only", False)
+    force_refresh = data.get("force_refresh", False)
     
     if not team_ids:
         return jsonify({"error": "Team is required"}), 400
@@ -1281,15 +1327,16 @@ def sprint_stats():
         jql += ' AND "platform[checkboxes]" = PRODUCTION'
     
     try:
-        res = requests.get(
+        res = get_jira_cached(
             f"{JIRA_DOMAIN}/rest/api/3/search/jql",
             headers=headers_dict,
             params={
                 "jql": jql, 
                 "maxResults": 1000, 
                 "fields": "summary,status,priority,assignee,issuetype"
-            }
-        ).json()
+            },
+            force_refresh=force_refresh
+        )
         
         if "errorMessages" in res:
             return jsonify({"error": res["errorMessages"]}), 400
@@ -1420,6 +1467,7 @@ def sprint_stats():
                 "status_category": i["fields"]["status"]["statusCategory"]["key"],
                 "assignee": i["fields"].get("assignee", {}).get("displayName", "Unassigned"),
                 "type_icon": i["fields"]["issuetype"].get("iconUrl"),
+                "type_name": i["fields"]["issuetype"].get("name"),
                 "local": local
             })
 
@@ -1427,14 +1475,15 @@ def sprint_stats():
         if extra_bug_keys:
             try:
                 extra_jql = f"key IN ({','.join(extra_bug_keys)})"
-                extra_res = requests.get(
+                extra_res = get_jira_cached(
                     f"{JIRA_DOMAIN}/rest/api/3/search/jql",
                     headers=headers_dict,
                     params={
                         "jql": extra_jql,
                         "fields": "status"
-                    }
-                ).json()
+                    },
+                    force_refresh=force_refresh
+                )
                 
                 for i in extra_res.get("issues", []):
                     tracking_issues.append({
@@ -1503,6 +1552,150 @@ def update_sprint_ticket_field():
     add_audit_log(page="Dashboard", item_key=issue_key, field_name=field, new_value=value, old_value=old_value)
 
     return jsonify({"success": True})
+
+@app.route("/api/dashboard/recently_added", methods=["POST"])
+@login_required
+def recently_added_tickets():
+    data = request.json
+    team_ids = data.get("team_id")
+    sprint_id = data.get("sprint_id")
+    filter_mode = data.get("filter_mode", "team")
+    
+    if not team_ids:
+        return jsonify({"error": "Team is required"}), 400
+        
+    if not isinstance(team_ids, list):
+        team_ids = [team_ids]
+
+    conn, cursor = get_db_connection()
+    if not conn: return jsonify({"error": "Database error"}), 500
+    
+    placeholders = ', '.join(['%s'] * len(team_ids))
+    cursor.execute(f"SELECT account_id FROM team_members WHERE team_id IN ({placeholders})", tuple(team_ids))
+    member_ids = [r[0] for r in cursor.fetchall() if r and r[0]]
+    conn.close()
+
+    headers_dict = dict(HEADERS)
+    project_key_str = str(PROJECT_KEY)
+    parent_team_filter = 'AND "team[team]" = "4da67a24-33ef-42a2-b940-840dd6e450bc"'
+    # JQL Construction
+    # We rely on 'Sprint CHANGED AFTER -3d' as requested.
+    # Note: 'Sprint' field name is standard.
+    # We add 'Sprint IS NOT EMPTY' to ensure we only target tickets that actually have a sprint context.
+    jql_primary = f'project = "{project_key_str}" {parent_team_filter} AND Sprint IS NOT EMPTY AND Sprint CHANGED AFTER "-3d" ORDER BY updated DESC'
+    
+    # Fallback to updated time ONLY if the primary Sprint query fails (e.g. Jira instance config issue)
+    jql_fallback = f'project = "{project_key_str}" {parent_team_filter} AND updated >= "-3d" ORDER BY updated DESC'
+    
+    def fetch_jira(jql_query):
+        return requests.get(
+            f"{JIRA_DOMAIN}/rest/api/3/search/jql",
+            headers=headers_dict,
+            params={
+                "jql": jql_query,
+                "maxResults": 50,
+                "fields": "summary,status,assignee,created,updated,issuetype,customfield_10020",
+                "expand": "changelog"
+            }
+        )
+
+    def parse_jira_datetime(raw):
+        if not raw:
+            return None
+        try:
+            return datetime.strptime(raw, "%Y-%m-%dT%H:%M:%S.%f%z")
+        except Exception:
+            try:
+                return datetime.strptime(raw, "%Y-%m-%dT%H:%M:%S%z")
+            except Exception:
+                return None
+
+    try:
+        print(f"DEBUG: Trying Primary JQL: {jql_primary}")
+        res = fetch_jira(jql_primary)
+        if res.status_code == 400 and jql_primary != jql_fallback:
+            print(f"DEBUG: Primary JQL failed ({res.text}). Trying Fallback: {jql_fallback}")
+            res = fetch_jira(jql_fallback)
+            
+        jira_payload = res.json()
+        if "errorMessages" in jira_payload:
+            return jsonify({"error": jira_payload["errorMessages"]}), 400
+            
+        issues = jira_payload.get("issues", [])
+        cutoff = datetime.now(timezone.utc) - timedelta(days=3)
+        formatted = []
+
+        print(f"DEBUG: Processing {len(issues)} issues for recent activity...")
+        
+        for i in issues:
+            f = i["fields"]
+            sprints = f.get("customfield_10020") or []
+            sprint_ids = []
+
+            if isinstance(sprints, list):
+                for s in sprints:
+                    if isinstance(s, dict) and s.get("id") is not None:
+                        try:
+                            sprint_ids.append(int(s.get("id")))
+                        except Exception:
+                            pass
+                    elif isinstance(s, str):
+                        m = re.search(r"id=(\d+)", s)
+                        if m:
+                            sprint_ids.append(int(m.group(1)))
+
+            # Check if ticket was CREATED recently (e.g. within cutoff)
+            created_at = parse_jira_datetime(f.get("created"))
+            is_newly_created = created_at and created_at >= cutoff
+            
+            sprint_changed_recently = False
+            
+            if is_newly_created:
+                sprint_changed_recently = True
+            else:
+                # Check changelog for Sprint changes
+                changelog = i.get("changelog") or {}
+                histories = changelog.get("histories") or []
+                for h in histories:
+                    changed_at = parse_jira_datetime(h.get("created"))
+                    if not changed_at or changed_at < cutoff:
+                        continue
+                    for item in h.get("items") or []:
+                        field_name = (item.get("field") or "").lower()
+                        field_id = (item.get("fieldId") or "").lower()
+                        # Some instances use 'Sprint' with capital S
+                        if field_name == "sprint" or field_id == "customfield_10020":
+                            sprint_changed_recently = True
+                            break
+                    if sprint_changed_recently:
+                        break
+
+            if not sprint_changed_recently:
+                continue
+
+            assignee_obj = f.get("assignee") or {}
+            formatted.append({
+                "key": i["key"],
+                "summary": f.get("summary"),
+                "status": (f.get("status") or {}).get("name"),
+                "assignee": assignee_obj.get("displayName"),
+                "assignee_id": assignee_obj.get("accountId"),
+                "created": f.get("updated"), # Return Updated time as 'created' for sorting
+                "type_icon": (f.get("issuetype") or {}).get("iconUrl"),
+                "sprint_ids": sprint_ids,
+                "is_new": is_newly_created
+            })
+
+        print(f"DEBUG: Found {len(formatted)} matching recent tickets.")
+
+        return jsonify({
+            "tickets": formatted,
+            "team_member_ids": member_ids,
+            "sprint_id": sprint_id,
+            "mode": filter_mode
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # =========================
 # VELOCITY DATA (TRENDS)

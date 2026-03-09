@@ -594,7 +594,7 @@
 
         <!-- Controls Section -->
         <div
-            class="bg-gray-800 p-6 rounded-2xl shadow-xl border border-gray-700 mb-8 flex flex-col md:flex-row gap-6 items-end">
+            class="bg-gray-800 p-6 rounded-2xl shadow-xl border border-gray-700 mb-8 flex flex-col md:flex-row gap-6 items-end relative">
             <div class="flex-1 w-full">
                 <label class="block text-sm font-bold text-gray-400 mb-2">Select Teams</label>
                 <select id="teamSelect" multiple="multiple"
@@ -632,9 +632,18 @@
                 </label>
             </div>
 
-            <button onclick="loadSprintDashboardData()"
-                class="bg-blue-600 hover:bg-blue-500 text-white font-bold h-[42px] px-6 rounded shadow-lg transition w-full md:w-auto">
-                Run Analysis
+            <div class="flex items-center gap-2">
+                <button onclick="loadSprintDashboardData()"
+                    class="bg-blue-600 hover:bg-blue-500 text-white font-bold h-[42px] px-6 rounded shadow-lg transition w-full md:w-auto">
+                    Run Analysis
+                </button>
+            </div>
+
+            <!-- Floating Refresh Button (Inside Container) -->
+            <button onclick="loadSprintDashboardData(true)"
+                class="absolute top-2 right-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-full w-8 h-8 flex items-center justify-center transition" 
+                title="Force Refresh from Jira">
+                <i class="fas fa-sync-alt text-xs"></i>
             </button>
         </div>
 
@@ -798,16 +807,33 @@
                 <div class="flex-1">
                     <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Search</label>
                     <input id="trackingSearchInput" type="text" placeholder="Search Jira # or summary..."
-                        class="w-full bg-gray-800/60 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 outline-none focus:border-gray-500">
+                        class="w-full bg-gray-800/60 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 outline-none focus:border-gray-500 h-[38px]">
+                </div>
+                <div class="w-full md:w-48 relative">
+                    <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Ticket Type</label>
+                    <button id="trackingTypeFilterBtn" type="button" onclick="toggleTrackingTypeFilterMenu()"
+                        class="w-full bg-gray-800/60 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 outline-none focus:border-gray-500 text-left flex justify-between items-center h-[38px]">
+                        <span id="trackingTypeFilterLabel" class="truncate">All Types</span>
+                        <svg class="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
+                    <div id="trackingTypeFilterMenu"
+                        class="hidden absolute left-0 mt-1 w-56 bg-gray-900 border border-gray-700 rounded-lg shadow-xl p-2 z-50 max-h-60 overflow-y-auto custom-scrollbar">
+                        <div id="trackingTypeFilterList" class="space-y-1"></div>
+                    </div>
                 </div>
                 <div class="w-full md:w-64">
                     <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Dev Assignee</label>
                     <select id="trackingAssigneeFilter"
-                        class="w-full bg-gray-800/60 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 outline-none focus:border-gray-500">
+                        class="w-full bg-gray-800/60 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 outline-none focus:border-gray-500 h-[38px]">
                         <option value="All">All</option>
                     </select>
                 </div>
                 <div class="flex gap-3">
+                    <button onclick="showRecentlyAddedTickets()"
+                        class="bg-purple-600 hover:bg-purple-500 text-white font-bold h-[42px] px-5 rounded-lg shadow-lg transition flex items-center gap-2">
+                        <i class="fas fa-clock"></i>
+                        Recent
+                    </button>
                     <button id="trackingCopyExcelBtn" type="button" onclick="copyTrackingExcelToClipboard(this)"
                         class="bg-blue-600 hover:bg-blue-500 text-white font-bold h-[42px] px-5 rounded-lg shadow-lg transition flex items-center gap-2">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -977,6 +1003,7 @@
         let lastStatusMap = {};
         let trackingSearchQuery = "";
         let trackingAssigneeFilter = "All";
+        let trackingTypeFilters = new Set(); // Set of selected types (empty = all)
         let trackingSortImportant = false; // Add sort state
         let lastFilteredTrackingIssues = [];
         const trackingColumnDefs = [
@@ -1085,6 +1112,72 @@
             }
         }
 
+        function updateTrackingTypeFilterOptions(issues) {
+            const list = document.getElementById("trackingTypeFilterList");
+            if (!list) return;
+            
+            // Extract unique types
+            const types = new Set();
+            (issues || []).forEach(i => {
+                if (i.type_name) types.add(i.type_name);
+            });
+            const sortedTypes = Array.from(types).sort();
+            
+            list.innerHTML = sortedTypes.map(t => {
+                const checked = trackingTypeFilters.has(t);
+                const issue = (issues || []).find(i => i.type_name === t);
+                const iconUrl = issue ? issue.type_icon : "";
+                
+                return `
+                    <label class="flex items-center justify-between gap-3 text-sm text-gray-200 cursor-pointer hover:bg-gray-700 p-2 rounded transition">
+                        <div class="flex items-center gap-2">
+                            ${iconUrl ? `<img src="${iconUrl}" class="w-4 h-4">` : ''}
+                            <span class="text-xs font-medium truncate max-w-[120px]" title="${t}">${t}</span>
+                        </div>
+                        <input type="checkbox" ${checked ? "checked" : ""} onchange="setTrackingTypeFilter('${t}', this.checked)"
+                            class="w-4 h-4 rounded bg-gray-700 border-gray-600 text-blue-500 focus:ring-0 focus:ring-offset-0">
+                    </label>
+                `;
+            }).join("");
+            
+            updateTrackingTypeFilterLabel();
+        }
+
+        function toggleTrackingTypeFilterMenu() {
+            const menu = document.getElementById("trackingTypeFilterMenu");
+            if (menu) menu.classList.toggle("hidden");
+        }
+
+        // Close menu when clicking outside
+        document.addEventListener('click', function(e) {
+            const menu = document.getElementById("trackingTypeFilterMenu");
+            const btn = document.getElementById("trackingTypeFilterBtn");
+            if (menu && btn && !menu.contains(e.target) && !btn.contains(e.target)) {
+                menu.classList.add("hidden");
+            }
+        });
+
+        function setTrackingTypeFilter(type, checked) {
+            if (checked) trackingTypeFilters.add(type);
+            else trackingTypeFilters.delete(type);
+            
+            updateTrackingTypeFilterLabel();
+            applyTrackingFiltersAndRender();
+        }
+
+        function updateTrackingTypeFilterLabel() {
+            const label = document.getElementById("trackingTypeFilterLabel");
+            if (!label) return;
+            
+            if (trackingTypeFilters.size === 0) {
+                label.textContent = "All Types";
+                label.classList.remove("text-blue-400");
+            } else {
+                label.textContent = `${trackingTypeFilters.size} Selected`;
+                label.classList.add("text-blue-400");
+            }
+        }
+
         async function loadTeams(initialIds) {
             try {
                 const res = await fetch("/api/teams");
@@ -1115,7 +1208,7 @@
             // For now, Team just filters the members we track in that sprint.
         }
 
-        async function loadSprintDashboardData() {
+        async function loadSprintDashboardData(forceRefresh = false) {
             const teamIds = $("#teamSelect").val(); // This will be an array
             const sprintId = $("#sprintSelect").val();
             const productionOnly = $("#productionOnly").is(":checked");
@@ -1135,7 +1228,8 @@
                     body: JSON.stringify({
                         team_id: teamIds,
                         sprint_id: sprintId || null,
-                        production_only: productionOnly
+                        production_only: productionOnly,
+                        force_refresh: forceRefresh
                     })
                 });
                 const data = await res.json();
@@ -1404,6 +1498,7 @@
         function renderTrackingTable(data) {
             lastDashboardData = data;
             updateTrackingAssigneeFilterOptions((data && data.tracking_issues) ? data.tracking_issues : []);
+            updateTrackingTypeFilterOptions((data && data.tracking_issues) ? data.tracking_issues : []);
             applyTrackingFiltersAndRender();
         }
 
@@ -1451,6 +1546,9 @@
             }
             if (assignee !== "All") {
                 filtered = filtered.filter(i => (i.assignee || "Unassigned") === assignee);
+            }
+            if (trackingTypeFilters.size > 0) {
+                filtered = filtered.filter(i => trackingTypeFilters.has(i.type_name));
             }
 
             // Sort by Important (Flagged) first if enabled
@@ -2316,6 +2414,112 @@
         }
 
 
+        async function showRecentlyAddedTickets(mode = 'team') {
+            document.getElementById("recentTicketsModal").classList.remove("hidden");
+            const content = document.getElementById("recentTicketsContent");
+            content.innerHTML = '<div class="text-center py-12"><div class="spinner-border-custom text-purple-500"></div></div>';
+            
+            // Update Filter Buttons
+            const btnTeam = document.getElementById("recentFilterTeam");
+            const btnAll = document.getElementById("recentFilterAll");
+            
+            if (mode === 'team') {
+                btnTeam.className = "px-3 py-1.5 rounded text-xs font-bold transition bg-purple-600 text-white shadow-lg ring-2 ring-purple-500/50";
+                btnAll.className = "px-3 py-1.5 rounded text-xs font-bold transition bg-gray-700 text-gray-300 hover:bg-gray-600";
+            } else {
+                btnAll.className = "px-3 py-1.5 rounded text-xs font-bold transition bg-purple-600 text-white shadow-lg ring-2 ring-purple-500/50";
+                btnTeam.className = "px-3 py-1.5 rounded text-xs font-bold transition bg-gray-700 text-gray-300 hover:bg-gray-600";
+            }
+
+            const teamIds = $("#teamSelect").val();
+            const sprintId = $("#sprintSelect").val();
+            
+            if (!teamIds || teamIds.length === 0) {
+                content.innerHTML = '<div class="text-center py-12 text-gray-400 border border-dashed border-gray-700 rounded-xl">Please select a team to view recent tickets.</div>';
+                return;
+            }
+            
+            try {
+                const res = await fetch("/api/dashboard/recently_added", {
+                    method: "POST",
+                    headers: getApiHeaders(),
+                    body: JSON.stringify({ 
+                        team_id: teamIds,
+                        sprint_id: sprintId || null,
+                        filter_mode: mode
+                    })
+                });
+                const payload = await res.json();
+                
+                if (payload.error) {
+                    content.innerHTML = `<div class="text-red-400 p-4 text-center bg-red-500/10 border border-red-500/20 rounded-xl">Error: ${payload.error}</div>`;
+                    return;
+                }
+
+                const data = Array.isArray(payload.tickets) ? payload.tickets : [];
+                // Ensure team_member_ids are strings for reliable comparison
+                const teamMemberIds = new Set((Array.isArray(payload.team_member_ids) ? payload.team_member_ids : []).map(String));
+                let displayTickets = data;
+
+                if (sprintId) {
+                    const sId = parseInt(sprintId);
+                    displayTickets = displayTickets.filter(t => t.sprint_ids && t.sprint_ids.includes(sId));
+                }
+
+                if (mode === 'team') {
+                    // Filter: ticket has assignee_id AND that id is in our team list
+                    displayTickets = displayTickets.filter(t => t.assignee_id && teamMemberIds.has(String(t.assignee_id)));
+                }
+
+                if (!displayTickets || displayTickets.length === 0) {
+                    const msg = mode === 'team'
+                        ? (sprintId ? 'No tickets added to this sprint in the last 3 days for selected team.' : 'No tickets assigned to team in the last 3 days.')
+                        : 'No tickets created in the last 3 days for this project.';
+                    content.innerHTML = `<div class="text-center py-12 text-gray-500 italic border border-dashed border-gray-700 rounded-xl">${msg}</div>`;
+                    return;
+                }
+                
+                let html = '<div class="flex flex-col gap-2">';
+                displayTickets.forEach(t => {
+                    // If t.created is available use it, otherwise fallback (though JQL 'updated' might be more relevant for moved items, we display what API returns)
+                    const dateStr = t.created || ""; 
+                    const dateDisplay = dateStr ? new Date(dateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : "Recently";
+                    
+                    html += `
+                        <div class="bg-gray-700/30 p-4 rounded-xl border border-gray-700/50 hover:bg-gray-700/70 transition group">
+                            <div class="flex items-start gap-3">
+                                <img src="${t.type_icon}" class="w-4 h-4 mt-1 opacity-75 group-hover:opacity-100 transition-opacity">
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex justify-between items-start mb-1">
+                                        <a href="${jiraBrowseUrl(t.key)}" target="_blank" class="text-blue-400 font-bold hover:underline font-mono text-sm">${t.key}</a>
+                                        <span class="text-[10px] text-gray-500 font-mono bg-gray-800 px-2 py-0.5 rounded ml-2 whitespace-nowrap">${dateDisplay}</span>
+                                    </div>
+                                    <p class="text-gray-200 text-sm font-medium leading-tight mb-2">${t.summary}</p>
+                                    <div class="flex items-center gap-2 text-xs">
+                                        <span class="px-2 py-0.5 rounded bg-gray-800 text-gray-300 font-bold uppercase tracking-wider text-[10px] border border-gray-700">${t.status}</span>
+                                        <span class="text-gray-500 flex items-center gap-1">
+                                            <i class="fas fa-user-circle"></i>
+                                            ${t.assignee || "Unassigned"}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+                html += '</div>';
+                
+                content.innerHTML = html;
+                
+            } catch (err) {
+                console.error(err);
+                content.innerHTML = `<div class="text-red-400 p-4 text-center bg-red-500/10 border border-red-500/20 rounded-xl">Failed to load tickets: ${err.message}</div>`;
+            }
+        }
+
+        function closeRecentTicketsModal() {
+            document.getElementById("recentTicketsModal").classList.add("hidden");
+        }
     </script>
 
     <div id="ticketOffcanvasBackdrop" class="custom-offcanvas-backdrop" onclick="closeOffcanvas()"></div>
@@ -2347,6 +2551,37 @@
                 <div class="mt-5 flex justify-end gap-3">
                     <button type="button" onclick="closeNoteModal()" class="px-4 py-2 text-gray-400 hover:text-white text-sm">Cancel</button>
                     <button id="saveTicketNoteBtn" type="button" onclick="saveTicketNote()" class="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-bold">Save Note</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="recentTicketsModal" class="fixed inset-0 z-[2100] hidden">
+        <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" onclick="closeRecentTicketsModal()"></div>
+        <div class="relative flex min-h-screen items-center justify-center p-4">
+            <div class="w-full max-w-2xl bg-gray-800 border border-gray-700 rounded-2xl shadow-2xl p-6 flex flex-col max-h-[85vh]">
+                <div class="flex flex-col gap-4 mb-4 flex-shrink-0">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                            <i class="fas fa-clock text-purple-400"></i>
+                            Recently Added Tickets (Last 3 Days)
+                        </h3>
+                        <button type="button" onclick="closeRecentTicketsModal()" class="text-gray-400 hover:text-white transition w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="showRecentlyAddedTickets('team')" id="recentFilterTeam" 
+                            class="px-3 py-1.5 rounded text-xs font-bold transition bg-purple-600 text-white shadow-lg ring-2 ring-purple-500/50">
+                            Team Only
+                        </button>
+                        <button onclick="showRecentlyAddedTickets('all')" id="recentFilterAll"
+                            class="px-3 py-1.5 rounded text-xs font-bold transition bg-gray-700 text-gray-300 hover:bg-gray-600">
+                            All Tickets
+                        </button>
+                    </div>
+                </div>
+                <div id="recentTicketsContent" class="overflow-y-auto flex-1 pr-2 custom-scrollbar space-y-2">
+                    <div class="text-center py-12 text-gray-500 italic">Loading...</div>
                 </div>
             </div>
         </div>
