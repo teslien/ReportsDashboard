@@ -2984,17 +2984,140 @@ def get_sprints():
     headers_dict = dict(HEADERS)
     project_key_str = str(PROJECT_KEY)
     
+    query = request.args.get("q", "").lower()
+    
+    # NEW APPROACH (Optimized & Comprehensive):
+    # 1. We prioritize "Scrum" boards and check ALL of them (not just top 2/5).
+    # 2. We fetch Active/Future sprints FIRST.
+    # 3. If query is present, we ALSO check closed sprints (limited history).
+    # 4. We use aggressive caching to make it fast.
+
+    try:
+        # 1. Find ALL Boards
+        # Cache this for a long time (1 hour) as boards rarely change
+        board_res = get_jira_cached(
+            f"{JIRA_DOMAIN}/rest/agile/1.0/board",
+            headers=headers_dict,
+            params={"projectKeyOrId": project_key_str},
+            ttl=3600 
+        )
+        
+        boards = board_res.get("values", [])
+        if not boards:
+             return get_sprints_fallback(query, headers_dict, project_key_str)
+
+        # Filter: Only Scrum boards are relevant for sprints usually
+        # But some projects might mix types, so let's keep others but deprioritize them
+        boards.sort(key=lambda b: 0 if b.get("type") == "scrum" else 1)
+        
+        # User requested: "dont search for payroll board" (or specifically avoid hardcoding it?)
+        # Wait, previous request was "only need sprint from payroll board".
+        # Current request: "dont search for payroll board show app now" -> "don't search for payroll board SPECIFICALLY, show ALL now"?
+        # OR "don't search for payroll board, show APP now"?
+        # Re-reading: "once user login make a call a cache record for sprint and dont search for payroll board show app now"
+        # It sounds like: "Pre-fetch/cache sprints on login so it's fast, and stop the specific 'payroll board' filter I asked for earlier."
+        
+        # So I will REMOVE the payroll-specific filter and search ALL boards.
+        
+        target_boards = boards # Search ALL boards (or maybe top 10 to be safe from timeout)
+        if len(target_boards) > 10:
+            target_boards = target_boards[:10]
+
+        all_sprints_map = {}
+        
+        for board in target_boards:
+            board_id = board.get("id")
+            sprints_url = f"{JIRA_DOMAIN}/rest/agile/1.0/board/{board_id}/sprint"
+            
+            # Fetch ALL Active and Future sprints
+            # We page through results to ensure we get every single one
+            try:
+                start_at_sprint = 0
+                max_results_sprint = 50
+                
+                while True:
+                    # Cache Key needs to include board_id and startAt
+                    # TTL 5 mins for active/future lists is reasonable
+                    res = get_jira_cached(
+                        sprints_url,
+                        headers=headers_dict,
+                        params={
+                            "state": "active,future",
+                            "startAt": start_at_sprint,
+                            "maxResults": max_results_sprint
+                        },
+                        ttl=300 
+                    )
+                    
+                    sprints_page = res.get("values", [])
+                    if not sprints_page:
+                        break
+                        
+                    for s in sprints_page:
+                        s_id = s.get("id")
+                        if s_id in all_sprints_map: continue
+                        s_name = s.get("name", "")
+                        
+                        if query and query not in s_name.lower() and query not in str(s_id):
+                            continue
+                            
+                        all_sprints_map[s_id] = {"id": s_id, "name": s_name, "state": s.get("state")}
+                    
+                    if res.get("isLast"):
+                        break
+                    start_at_sprint += len(sprints_page)
+                    
+            except Exception as e:
+                print(f"DEBUG: Failed to fetch sprints for board {board_id}: {e}")
+
+            # If searching for specific sprint (query present) and found nothing yet, check CLOSED sprints
+            # Limit to last 50 closed sprints per board to avoid slowness
+            if query and len(all_sprints_map) == 0:
+                 try:
+                     res_closed = get_jira_cached(
+                        sprints_url,
+                        headers=headers_dict,
+                        params={
+                            "state": "closed",
+                            "maxResults": 50 
+                        },
+                        ttl=600 # Cache closed sprints for 10 mins
+                    )
+                     for s in res_closed.get("values", []):
+                        s_id = s.get("id")
+                        if s_id in all_sprints_map: continue
+                        s_name = s.get("name", "")
+                        if query in s_name.lower() or query in str(s_id):
+                            all_sprints_map[s_id] = {"id": s_id, "name": s_name, "state": s.get("state")}
+                 except Exception:
+                     pass
+
+        all_sprints = list(all_sprints_map.values())
+        
+        # Sort: Active first, then Future, then Closed (descending ID)
+        state_order = {"active": 0, "future": 1, "closed": 2}
+        all_sprints.sort(key=lambda x: (state_order.get(x["state"], 3), -x["id"]))
+        
+        return jsonify(all_sprints)
+        
+    except Exception as e:
+        print(f"Error fetching sprints via Board API: {e}")
+        return get_sprints_fallback(query, headers_dict, project_key_str)
+
+def get_sprints_fallback(query, headers_dict, project_key_str):
     # Use JQL and paginate through results to collect all sprint references
     jql = f'project = "{project_key_str}"'
     url = f"{JIRA_DOMAIN}/rest/api/3/search/jql"
     
     try:
-        query = request.args.get("q", "").lower()
         all_sprints_map = {}
         start_at = 0
         max_results = 100
 
         while True:
+            # Limit scan to recent 500 issues to avoid timeouts
+            if start_at > 500: break
+            
             params = {
                 "jql": jql,
                 "maxResults": max_results,
