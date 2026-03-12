@@ -594,56 +594,92 @@
 
         <!-- Controls Section -->
         <div
-            class="bg-gray-800 p-6 rounded-2xl shadow-xl border border-gray-700 mb-8 flex flex-col md:flex-row gap-6 items-end relative">
-            <div class="flex-1 w-full">
-                <label class="block text-sm font-bold text-gray-400 mb-2">Select Teams</label>
-                <select id="teamSelect" multiple="multiple"
-                    class="w-full bg-gray-700 text-white h-[42px] rounded px-3 border border-gray-600 focus:border-blue-500 outline-none"
-                    onchange="handleTeamChange()">
-                </select>
-            </div>
+            class="bg-gray-800 p-6 rounded-2xl shadow-xl border border-gray-700 mb-8 relative">
+            
+            <div class="flex flex-col lg:flex-row gap-8 items-end">
+                <!-- Standard Analysis Group -->
+                <div id="standardAnalysisGroup" class="flex-1 w-full grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-gray-900/30 rounded-xl border border-gray-700/50 relative group transition-all duration-300">
+                    <div class="absolute -top-3 left-4 bg-gray-800 px-2 text-[10px] font-bold uppercase tracking-widest text-gray-500 group-focus-within:text-blue-400 transition">Standard Analysis</div>
+                    
+                    <div class="w-full">
+                        <label class="block text-xs font-bold text-gray-500 mb-2 uppercase tracking-wider">Select Teams</label>
+                        <select id="teamSelect" multiple="multiple"
+                            class="w-full bg-gray-700 text-white h-[42px] rounded px-3 border border-gray-600 focus:border-blue-500 outline-none"
+                            onchange="handleTeamChange()">
+                        </select>
+                    </div>
 
-            <div class="flex-1 w-full">
-                <label class="block text-sm font-bold text-gray-400 mb-2">Select Sprint (Optional)</label>
-                <div class="relative">
-                    <select id="sprintSelect"
-                        class="w-full bg-gray-700 text-white h-[42px] rounded px-3 border border-gray-600 focus:border-blue-500 outline-none">
-                        <option value="">No sprint (Team work only)</option>
-                    </select>
-                    <div id="sprintLoader" class="absolute right-10 top-1/2 -translate-y-1/2 hidden">
-                        <svg class="animate-spin h-5 w-5 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none"
-                            viewBox="0 0 24 24">
-                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
-                            </circle>
-                            <path class="opacity-75" fill="currentColor"
-                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
-                            </path>
-                        </svg>
+                    <div class="w-full">
+                        <label class="block text-xs font-bold text-gray-500 mb-2 uppercase tracking-wider">Select Sprint</label>
+                        <div class="relative">
+                            <select id="sprintSelect"
+                                class="w-full bg-gray-700 text-white h-[42px] rounded px-3 border border-gray-600 focus:border-blue-500 outline-none"
+                                onchange="handleSprintChange()">
+                                <option value="">No sprint (Team work only)</option>
+                            </select>
+                            <div id="sprintLoader" class="absolute right-10 top-1/2 -translate-y-1/2 hidden">
+                                <svg class="animate-spin h-5 w-5 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none"
+                                    viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
+                                    </circle>
+                                    <path class="opacity-75" fill="currentColor"
+                                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                                    </path>
+                                </svg>
+                            </div>
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            <div class="w-full md:w-auto pb-2">
-                <label class="flex items-center gap-2 cursor-pointer group">
-                    <input type="checkbox" id="productionOnly"
-                        class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-blue-600 focus:ring-0 cursor-pointer">
-                    <span class="text-sm font-bold text-gray-400 group-hover:text-white transition">Production
-                        Only</span>
-                </label>
-            </div>
+                <!-- OR Divider -->
+                <div class="hidden lg:flex flex-col items-center justify-center h-[80px] px-2">
+                    <div class="w-[1px] h-full bg-gray-700"></div>
+                    <span class="text-[10px] font-black text-gray-600 my-2">OR</span>
+                    <div class="w-[1px] h-full bg-gray-700"></div>
+                </div>
+                <div class="lg:hidden flex items-center w-full gap-4 px-4">
+                    <div class="flex-1 h-[1px] bg-gray-700"></div>
+                    <span class="text-[10px] font-black text-gray-600">OR</span>
+                    <div class="flex-1 h-[1px] bg-gray-700"></div>
+                </div>
 
-            <div class="flex items-center gap-2">
-                <button onclick="loadSprintDashboardData()"
-                    class="bg-blue-600 hover:bg-blue-500 text-white font-bold h-[42px] px-6 rounded shadow-lg transition w-full md:w-auto">
-                    Run Analysis
-                </button>
+                <!-- Report Group -->
+                <div id="customReportGroup" class="flex-1 w-full p-4 bg-gray-900/30 rounded-xl border border-gray-700/50 relative group transition-all duration-300">
+                    <div class="absolute -top-3 left-4 bg-gray-800 px-2 text-[10px] font-bold uppercase tracking-widest text-blue-400">Custom Report</div>
+                    
+                    <div class="w-full">
+                        <label class="block text-xs font-bold text-gray-500 mb-2 uppercase tracking-wider">Select Saved Filter</label>
+                        <select id="reportSelect"
+                            class="w-full bg-gray-700 text-white h-[42px] rounded px-3 border border-gray-600 focus:border-blue-500 outline-none"
+                            onchange="handleReportChange()">
+                            <option value="">No report selected</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Run Button Group -->
+                <div class="flex flex-row md:flex-row lg:flex-col gap-4 items-center lg:items-end w-full lg:w-auto pt-2 lg:pt-0">
+                    <div class="pb-2">
+                        <label class="flex items-center gap-2 cursor-pointer group">
+                            <input type="checkbox" id="productionOnly"
+                                class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-blue-600 focus:ring-0 cursor-pointer">
+                            <span class="text-xs font-bold text-gray-500 group-hover:text-white transition">Production
+                                Only</span>
+                        </label>
+                    </div>
+
+                    <button onclick="loadSprintDashboardData()"
+                        class="bg-blue-600 hover:bg-blue-500 text-white font-bold h-[42px] px-8 rounded-lg shadow-lg transition w-full lg:w-auto whitespace-nowrap">
+                        Run Analysis
+                    </button>
+                </div>
             </div>
 
             <!-- Floating Refresh Button (Inside Container) -->
             <button onclick="loadSprintDashboardData(true)"
-                class="absolute top-2 right-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-full w-8 h-8 flex items-center justify-center transition" 
+                class="absolute top-2 right-2 text-gray-500 hover:text-white hover:bg-white/10 rounded-full w-8 h-8 flex items-center justify-center transition" 
                 title="Force Refresh from Jira">
-                <i class="fas fa-sync-alt text-xs"></i>
+                <i class="fas fa-sync-alt text-[10px]"></i>
             </button>
         </div>
 
@@ -901,6 +937,7 @@
             const initialTeamId = urlParams.get('team_id');
             const initialTeamIds = initialTeamId ? initialTeamId.split(',') : [];
             const initialSprintId = urlParams.get('sprint_id');
+            const initialReportId = urlParams.get('report_id');
             const initialProdOnly = urlParams.get('prod_only') === 'true';
 
             if (initialProdOnly) {
@@ -946,6 +983,7 @@
             });
 
             $('#sprintSelect').on('change', function() {
+                handleSprintChange();
                 updateUrlParams();
             });
 
@@ -954,39 +992,75 @@
             });
 
             initTrackingTableControls();
-
-            // Initial load of teams
-            loadTeams(initialTeamIds).then(() => {
-                // If we have an initial sprint ID, we need to fetch its details to show it in Select2
-                if (initialSprintId) {
-                    // Fetch all sprints to find the name of the one in the URL
-                    fetch('/api/sprints').then(res => res.json()).then(sprints => {
-                        const sprint = sprints.find(s => s.id == initialSprintId);
-                        if (sprint) {
-                            const newOption = new Option(`${sprint.name} (${sprint.state})`, sprint.id, true, true);
-                            $('#sprintSelect').append(newOption).trigger('change');
-                        }
-                        
-                        // If we have both, auto-run analysis
-                        if (initialTeamIds.length > 0) {
-                            loadSprintDashboardData();
-                        }
-                    });
-                } else if (initialTeamIds.length > 0) {
-                    // If only team is present, auto-run analysis
-                    loadSprintDashboardData();
+            
+            // Initialize Report Select
+            $('#reportSelect').select2({
+                placeholder: 'Select custom report...',
+                allowClear: true,
+                width: '100%',
+                ajax: {
+                    url: '/api/reports',
+                    dataType: 'json',
+                    delay: 250,
+                    processResults: function (data) {
+                        return {
+                            results: data.map(r => ({ id: r.id, text: r.name, jql: r.jql }))
+                        };
+                    },
+                    cache: true
                 }
+            }).on('change', function() {
+                handleReportChange();
+                updateUrlParams();
             });
+
+            // Initial load logic
+            if (initialReportId) {
+                // If we have an initial report ID, fetch it and select it
+                fetch(`/api/reports`).then(res => res.json()).then(reports => {
+                    const report = reports.find(r => r.id == initialReportId);
+                    if (report) {
+                        const newOption = new Option(report.name, report.id, true, true);
+                        $('#reportSelect').append(newOption).trigger('change');
+                        // handleReportChange will call loadSprintDashboardData
+                    }
+                });
+            } else {
+                // Initial load of teams (standard analysis path)
+                loadTeams(initialTeamIds).then(() => {
+                    // If we have an initial sprint ID, we need to fetch its details to show it in Select2
+                    if (initialSprintId) {
+                        // Fetch specific sprint by ID to ensure we find it (even if closed)
+                        fetch(`/api/sprints?q=${initialSprintId}`).then(res => res.json()).then(sprints => {
+                            const sprint = sprints.find(s => s.id == initialSprintId);
+                            if (sprint) {
+                                const newOption = new Option(`${sprint.name} (${sprint.state})`, sprint.id, true, true);
+                                $('#sprintSelect').append(newOption).trigger('change');
+                            }
+                            
+                            // Auto-run analysis if we have Sprint OR Team
+                            if (initialSprintId || initialTeamIds.length > 0) {
+                                loadSprintDashboardData();
+                            }
+                        });
+                    } else if (initialTeamIds.length > 0) {
+                        // If only team is present, auto-run analysis
+                        loadSprintDashboardData();
+                    }
+                });
+            }
         });
 
         function updateUrlParams() {
             const teamIds = $('#teamSelect').val();
             const sprintId = $('#sprintSelect').val();
+            const reportId = $('#reportSelect').val();
             const prodOnly = $('#productionOnly').is(':checked');
             
             const params = new URLSearchParams();
             if (teamIds && teamIds.length > 0) params.set('team_id', teamIds.join(','));
             if (sprintId) params.set('sprint_id', sprintId);
+            if (reportId) params.set('report_id', reportId);
             if (prodOnly) params.set('prod_only', 'true');
             
             const newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
@@ -1202,19 +1276,92 @@
         }
 
 
+        function handleReportChange() {
+            const data = $('#reportSelect').select2('data')[0];
+            const sprintSelect = $('#sprintSelect');
+            const teamSelect = $('#teamSelect');
+            const standardGroup = $('#standardAnalysisGroup');
+            const reportGroup = $('#customReportGroup');
+            
+            if (data && data.id) {
+                // Disable and dim standard inputs
+                sprintSelect.val(null).trigger('change.select2').prop('disabled', true);
+                teamSelect.val(null).trigger('change.select2').prop('disabled', true);
+                standardGroup.addClass('opacity-30 grayscale pointer-events-none');
+                reportGroup.removeClass('opacity-30 grayscale');
+                
+                loadSprintDashboardData();
+            } else {
+                // Enable standard inputs
+                sprintSelect.prop('disabled', false);
+                teamSelect.prop('disabled', false);
+                standardGroup.removeClass('opacity-30 grayscale pointer-events-none');
+            }
+            updateUrlParams();
+        }
+
+        function handleSprintChange() {
+            const sprintVal = $('#sprintSelect').val();
+            const teamVal = $('#teamSelect').val();
+            const reportSelect = $('#reportSelect');
+            const standardGroup = $('#standardAnalysisGroup');
+            const reportGroup = $('#customReportGroup');
+
+            if (sprintVal || (teamVal && teamVal.length > 0)) {
+                // If standard analysis is being used, disable report select
+                reportSelect.val(null).trigger('change.select2').prop('disabled', true);
+                reportGroup.addClass('opacity-30 grayscale pointer-events-none');
+                standardGroup.removeClass('opacity-30 grayscale');
+            } else {
+                // If both cleared, re-enable report select
+                if (!reportSelect.val()) {
+                    reportSelect.prop('disabled', false);
+                    reportGroup.removeClass('opacity-30 grayscale pointer-events-none');
+                }
+            }
+            updateUrlParams();
+        }
+
         function handleTeamChange() {
-            // We could filter sprints here if they were team-specific in Jira,
-            // but usually they are project-wide. 
-            // For now, Team just filters the members we track in that sprint.
+            const teamVal = $('#teamSelect').val();
+            const sprintVal = $('#sprintSelect').val();
+            const reportSelect = $('#reportSelect');
+            const standardGroup = $('#standardAnalysisGroup');
+            const reportGroup = $('#customReportGroup');
+
+            if ((teamVal && teamVal.length > 0) || sprintVal) {
+                // If standard analysis is being used, disable report select
+                reportSelect.val(null).trigger('change.select2').prop('disabled', true);
+                reportGroup.addClass('opacity-30 grayscale pointer-events-none');
+                standardGroup.removeClass('opacity-30 grayscale');
+            } else {
+                // If both cleared, re-enable report select
+                if (!reportSelect.val()) {
+                    reportSelect.prop('disabled', false);
+                    reportGroup.removeClass('opacity-30 grayscale pointer-events-none');
+                }
+            }
+            updateUrlParams();
         }
 
         async function loadSprintDashboardData(forceRefresh = false) {
             const teamIds = $("#teamSelect").val(); // This will be an array
             const sprintId = $("#sprintSelect").val();
+            const reportId = $("#reportSelect").val();
             const productionOnly = $("#productionOnly").is(":checked");
     
-            if (!teamIds || teamIds.length === 0) {
-                alert("Please select at least one Team.");
+            // Team is now optional
+            // if (!teamIds || teamIds.length === 0) {
+            //     alert("Please select at least one Team.");
+            //     return;
+            // }
+            
+            // However, backend might need team_id to fetch members for filtering
+            // If no team selected, we might want to fetch stats for ALL teams or just rely on Sprint
+            // Let's assume backend can handle empty team_id list if sprint_id is present
+            // If both are empty, we might want to alert? 
+            if ((!teamIds || teamIds.length === 0) && !sprintId && !reportId) {
+                alert("Please select at least one Team, Sprint, or Report.");
                 return;
             }
     
@@ -1228,6 +1375,7 @@
                     body: JSON.stringify({
                         team_id: teamIds,
                         sprint_id: sprintId || null,
+                        report_id: reportId || null,
                         production_only: productionOnly,
                         force_refresh: forceRefresh
                     })
@@ -1517,8 +1665,9 @@
             const body = document.getElementById("trackingTableBody");
             body.innerHTML = "";
             const sprintId = $("#sprintSelect").val();
+            const reportId = $("#reportSelect").val();
 
-            if (!sprintId) {
+            if (!sprintId && !reportId) {
                 lastFilteredTrackingIssues = [];
                 body.innerHTML = '<tr><td colspan="9" class="py-8 text-center text-gray-500 italic">Select a sprint to enable local tracking</td></tr>';
                 return;

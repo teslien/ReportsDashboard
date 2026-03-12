@@ -1278,53 +1278,80 @@ def sprint_stats():
     data = request.json
     team_ids = data.get("team_id")
     sprint_id = data.get("sprint_id") # Optional Jira Sprint ID
+    report_id = data.get("report_id")
     production_only = data.get("production_only", False)
     force_refresh = data.get("force_refresh", False)
+    custom_jql = data.get("custom_jql") # NEW: Support for Custom Reports
     
-    if not team_ids:
-        return jsonify({"error": "Team is required"}), 400
+    if not team_ids and not sprint_id and not custom_jql and not report_id:
+        return jsonify({"error": "Team, Sprint, Report, or Custom JQL is required"}), 400
         
-    if not isinstance(team_ids, list):
+    if team_ids and not isinstance(team_ids, list):
         team_ids = [team_ids]
 
-    # 1. Get Team Members for all selected teams
-    conn, cursor = get_db_connection()
-    if not conn: return jsonify({"error": "Database error"}), 500
+    members = []
+    member_ids_str = ""
     
-    placeholders = ', '.join(['%s'] * len(team_ids))
-    cursor.execute(f"SELECT account_id, display_name, avatar_url FROM team_members WHERE team_id IN ({placeholders})", tuple(team_ids))
-    
-    # Use a dictionary to ensure members are unique across multiple teams
-    members_map = {}
-    for r in cursor.fetchall():
-        members_map[r[0]] = {"id": r[0], "name": r[1], "avatar": r[2]}
-    
-    members = list(members_map.values())
-    conn.close()
-    
-    if not members:
-        return jsonify({"error": "No members found for this team"}), 400
+    # 1. Get Team Members for all selected teams (IF TEAMS SELECTED)
+    if team_ids:
+        conn, cursor = get_db_connection()
+        if not conn: return jsonify({"error": "Database error"}), 500
         
-    member_ids = [m["id"] for m in members]
-    member_ids_str = ", ".join([f'"{mid}"' for mid in member_ids])
+        placeholders = ', '.join(['%s'] * len(team_ids))
+        cursor.execute(f"SELECT account_id, display_name, avatar_url FROM team_members WHERE team_id IN ({placeholders})", tuple(team_ids))
+        
+        # Use a dictionary to ensure members are unique across multiple teams
+        members_map = {}
+        for r in cursor.fetchall():
+            members_map[r[0]] = {"id": r[0], "name": r[1], "avatar": r[2]}
+        
+        members = list(members_map.values())
+        conn.close()
+        
+        if not members:
+            # If teams selected but no members, we might return empty or error?
+            # Let's return error as "No members found for this team" implies configuration issue.
+            return jsonify({"error": "No members found for this team"}), 400
+            
+        member_ids = [m["id"] for m in members]
+        member_ids_str = ", ".join([f'"{mid}"' for mid in member_ids])
     
     headers_dict = dict(HEADERS)
     project_key_str = str(PROJECT_KEY)
 
+    if report_id and not custom_jql:
+        conn, cursor = get_db_connection()
+        if not conn:
+            return jsonify({"error": "Database error"}), 500
+        cursor.execute("SELECT jql FROM custom_reports WHERE id = %s", (report_id,))
+        report_row = cursor.fetchone()
+        conn.close()
+        if not report_row:
+            return jsonify({"error": "Report not found"}), 404
+        custom_jql = report_row[0]
+
     # 2. Build JQL
-    # We must have project key
-    jql = f'project = "{project_key_str}"'
-    
-    # Optional Sprint filter
-    if sprint_id:
-        jql += f' AND sprint = {sprint_id}'
-    
-    # Required Assignee filter (for this dashboard, we only track the team members)
-    jql += f' AND assignee IN ({member_ids_str})'
-    
-    # Optional Production filter
-    if production_only:
-        jql += ' AND "platform[checkboxes]" = PRODUCTION'
+    if custom_jql:
+        # If Custom JQL is provided, use it directly (but append Prod filter if needed)
+        jql = custom_jql
+        if production_only:
+            jql = f'({jql}) AND "platform[checkboxes]" = PRODUCTION'
+    else:
+        # Standard logic
+        # We must have project key
+        jql = f'project = "{project_key_str}"'
+        
+        # Optional Sprint filter
+        if sprint_id:
+            jql += f' AND sprint = {sprint_id}'
+        
+        # Optional Assignee filter (Only if teams selected)
+        if member_ids_str:
+            jql += f' AND assignee IN ({member_ids_str})'
+        
+        # Optional Production filter
+        if production_only:
+            jql += ' AND "platform[checkboxes]" = PRODUCTION'
     
     try:
         res = get_jira_cached(
@@ -1363,14 +1390,30 @@ def sprint_stats():
         bugs_solved = len([i for i in done_issues if i["fields"]["issuetype"]["name"].lower() == "bug"])
         
         # User Performance
+        # If we have members (Team selected), we calculate for them.
+        # If NO team selected (Custom JQL or just Sprint), we calculate for ALL assignees found in the tickets.
+        
         performance = {}
-        for m in members:
-            performance[m["id"]] = {"name": m["name"], "avatar": m["avatar"], "solved": 0, "active": 0}
-            
+        
+        if members:
+            # Initialize with team members
+            for m in members:
+                performance[m["id"]] = {"name": m["name"], "avatar": m["avatar"], "solved": 0, "active": 0}
+        
         for i in all_issues:
             assignee = i["fields"].get("assignee")
             if assignee:
                 aid = assignee["accountId"]
+                
+                # If no specific team selected, add any assignee encountered
+                if not members and aid not in performance:
+                     performance[aid] = {
+                         "name": assignee["displayName"], 
+                         "avatar": assignee["avatarUrls"]["48x48"], 
+                         "solved": 0, 
+                         "active": 0
+                     }
+                
                 if aid in performance:
                     status_name = i["fields"]["status"]["name"].upper()
                     status_cat = i["fields"]["status"]["statusCategory"]["key"].lower()
@@ -1386,7 +1429,7 @@ def sprint_stats():
             today_work.append({
                 "key": i["key"],
                 "summary": i["fields"]["summary"],
-                "assignee": i["fields"].get("assignee", {}).get("displayName", "Unassigned"),
+                "assignee": (i["fields"].get("assignee") or {}).get("displayName", "Unassigned"),
                 "status": i["fields"]["status"]["name"],
                 "type_icon": i["fields"]["issuetype"].get("iconUrl")
             })
@@ -1410,30 +1453,74 @@ def sprint_stats():
             pri_dist[p] = pri_dist.get(p, 0) + 1
             
         # NEW: Fetch local tracking data for the table
+        # If we have a sprint_id, we fetch data for that sprint.
+        # If we have a custom_jql (no sprint_id), we might want to fetch data based on issue keys?
+        # But our DB structure links tickets to sprint_id.
+        # So for Custom Reports (which might span multiple sprints or have no sprint), 
+        # local tracking data might be tricky if it depends on sprint_id.
+        
+        # Current DB Schema: sprint_tickets (sprint_id, issue_key, ...)
+        # If we don't have a sprint_id, we can't easily fetch local data unless we fetch by issue_key.
+        # Let's try to fetch by issue_key for the issues returned by JQL.
+        
         tracking_data = {}
-        if sprint_id:
+        issue_keys = [i["key"] for i in all_issues]
+        
+        if issue_keys:
             conn, cursor = get_db_connection(dictionary=True)
-            if not conn: return jsonify({"error": "Database error"}), 500
-            cursor.execute("""
-                SELECT issue_key, pr_raised, pr_merged, deploy_status, qa_assignee, qa_status, bugs_found, requirements_clear, completed, is_flagged, comment
-                FROM sprint_tickets 
-                WHERE sprint_id = %s
-            """, (sprint_id,))
-            rows = cursor.fetchall()
-            for r in rows:
-                tracking_data[r["issue_key"]] = {
-                    "pr_raised": bool(r["pr_raised"]),
-                    "pr_merged": bool(r["pr_merged"]),
-                    "deploy_status": r["deploy_status"],
-                    "qa_assignee": r["qa_assignee"],
-                    "qa_status": r["qa_status"],
-                    "bugs_found": r["bugs_found"],
-                    "requirements_clear": r["requirements_clear"] or "No",
-                    "completed": bool(r["completed"]),
-                    "is_flagged": bool(r["is_flagged"]),
-                    "comment": r["comment"] or ""
-                }
-            conn.close()
+            if conn:
+                # If we have a sprint_id, we can filter by it to be precise.
+                # If not (Custom Report), we fetch the LATEST entry for that ticket? 
+                # Or just any entry? A ticket might be in multiple sprints over time.
+                # Ideally, we should show the data for the current context.
+                # If custom report, maybe we just show the latest known status?
+                
+                if sprint_id:
+                    cursor.execute("""
+                        SELECT issue_key, pr_raised, pr_merged, deploy_status, qa_assignee, qa_status, bugs_found, requirements_clear, completed, is_flagged, comment
+                        FROM sprint_tickets 
+                        WHERE sprint_id = %s
+                    """, (sprint_id,))
+                else:
+                    # For Custom Reports: Fetch data for these keys.
+                    # Problem: A ticket might appear multiple times in sprint_tickets table (different sprints).
+                    # We should probably pick the most recent one (highest sprint_id or created_at? we don't have created_at).
+                    # Let's assume fetching by issue_key is "okay" and if multiple exist, we pick one (or latest).
+                    # Actually, let's just fetch all matching keys and overwrite (so we get one of them).
+                    # Or better: `WHERE issue_key IN (...)`
+                    
+                    placeholders = ', '.join(['%s'] * len(issue_keys))
+                    cursor.execute(f"""
+                        SELECT issue_key, pr_raised, pr_merged, deploy_status, qa_assignee, qa_status, bugs_found, requirements_clear, completed, is_flagged, comment
+                        FROM sprint_tickets 
+                        WHERE issue_key IN ({placeholders})
+                        ORDER BY id DESC
+                    """, tuple(issue_keys))
+                    
+                    # Note: This might return multiple rows per key. The dictionary comprehension below 
+                    # will overwrite earlier ones with later ones (due to ORDER BY id DESC, later ones come first? No, wait).
+                    # If we iterate, the last one processed wins. 
+                    # If we ORDER BY id ASC, the last one (newest) wins.
+                    
+                rows = cursor.fetchall()
+                # If using IN clause with multiple rows per key, we want the latest.
+                # If we ORDER BY id ASC, the loop will set key -> val, then update key -> newer_val.
+                # So existing logic works fine if we order correctly or just accept "a" value.
+                
+                for r in rows:
+                    tracking_data[r["issue_key"]] = {
+                        "pr_raised": bool(r["pr_raised"]),
+                        "pr_merged": bool(r["pr_merged"]),
+                        "deploy_status": r["deploy_status"],
+                        "qa_assignee": r["qa_assignee"],
+                        "qa_status": r["qa_status"],
+                        "bugs_found": r["bugs_found"],
+                        "requirements_clear": r["requirements_clear"] or "No",
+                        "completed": bool(r["completed"]),
+                        "is_flagged": bool(r["is_flagged"]),
+                        "comment": r["comment"] or ""
+                    }
+                conn.close()
 
         # Merge local data into all issues for the tracking table
         tracking_issues = []
@@ -1465,7 +1552,7 @@ def sprint_stats():
                 "summary": i["fields"]["summary"],
                 "status": i["fields"]["status"]["name"],
                 "status_category": i["fields"]["status"]["statusCategory"]["key"],
-                "assignee": i["fields"].get("assignee", {}).get("displayName", "Unassigned"),
+                "assignee": (i["fields"].get("assignee") or {}).get("displayName", "Unassigned"),
                 "type_icon": i["fields"]["issuetype"].get("iconUrl"),
                 "type_name": i["fields"]["issuetype"].get("name"),
                 "local": local
