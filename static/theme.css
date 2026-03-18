@@ -81,7 +81,7 @@
 }
 
 /* ─── Navbar Overrides (Light Mode) ────────────────────────── */
-[data-theme="light"] nav {
+[data-theme="light"] nav { color: green; } {
     background: rgba(255, 255, 255, 0.9) !important;
     border-bottom: 1px solid #e2e8f0 !important;
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
