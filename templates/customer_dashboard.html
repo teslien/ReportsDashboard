@@ -53,12 +53,19 @@
   .cd-modal-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,0.45); display: none; align-items: center; justify-content: center; z-index: 1100; }
   .cd-modal-backdrop.open { display: flex; }
   .cd-modal { width: min(860px, calc(100vw - 24px)); background: #fff; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 16px 44px rgba(15,23,42,.28); }
-  .cd-modal-head { padding: 12px 14px; border-bottom: 1px solid #e2e8f0; font-size: 14px; font-weight: 700; color: #0f172a; }
+  .cd-modal-head { padding: 12px 14px; border-bottom: 1px solid #e2e8f0; font-size: 14px; font-weight: 700; color: #0f172a; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
   .cd-modal-body { padding: 14px; }
   .cd-modal-actions { padding: 10px 14px 14px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 8px; }
   .cd-btn-secondary { border: 1px solid #cbd5e1; background: #fff; color: #334155; border-radius: 8px; padding: 8px 12px; font-size: 12px; font-weight: 600; }
   .cd-settings-btn { width: 34px; height: 34px; border-radius: 999px; border: 1px solid #cbd5e1; background: #fff; color: #475569; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: all .15s; }
   .cd-settings-btn:hover { background: #f1f5f9; color: #0f172a; }
+  .cd-modal-close { border: none; background: transparent; color: #64748b; font-size: 18px; line-height: 1; cursor: pointer; padding: 0 2px; }
+  .cd-modal-close:hover { color: #0f172a; }
+  .cd-loader-backdrop { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(15,23,42,0.24); z-index: 1200; }
+  .cd-loader-backdrop.open { display: flex; }
+  .cd-loader-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 10px 14px; box-shadow: 0 8px 24px rgba(15,23,42,.22); display: inline-flex; align-items: center; gap: 8px; color: #334155; font-size: 12px; }
+  .cd-loader-spin { width: 14px; height: 14px; border: 2px solid #c7d2fe; border-top-color: #4f46e5; border-radius: 50%; animation: cd-spin .75s linear infinite; }
+  @keyframes cd-spin { to { transform: rotate(360deg); } }
 </style>
 {% endblock %}
 
@@ -191,7 +198,10 @@
 
 <div id="cd-jql-modal" class="cd-modal-backdrop">
   <div class="cd-modal" role="dialog" aria-modal="true" aria-labelledby="cd-jql-title">
-    <div id="cd-jql-title" class="cd-modal-head">Build Dashboard from JQL</div>
+    <div class="cd-modal-head">
+      <span id="cd-jql-title">Build Dashboard from JQL</span>
+      <button id="cd-jql-close" class="cd-modal-close" aria-label="Close">&times;</button>
+    </div>
     <div class="cd-modal-body">
       <label class="cd-label">JQL</label>
       <textarea id="cd-jql-input" class="cd-input" rows="6" placeholder='Example: project = "TIM" AND created >= -30d ORDER BY created DESC'></textarea>
@@ -204,7 +214,10 @@
 </div>
 <div id="cd-settings-modal" class="cd-modal-backdrop">
   <div class="cd-modal" role="dialog" aria-modal="true" aria-labelledby="cd-settings-title">
-    <div id="cd-settings-title" class="cd-modal-head">Jira Credentials (Local)</div>
+    <div class="cd-modal-head">
+      <span id="cd-settings-title">Jira Credentials (Local)</span>
+      <button id="cd-settings-close" class="cd-modal-close" aria-label="Close">&times;</button>
+    </div>
     <div class="cd-modal-body">
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
@@ -222,6 +235,12 @@
       <button id="cd-settings-cancel" class="cd-btn-secondary">Cancel</button>
       <button id="cd-settings-save" class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold px-4 py-2 rounded-md">Save Settings</button>
     </div>
+  </div>
+</div>
+<div id="cd-loader" class="cd-loader-backdrop" aria-live="polite" aria-busy="true">
+  <div class="cd-loader-card">
+    <span class="cd-loader-spin"></span>
+    <span>Fetching dashboard...</span>
   </div>
 </div>
 {% endblock %}
@@ -880,6 +899,10 @@
     document.getElementById("cd-settings-modal").classList.remove("open");
   }
 
+  function setLoading(open) {
+    document.getElementById("cd-loader").classList.toggle("open", !!open);
+  }
+
   async function fetchByJql(jql) {
     const status = document.getElementById("cd-status");
     const finalJql = (jql || "").trim();
@@ -899,6 +922,7 @@
     saveStoredSettings({ jql: finalJql });
     status.textContent = "Loading...";
     status.classList.remove("text-red-400");
+    setLoading(true);
     try {
       const res = await fetch("/api/customer_dashboard/data", {
         method: "POST",
@@ -923,6 +947,8 @@
     } catch (e) {
       status.textContent = e.message;
       status.classList.add("text-red-400");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -937,11 +963,10 @@
     document.getElementById("cd-open-builder").addEventListener("click", openJqlDialog);
     document.getElementById("cd-open-settings").addEventListener("click", openSettingsDialog);
     document.getElementById("cd-jql-cancel").addEventListener("click", closeJqlDialog);
+    document.getElementById("cd-jql-close").addEventListener("click", closeJqlDialog);
     document.getElementById("cd-jql-apply").addEventListener("click", () => fetchByJql(document.getElementById("cd-jql-input").value));
-    document.getElementById("cd-jql-modal").addEventListener("click", (e) => {
-      if (e.target.id === "cd-jql-modal") closeJqlDialog();
-    });
     document.getElementById("cd-settings-cancel").addEventListener("click", closeSettingsDialog);
+    document.getElementById("cd-settings-close").addEventListener("click", closeSettingsDialog);
     document.getElementById("cd-settings-save").addEventListener("click", () => {
       const email = (document.getElementById("cd-setting-email").value || "").trim();
       const token = (document.getElementById("cd-setting-token").value || "").trim();
@@ -951,8 +976,11 @@
       status.textContent = "Settings saved locally.";
       status.classList.remove("text-red-400");
     });
-    document.getElementById("cd-settings-modal").addEventListener("click", (e) => {
-      if (e.target.id === "cd-settings-modal") closeSettingsDialog();
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        closeJqlDialog();
+        closeSettingsDialog();
+      }
     });
   }
 
