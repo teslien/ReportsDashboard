@@ -1,0 +1,614 @@
+[
+  {
+    "name": "CP 0501",
+    "sprint_goal": "Ship vacation pay engine, T&DA framework, and Canadian reports suite",
+    "themes": [
+      {
+        "theme_key": "vacation-pay-canada",
+        "epic_name": "Vacation Pay — End-to-End for Canada",
+        "sentence": "Full-lifecycle vacation pay engine for Canadian workers",
+        "bullets": [
+          "Policy engine with tenure tiers, earning type overrides, and company-level settings",
+          "Worker-facing dashboard, auto-escalation, and termination payout with province-specific deadlines"
+        ],
+        "tickets": [
+          {"ticket_key": "TIM-26520", "summary": "Policy Engine — Create, Edit, Assign Vacation Pay Policies with Tenure Tiers", "status": "In Development", "customers": [], "lb": false},
+          {"ticket_key": "TIM-26521", "summary": "Earning Type Overrides — Policy-Level Defaults", "status": "In Development", "customers": [], "lb": false},
+          {"ticket_key": "TIM-26522", "summary": "Earning Type Overrides — Worker-Level Exceptions", "status": "In Development", "customers": [], "lb": false},
+          {"ticket_key": "TIM-26523", "summary": "Auto-Escalation — Tenure Threshold Monitoring and NMBR Sync", "status": "In Development", "customers": [], "lb": false},
+          {"ticket_key": "TIM-26524", "summary": "Company-Level Vacation Pay Settings (Date Formula + Notifications)", "status": "In Development", "customers": [], "lb": false},
+          {"ticket_key": "TIM-26525", "summary": "Worker Vacation Tab — Balance Management, Settings, and History", "status": "In Development", "customers": [], "lb": false},
+          {"ticket_key": "TIM-26526", "summary": "Manual Accrual Adjustments (Matching NMBR Capabilities)", "status": "In Development", "customers": [], "lb": false},
+          {"ticket_key": "TIM-26527", "summary": "Employee Self-Service — Vacation Pay Dashboard", "status": "In Development", "customers": [], "lb": false},
+          {"ticket_key": "TIM-26519", "summary": "Design — Vacation Pay Screens & Flows (13 Screens)", "status": "Ready for Dev", "customers": [], "lb": false},
+          {"ticket_key": "TIM-26530", "summary": "Termination — Automated Vacation Payout with Province-Specific Deadlines", "status": "Ready for Dev", "customers": [], "lb": false}
+        ]
+      },
+      {
+        "theme_key": "tda-framework",
+        "epic_name": "Canada-Travel & Daily Allowance Configuration Framework",
+        "sentence": "T&DA policy framework for Canadian timesheets and mobile clock-out",
+        "bullets": [
+          "Company, project, and union-level T&DA type and rate configuration",
+          "Admin timesheet management and mobile clock-out surfacing of allowances"
+        ],
+        "tickets": [
+          {"ticket_key": "TIM-25856", "summary": "CA - Company Level: Manage Travel & Daily Allowance Types", "status": "In Development", "customers": [], "lb": false},
+          {"ticket_key": "TIM-25853", "summary": "CA - FINAL Display and Enable Admin Management of Travel, Daily Allowances on Timesheets", "status": "In Development", "customers": [], "lb": false},
+          {"ticket_key": "TIM-25857", "summary": "CA - Company Level: Create & Manage Immutable Policies", "status": "Ready for Dev", "customers": [], "lb": false},
+          {"ticket_key": "TIM-25858", "summary": "CA - Project Level: Configure Applicable Types", "status": "Ready for Dev", "customers": [], "lb": false},
+          {"ticket_key": "TIM-25861", "summary": "CA - User Level: Configure Applicable Types", "status": "Ready for Dev", "customers": [], "lb": false},
+          {"ticket_key": "TIM-25869", "summary": "CA - Union Level: Travel & Allowance Rate Configuration", "status": "Ready for Dev", "customers": [], "lb": false},
+          {"ticket_key": "TIM-25852", "summary": "CA - FINAL Surface Applicable Compensation Items in Mobile App (Clock-Out Flow)", "status": "Ready for Dev", "customers": [], "lb": false},
+          {"ticket_key": "TIM-25871", "summary": "CA - Client Communication & Onboarding to Policy-Based Compensation System (Banner + Migration Modal)", "status": "Ready for Dev", "customers": [], "lb": false}
+        ]
+      },
+      {
+        "theme_key": "canadian-reports",
+        "epic_name": "Canadian Reports",
+        "sentence": "Full suite of Canadian payroll compliance and tax reports",
+        "bullets": [
+          "CRA remittance, EI/CPP balance, employer provincial taxes, and payroll register",
+          "YTD, vacation accrual, workers' comp reports with updated filter components"
+        ],
+        "tickets": [
+          {"ticket_key": "TIM-26438", "summary": "Dropdown Grouping, Tooltips & New Filter Components", "status": "Ready for Dev", "customers": [], "lb": false},
+          {"ticket_key": "TIM-26437", "summary": "CRA Remittance Report", "status": "Ready for Dev", "customers": [], "lb": false},
+          {"ticket_key": "TIM-26436", "summary": "EI/CPP Balance Report", "status": "Ready for Dev", "customers": [], "lb": false},
+          {"ticket_key": "TIM-26369", "summary": "Payroll Register Report", "status": "Ready for Dev", "customers": [], "lb": false},
+          {"ticket_key": "TIM-26366", "summary": "YTD Report", "status": "Ready for Dev", "customers": [], "lb": false},
+          {"ticket_key": "TIM-26364", "summary": "Vacation Accrual Report", "status": "Ready for Dev", "customers": [], "lb": false},
+          {"ticket_key": "TIM-26361", "summary": "Workers' Compensation Report", "status": "Ready for Dev", "customers": [], "lb": false},
+          {"ticket_key": "TIM-26358", "summary": "Employer Provincial Taxes Report", "status": "Ready for Dev", "customers": [], "lb": false}
+        ]
+      },
+      {
+        "theme_key": "ca-holiday-pay",
+        "epic_name": "CA - Holiday Pay Eligibility",
+        "sentence": "Configurable holiday pay eligibility rules for Canadian workers",
+        "bullets": [
+          "Work-before-and-after eligibility criteria configuration per Canadian employment rules",
+          "Holiday pay eligibility policy settings at company and worker level"
+        ],
+        "tickets": [
+          {"ticket_key": "TIM-26672", "summary": "CA - Holiday Pay Eligibility", "status": "In Development", "customers": [], "lb": false},
+          {"ticket_key": "TIM-26674", "summary": "CA - Configurable Holiday Pay Eligibility – Work Before & After", "status": "In Development", "customers": [], "lb": false}
+        ]
+      },
+      {
+        "theme_key": "union-enhancement",
+        "epic_name": "Union Enhancement",
+        "sentence": "Cash payout of excess employer fringes during union reciprocity",
+        "bullets": [
+          "Enable cash payout when employer fringe contributions exceed the home union amount during reciprocity"
+        ],
+        "tickets": [
+          {"ticket_key": "TIM-26677", "summary": "CA - Enable Cash Payout of Excess Employer Fringes During Union Reciprocity", "status": "In Development", "customers": [], "lb": false}
+        ]
+      },
+      {
+        "theme_key": "shift-premium",
+        "epic_name": "Shift Premium",
+        "sentence": "Home vs work union selection for shift premium configuration",
+        "bullets": [
+          "Simplified UI to assign shift premiums by home or work union for Canadian workers"
+        ],
+        "tickets": [
+          {"ticket_key": "TIM-26676", "summary": "CA - Add Home vs Work Union Selection for Shift Premiums + Simplify UI", "status": "Ready for Dev", "customers": [], "lb": false}
+        ]
+      },
+      {
+        "theme_key": "cp-standalone",
+        "epic_name": "Standalone & Integration",
+        "sentence": "NMBR webhook sync, CPR format toggle, and UI fixes",
+        "bullets": [
+          "Webhook architecture and sync implementation for NMBR integration",
+          "WiredHQ CPR format toggle and paystub consolidation whitespace fix"
+        ],
+        "tickets": [
+          {"ticket_key": "TIM-25494", "summary": "WiredHQ - Toggle to enable the updated CPR Format", "status": "Done", "customers": ["WiredHQ"], "lb": false},
+          {"ticket_key": "TIM-23883", "summary": "Webhook Implementation For NMBR [Architecture]", "status": "In Development", "customers": [], "lb": false},
+          {"ticket_key": "TIM-24495", "summary": "Webhook Implementation For NMBR - Sync Implementation", "status": "In Development", "customers": [], "lb": false},
+          {"ticket_key": "TIM-27096", "summary": "Extra white space on company settings for paystub consolidation", "status": "Ready for Dev", "customers": [], "lb": false}
+        ]
+      }
+    ]
+  },
+  {
+    "name": "PR 0501",
+    "sprint_goal": "Ship payroll notifications, recurring reimbursement enhancements, 401(k) config, and union holiday calendars",
+    "themes": [
+      {
+        "theme_key": "payroll-notifications",
+        "epic_name": "Payroll Notifications Centre",
+        "sentence": "Configurable payroll event notifications for admins and employees",
+        "bullets": [
+          "Alerts for direct deposit, debit events, bank validation failures, and tax transfers",
+          "Settings page, recipient management, BCC addresses, first-time experience, and digest controls"
+        ],
+        "tickets": [
+          {"ticket_key": "TIM-26237", "summary": "Employee direct deposit changed", "status": "Ready for Dev", "customers": [], "lb": false},
+          {"ticket_key": "TIM-26238", "summary": "Employer bank account validation failed", "status": "Ready for Dev", "customers": [], "lb": false},
+          {"ticket_key": "TIM-26239", "summary": "Tax adjustment scheduled (Filing Period Closed)", "status": "Open", "customers": [], "lb": false},
+          {"ticket_key": "TIM-26240", "summary": "Tax adjustment cancelled (Tax Transfer Cancelled)", "status": "Open", "customers": [], "lb": false},
+          {"ticket_key": "TIM-26241", "summary": "Payroll debit scheduled (Employer Debit Receipt)", "status": "Open", "customers": [], "lb": false},
+          {"ticket_key": "TIM-26242", "summary": "Payroll debit failed", "status": "Open", "customers": [], "lb": false},
+          {"ticket_key": "TIM-26243", "summary": "Notifications settings page", "status": "Open", "customers": [], "lb": false},
+          {"ticket_key": "TIM-26244", "summary": "First-time experience", "status": "Open", "customers": [], "lb": false},
+          {"ticket_key": "TIM-26246", "summary": "Manage recipients", "status": "Open", "customers": [], "lb": false},
+          {"ticket_key": "TIM-26247", "summary": "Add a BCC address", "status": "Open", "customers": ["K2 Construction", "Precision Group"], "lb": false},
+          {"ticket_key": "TIM-26248", "summary": "Frequency control (digest) for direct deposit changed", "status": "Open", "customers": [], "lb": false}
+        ]
+      },
+      {
+        "theme_key": "recurring-reimbursement",
+        "epic_name": "Recurring Reimbursement Enhancements",
+        "sentence": "Smart recurring reimbursements with limits, conditions, and auto-disable",
+        "bullets": [
+          "Limit configuration, cumulative tracking, and auto-disable when cap is reached",
+          "Conditional exclusion when no hours, report enhancements, and UX bug fixes"
+        ],
+        "tickets": [
+          {"ticket_key": "TIM-25879", "summary": "Conditional RMB Processing - Auto-Exclude When No Hours", "status": "Ready for Dev", "customers": [], "lb": false},
+          {"ticket_key": "TIM-25880", "summary": "Reimbursement Limit Configuration UI", "status": "Ready for Dev", "customers": [], "lb": false},
+          {"ticket_key": "TIM-25881", "summary": "Cumulative Reimbursement Amount Tracking & Display", "status": "Ready for Dev", "customers": [], "lb": false},
+          {"ticket_key": "TIM-25882", "summary": "Auto-Disable Reimbursement When Limit Reached", "status": "Ready for Dev", "customers": [], "lb": false},
+          {"ticket_key": "TIM-25883", "summary": "Employer Notification System for Reimbursement Limits", "status": "Ready for Dev", "customers": [], "lb": false},
+          {"ticket_key": "TIM-25884", "summary": "Recurring Reimbursement Report Enhancements", "status": "Ready for Dev", "customers": [], "lb": false},
+          {"ticket_key": "TIM-26261", "summary": "Recurring Reimbursement UX Enhancements & Bug Fixes", "status": "Ready for Dev", "customers": [], "lb": false}
+        ]
+      },
+      {
+        "theme_key": "401k-config",
+        "epic_name": "401k Configuration to Company Settings",
+        "sentence": "401(k) plan configuration consolidated into company settings",
+        "bullets": [
+          "Plan overview, contribution setup, eligible compensation basis, and annual limit config",
+          "Existing integrations relocated to company settings alongside 401(k) block"
+        ],
+        "tickets": [
+          {"ticket_key": "TIM-26797", "summary": "Add 401(k) block under Payroll > General and create plan overview settings", "status": "Open", "customers": ["Bryan Construction", "The State Group"], "lb": false},
+          {"ticket_key": "TIM-26798", "summary": "Configure employee and employer contribution setup within 401(k) settings", "status": "Open", "customers": ["Bryan Construction", "The State Group"], "lb": false},
+          {"ticket_key": "TIM-26799", "summary": "Configure 401(k)-eligible compensation basis, including imputed earnings", "status": "Open", "customers": ["Bryan Construction", "The State Group"], "lb": false},
+          {"ticket_key": "TIM-26800", "summary": "Add 401(k)-specific settings validations and annual limit configuration", "status": "Open", "customers": ["Bryan Construction", "The State Group"], "lb": false},
+          {"ticket_key": "TIM-26805", "summary": "Relocate existing integrations into Company Settings", "status": "Open", "customers": ["Bryan Construction", "The State Group"], "lb": false}
+        ]
+      },
+      {
+        "theme_key": "union-holiday-calendar",
+        "epic_name": "Union Holiday Calendar",
+        "sentence": "Union CBA holiday calendar configuration for payroll processing",
+        "bullets": [
+          "Configure CBA eligibility, default pay rules, and company calendar selection per CBA year",
+          "Per-holiday override, review flow, and empty-state first-time experience"
+        ],
+        "tickets": [
+          {"ticket_key": "TIM-25380", "summary": "Union calendar - Empty state and first-time access", "status": "Open", "customers": [], "lb": false},
+          {"ticket_key": "TIM-25381", "summary": "Select company calendar per CBA year", "status": "Ready for Dev", "customers": [], "lb": false},
+          {"ticket_key": "TIM-25382", "summary": "Configure default pay rules", "status": "Ready for Dev", "customers": [], "lb": false},
+          {"ticket_key": "TIM-25383", "summary": "Configure CBA eligibility", "status": "Ready for Dev", "customers": [], "lb": false},
+          {"ticket_key": "TIM-25384", "summary": "Review, per-holiday override, and save", "status": "Ready for Dev", "customers": [], "lb": false}
+        ]
+      },
+      {
+        "theme_key": "401k-optimization",
+        "epic_name": "401(k) Optimization",
+        "sentence": "Automated 401(k) reporting and safe harbor contribution caps",
+        "bullets": [
+          "Automate 401(k) report transfer from Lumber to PayKonnect",
+          "Annual employer contribution cap per employee for safe harbor plans"
+        ],
+        "tickets": [
+          {"ticket_key": "TIM-26551", "summary": "Automate 401(k) Report Transfer from Lumber to PayKonnect", "status": "Open", "customers": ["Bryan Construction", "MIINC"], "lb": false},
+          {"ticket_key": "TIM-26613", "summary": "Annual Employer Contribution Cap per Employee for Safe Harbor 401(k)", "status": "Open", "customers": ["Bryan Construction", "The State Group"], "lb": false}
+        ]
+      },
+      {
+        "theme_key": "worker-comp-gl",
+        "epic_name": "Worker Compensation GL level report",
+        "sentence": "Map worker comp codes to cost codes for GL-level reporting",
+        "bullets": [
+          "Enable cost code to worker compensation code mapping for GL export and reporting"
+        ],
+        "tickets": [
+          {"ticket_key": "TIM-14769", "summary": "Enable Mapping of Worker Compensation Codes to Cost Codes", "status": "Ready for Dev", "customers": ["Bowman Steel", "JM Construction", "K2 Construction", "Yard 1 LLC."], "lb": true}
+        ]
+      },
+      {
+        "theme_key": "paystub-visibility",
+        "epic_name": "Pay stub visibility",
+        "sentence": "Company-level control over when employees can view paystubs",
+        "bullets": [
+          "Toggle to delay paystub visibility until payment is confirmed by the employer"
+        ],
+        "tickets": [
+          {"ticket_key": "TIM-21115", "summary": "Enable Company-Level Configuration to Control Paystub Visibility Until Payment Is Confirmed", "status": "Ready for Dev", "customers": ["Bryan Construction", "MIINC", "Precision Group", "Stratus Systems"], "lb": false}
+        ]
+      },
+      {
+        "theme_key": "terminate-employees",
+        "epic_name": "Terminate Employees",
+        "sentence": "Per-employee confirmation flow for bulk rehires",
+        "bullets": [
+          "Bulk rehire flow with per-employee confirmation for streamlined re-onboarding"
+        ],
+        "tickets": [
+          {"ticket_key": "TIM-25714", "summary": "Bulk rehire: support new rehire flow with per-employee confirmation (follow-up)", "status": "Ready for Dev", "customers": [], "lb": false}
+        ]
+      },
+      {
+        "theme_key": "double-l",
+        "epic_name": "Double L Payroll: Reduce Processing Time",
+        "sentence": "Payroll processing speed improvements for Double L",
+        "bullets": [
+          "Filter and report for employees under 40 hours to reduce payroll review cycle"
+        ],
+        "tickets": [
+          {"ticket_key": "TIM-26905", "summary": "[Double L P-004] No Filter/Report for Employees Under 40 Hours", "status": "Open", "customers": ["Double L"], "lb": false}
+        ]
+      },
+      {
+        "theme_key": "bulk-zip-download",
+        "epic_name": "Bulk and selective zip download for PW & Union reports",
+        "sentence": "Bulk and selective ZIP download for prevailing wage and union reports",
+        "bullets": [
+          "Download multiple PW and union CPR reports as a single ZIP archive"
+        ],
+        "tickets": [
+          {"ticket_key": "TIM-23185", "summary": "Bulk & Selective ZIP Download for Prevailing Wage and Union Reports", "status": "Ready for Dev", "customers": [], "lb": false}
+        ]
+      },
+      {
+        "theme_key": "union-fringe",
+        "epic_name": "Union Fringe enhancement",
+        "sentence": "Granular fringe configuration at the union level",
+        "bullets": [
+          "Union-level fringe configuration with optional per-class or per-category granularity"
+        ],
+        "tickets": [
+          {"ticket_key": "TIM-22914", "summary": "Union-Level Fringe Configuration with Optional Granularity", "status": "Ready for Dev", "customers": [], "lb": false}
+        ]
+      },
+      {
+        "theme_key": "reports-enhancements",
+        "epic_name": "Reports Enhancements",
+        "sentence": "Pay period-based date picker for all payroll reports",
+        "bullets": [
+          "Remove legacy UDF flag and enable unified pay period date picker across all reports"
+        ],
+        "tickets": [
+          {"ticket_key": "TIM-24835", "summary": "Remove NEW_FILTER_PAYROLL_REPORT UDF and enable payperiod based date picker for all reports", "status": "On Hold", "customers": ["Texas Commercial Glass"], "lb": false}
+        ]
+      },
+      {
+        "theme_key": "pr-standalone",
+        "epic_name": "Customer Escalations & Standalone",
+        "sentence": "Customer escalations, security fixes, and ad-hoc requests",
+        "bullets": [
+          "TSG security bug, Harris union bulk assignment, MIINC net pay review before submission",
+          "PTO bug fix, leave cancellation handling, and terminated employee payroll"
+        ],
+        "tickets": [
+          {"ticket_key": "TIM-25002", "summary": "TSG - CRITICAL SECURITY: POA/Tax Doc Authorization Allows Any Admin to Sign as Another User", "status": "Open", "customers": ["The State Group"], "lb": false},
+          {"ticket_key": "TIM-27072", "summary": "Herbst Electric/Welch & Rushe — Union Selection UI Showing Incorrect/Extra Classes and Levels Across Locals", "status": "Open", "customers": ["The State Group"], "lb": false},
+          {"ticket_key": "TIM-26892", "summary": "MIINC - Measures to review Net pay before payroll submission", "status": "Open", "customers": ["MIINC"], "lb": false},
+          {"ticket_key": "TIM-26655", "summary": "Harris - Backend support needed to bulk assign unions to Harris projects imported from Workday", "status": "Open", "customers": ["Harris Company"], "lb": false},
+          {"ticket_key": "TIM-26508", "summary": "[Harris] Query and Extract All Rates and Fringes from Prevailing Wage Setup", "status": "Open", "customers": ["Harris Company"], "lb": false},
+          {"ticket_key": "TIM-26507", "summary": "[Harris] Query and Export Union Fringe Rates, Configurations, and Benefits for All Unions", "status": "Open", "customers": ["Harris Company"], "lb": false},
+          {"ticket_key": "TIM-24885", "summary": "Precision Group - Bank Account Notifications", "status": "Open", "customers": ["Precision Group"], "lb": false},
+          {"ticket_key": "TIM-26549", "summary": "PTO hours are not appearing for contractors in the Payroll Overview", "status": "Open", "customers": [], "lb": false},
+          {"ticket_key": "TIM-26404", "summary": "Handle Cancellation of Approved Leaves in Payroll Drafts", "status": "Ready for Dev", "customers": [], "lb": false},
+          {"ticket_key": "TIM-25914", "summary": "Pay Terminated Employee for Pre-Termination Work", "status": "Ready for Design", "customers": [], "lb": false}
+        ]
+      }
+    ]
+  },
+  {
+    "name": "QW 0501",
+    "sprint_goal": "Ship payroll processing fixes, unsaved changes warnings, and report enhancements",
+    "themes": [
+      {
+        "theme_key": "qw-payroll-processing",
+        "epic_name": "Payroll Processing Optimization",
+        "sentence": "Payroll processing fixes and improvements for key accounts",
+        "bullets": [
+          "Resolve pay period and processing blockers for Sievert and Double L",
+          "Enable Bryan Construction and Double L payroll edge cases"
+        ],
+        "tickets": [
+          {"ticket_key": "TIM-19917", "summary": "Payroll Processing — Sievert pay period fix", "status": "Resolved", "customers": ["Sievert"], "lb": false},
+          {"ticket_key": "TIM-26028", "summary": "Payroll Processing — Double L processing improvement", "status": "Ready for Dev", "customers": ["Double L"], "lb": false},
+          {"ticket_key": "TIM-25573", "summary": "Payroll Processing — Bryan Construction edge case", "status": "Deployed", "customers": ["Bryan Construction"], "lb": false},
+          {"ticket_key": "TIM-21347", "summary": "Payroll Processing — Bryan Construction fix", "status": "Ready for Dev", "customers": ["Bryan Construction"], "lb": false}
+        ]
+      },
+      {
+        "theme_key": "qw-holiday-timeoff",
+        "epic_name": "Holiday & Time-Off Optimization",
+        "sentence": "Holiday and time-off policy improvements for multi-account use",
+        "bullets": [
+          "Optimize holiday and time-off handling for EVCO, K2, M2 Roofing, and Sievert"
+        ],
+        "tickets": [
+          {"ticket_key": "TIM-18282", "summary": "Holiday & Time-Off Optimization", "status": "Ready for Dev", "customers": ["EVCO", "K2 Construction", "M2 Roofing", "Sievert"], "lb": false}
+        ]
+      },
+      {
+        "theme_key": "qw-unsaved-changes",
+        "epic_name": "Unsaved Changes Warning Across Admin Forms",
+        "sentence": "Warn admins of unsaved changes across all admin configuration forms",
+        "bullets": [
+          "Add unsaved changes modal/guard to six admin form pages",
+          "Fix dev corrections for Delta Painting and Double L"
+        ],
+        "tickets": [
+          {"ticket_key": "TIM-26016", "summary": "Unsaved Changes Warning — Admin Form (page 6)", "status": "Ready for Dev", "customers": [], "lb": false},
+          {"ticket_key": "TIM-26015", "summary": "Unsaved Changes Warning — Admin Form (page 5)", "status": "Ready for Dev", "customers": [], "lb": false},
+          {"ticket_key": "TIM-26013", "summary": "Unsaved Changes Warning — Admin Form (page 4)", "status": "Ready for Dev", "customers": [], "lb": false},
+          {"ticket_key": "TIM-24429", "summary": "Unsaved Changes Warning — Admin Form (page 3)", "status": "Ready for Dev", "customers": [], "lb": false},
+          {"ticket_key": "TIM-24428", "summary": "Unsaved Changes Warning — Admin Form (page 2)", "status": "Ready for Dev", "customers": [], "lb": false},
+          {"ticket_key": "TIM-24426", "summary": "Unsaved Changes Warning — Admin Form (page 1, dev corrections)", "status": "Dev Corrections Needed", "customers": ["Delta Painting"], "lb": false},
+          {"ticket_key": "TIM-23196", "summary": "Unsaved Changes Warning — Double L follow-up", "status": "Ready for Dev", "customers": ["Double L"], "lb": false}
+        ]
+      },
+      {
+        "theme_key": "qw-reports-enhancements",
+        "epic_name": "Reports Enhancements",
+        "sentence": "Report enhancements for Yard 1, HD Construction, and Cupertino",
+        "bullets": [
+          "New report features and improvements for Yard 1, HD Construction, and Cupertino accounts"
+        ],
+        "tickets": [
+          {"ticket_key": "TIM-25863", "summary": "Reports Enhancement — Yard 1", "status": "Open", "customers": ["Yard 1"], "lb": false},
+          {"ticket_key": "TIM-22039", "summary": "Reports Enhancement — HD Construction", "status": "Ready for Dev", "customers": ["HD Construction"], "lb": false},
+          {"ticket_key": "TIM-14863", "summary": "Reports Enhancement — Cupertino", "status": "Ready for Dev", "customers": ["Cupertino"], "lb": false}
+        ]
+      },
+      {
+        "theme_key": "qw-lumber-ai",
+        "epic_name": "Lumber AI Track Enhancements",
+        "sentence": "AI track enhancements for payroll intelligence",
+        "bullets": [
+          "Improve Lumber AI capabilities for payroll and timesheet workflows"
+        ],
+        "tickets": [
+          {"ticket_key": "TIM-19456", "summary": "Lumber AI Track Enhancements", "status": "Ready for Dev", "customers": [], "lb": false}
+        ]
+      },
+      {
+        "theme_key": "qw-onboarding",
+        "epic_name": "Onboarding Flow Enhancement",
+        "sentence": "Onboarding flow improvements for Sievert",
+        "bullets": [
+          "Streamline onboarding flow and reduce friction for new account setup"
+        ],
+        "tickets": [
+          {"ticket_key": "TIM-25145", "summary": "Onboarding Flow Enhancement — Sievert", "status": "Ready for Dev", "customers": ["Sievert"], "lb": false}
+        ]
+      },
+      {
+        "theme_key": "qw-employee-drawer",
+        "epic_name": "Employee Drawer Optimization",
+        "sentence": "Employee drawer UX optimization for K2 Construction",
+        "bullets": [
+          "Optimize employee drawer performance and usability for K2 Construction admins"
+        ],
+        "tickets": [
+          {"ticket_key": "TIM-22427", "summary": "Employee Drawer Optimization — K2 Construction", "status": "Ready for Dev", "customers": ["K2 Construction"], "lb": false}
+        ]
+      },
+      {
+        "theme_key": "qw-payroll-notifications",
+        "epic_name": "Payroll Notifications Centre",
+        "sentence": "Payroll notification centre enhancements",
+        "bullets": [
+          "Extend payroll notification centre with additional event types"
+        ],
+        "tickets": [
+          {"ticket_key": "TIM-20390", "summary": "Payroll Notifications Centre — additional events", "status": "Ready for Dev", "customers": [], "lb": false}
+        ]
+      },
+      {
+        "theme_key": "qw-quick-wins",
+        "epic_name": "Quick Wins",
+        "sentence": "Quick wins and minor UI/UX improvements",
+        "bullets": [
+          "Ship small high-impact fixes and improvements"
+        ],
+        "tickets": [
+          {"ticket_key": "TIM-14856", "summary": "Quick Win — UI/UX improvement", "status": "Done", "customers": [], "lb": false}
+        ]
+      },
+      {
+        "theme_key": "qw-standalone",
+        "epic_name": "Standalone & Escalations",
+        "sentence": "Standalone escalation for Level 5 Drywall",
+        "bullets": [
+          "Address open escalation item for Level 5 Drywall"
+        ],
+        "tickets": [
+          {"ticket_key": "TIM-27056", "summary": "Level 5 Drywall — open escalation", "status": "Open", "customers": ["Level 5 Drywall"], "lb": false}
+        ]
+      }
+    ]
+  },
+  {
+    "name": "RPT 0501",
+    "sprint_goal": "Ship typed fringe classification for CPR reports, PW shifts revamp, and worker comp aggregation",
+    "themes": [
+      {
+        "theme_key": "rpt-positive-pay",
+        "epic_name": "Positive Pay Report",
+        "sentence": "Positive pay report with check number support for Galindo",
+        "bullets": [
+          "Add check number field to positive pay report for Galindo account"
+        ],
+        "tickets": [
+          {"ticket_key": "TIM-26895", "summary": "Positive Pay Report — Check Numbers (Galindo)", "status": "Ready for Dev", "customers": ["Galindo"], "lb": false}
+        ]
+      },
+      {
+        "theme_key": "rpt-double-l-speed",
+        "epic_name": "Double L Payroll: Reduce Processing Time",
+        "sentence": "Cut Double L payroll processing time with speed improvements",
+        "bullets": [
+          "Performance and workflow improvements to reduce Double L payroll processing cycle"
+        ],
+        "tickets": [
+          {"ticket_key": "TIM-26911", "summary": "Double L — Payroll Processing Speed (story 1)", "status": "Open", "customers": ["Double L"], "lb": false},
+          {"ticket_key": "TIM-26913", "summary": "Double L — Payroll Processing Speed (story 2)", "status": "Open", "customers": ["Double L"], "lb": false}
+        ]
+      },
+      {
+        "theme_key": "rpt-ytd-hours",
+        "epic_name": "YTD Hours in Reports",
+        "sentence": "Add YTD hours column to payroll reports for Bryan Construction",
+        "bullets": [
+          "Surface year-to-date hours in standard payroll reports for Bryan Construction"
+        ],
+        "tickets": [
+          {"ticket_key": "TIM-25156", "summary": "YTD Hours in Reports — Bryan Construction", "status": "Ready for Dev", "customers": ["Bryan Construction"], "lb": false}
+        ]
+      },
+      {
+        "theme_key": "rpt-ui-standardisation",
+        "epic_name": "UI Standardisation for Reports",
+        "sentence": "Standardise UI components across all report pages",
+        "bullets": [
+          "Consistent filter components, table headers, and layout across report views"
+        ],
+        "tickets": [
+          {"ticket_key": "TIM-25078", "summary": "UI Standardisation for Reports — Systems Undercover", "status": "Ready for Dev", "customers": ["Systems Undercover"], "lb": false},
+          {"ticket_key": "TIM-25727", "summary": "UI Standardisation for Reports — general", "status": "Ready for Dev", "customers": [], "lb": false}
+        ]
+      },
+      {
+        "theme_key": "rpt-state-cprs",
+        "epic_name": "State CPRs",
+        "sentence": "State-level certified payroll report generation for Bryan Construction",
+        "bullets": [
+          "Generate state CPR formats required by Bryan Construction compliance workflow"
+        ],
+        "tickets": [
+          {"ticket_key": "TIM-21838", "summary": "State CPRs — Bryan Construction", "status": "Ready for Dev", "customers": ["Bryan Construction"], "lb": false}
+        ]
+      },
+      {
+        "theme_key": "rpt-reports-filtering",
+        "epic_name": "Reports Filtering Related Stories",
+        "sentence": "Advanced filtering for payroll reports for Wagner Roofing",
+        "bullets": [
+          "Add filtering capabilities to key payroll report views for Wagner Roofing"
+        ],
+        "tickets": [
+          {"ticket_key": "TIM-18283", "summary": "Reports Filtering — Wagner Roofing", "status": "Ready for Dev", "customers": ["Wagner Roofing"], "lb": false}
+        ]
+      },
+      {
+        "theme_key": "rpt-pw-shifts-revamp",
+        "epic_name": "Shifts in PW Configurations Revamp",
+        "sentence": "Revamp shift configuration within prevailing wage setup",
+        "bullets": [
+          "Redesign shift management UI and logic within PW configuration screens"
+        ],
+        "tickets": [
+          {"ticket_key": "TIM-27312", "summary": "Shifts in PW Configurations Revamp (story 1)", "status": "Open", "customers": [], "lb": false},
+          {"ticket_key": "TIM-27310", "summary": "Shifts in PW Configurations Revamp (story 2)", "status": "Open", "customers": [], "lb": false}
+        ]
+      },
+      {
+        "theme_key": "rpt-typed-fringes",
+        "epic_name": "Enable Fringes/Dues in Union Configuration to be Strongly Typed",
+        "sentence": "Strongly type fringes and dues in union configuration for CPR accuracy",
+        "bullets": [
+          "Classify fringe and dues items with explicit types to drive CPR report accuracy",
+          "Covers health, pension, vacation, training, and other fringe categories"
+        ],
+        "tickets": [
+          {"ticket_key": "TIM-25181", "summary": "Strongly Typed Fringes — health & welfare", "status": "Ready for Dev", "customers": [], "lb": false},
+          {"ticket_key": "TIM-25180", "summary": "Strongly Typed Fringes — pension", "status": "Ready for Dev", "customers": [], "lb": false},
+          {"ticket_key": "TIM-25179", "summary": "Strongly Typed Fringes — vacation/holiday", "status": "Ready for Dev", "customers": [], "lb": false},
+          {"ticket_key": "TIM-25178", "summary": "Strongly Typed Fringes — training/JATC", "status": "Ready for Dev", "customers": [], "lb": false},
+          {"ticket_key": "TIM-25176", "summary": "Strongly Typed Fringes — other/dues", "status": "Ready for Dev", "customers": [], "lb": false}
+        ]
+      },
+      {
+        "theme_key": "rpt-xml-state-reports",
+        "epic_name": "New XML Formats for State Report",
+        "sentence": "New XML export formats for state-level reports for Renua Energy",
+        "bullets": [
+          "Generate state report XML in formats required by Renua Energy compliance workflow"
+        ],
+        "tickets": [
+          {"ticket_key": "TIM-25101", "summary": "New XML Formats for State Report — Renua Energy", "status": "Ready for Dev", "customers": ["Renua Energy"], "lb": false}
+        ]
+      },
+      {
+        "theme_key": "rpt-wc-qbc",
+        "epic_name": "Worker Comp Standardisation (QBC)-2",
+        "sentence": "Worker compensation standardisation phase 2 for QBC",
+        "bullets": [
+          "Standardise worker comp configuration and reporting for QBC account"
+        ],
+        "tickets": [
+          {"ticket_key": "TIM-24983", "summary": "Worker Comp Standardisation (QBC) — phase 2", "status": "Open", "customers": ["QBC"], "lb": false}
+        ]
+      },
+      {
+        "theme_key": "rpt-union-report-settings",
+        "epic_name": "Union Report Settings",
+        "sentence": "Configurable union report settings for CPR exports",
+        "bullets": [
+          "Add union-level report settings to control CPR export behaviour and formatting"
+        ],
+        "tickets": [
+          {"ticket_key": "TIM-24647", "summary": "Union Report Settings", "status": "In Development", "customers": [], "lb": false}
+        ]
+      },
+      {
+        "theme_key": "rpt-non-taxable-earnings",
+        "epic_name": "Report to Include Non-Taxable Earnings During Payroll Run",
+        "sentence": "Include non-taxable earnings in payroll run reports for Texas Commercial Glass",
+        "bullets": [
+          "Surface non-taxable earning line items in payroll run report for Texas Commercial Glass"
+        ],
+        "tickets": [
+          {"ticket_key": "TIM-23095", "summary": "Non-Taxable Earnings in Payroll Run Report — Texas Commercial Glass", "status": "Open", "customers": ["Texas Commercial Glass"], "lb": false}
+        ]
+      },
+      {
+        "theme_key": "rpt-miinc-compare",
+        "epic_name": "MIINC — Compare Reports from Sage 300 Payroll with Lumber Reports",
+        "sentence": "Reconcile Lumber reports against Sage 300 payroll data for MIINC",
+        "bullets": [
+          "Build comparison view to validate Lumber report data against Sage 300 payroll exports for MIINC"
+        ],
+        "tickets": [
+          {"ticket_key": "TIM-22413", "summary": "MIINC — Compare Sage 300 vs Lumber Reports", "status": "Ready for Dev", "customers": ["MIINC"], "lb": false}
+        ]
+      },
+      {
+        "theme_key": "rpt-wc-financial-posting",
+        "epic_name": "Worker Compensation Report for Financial Posting",
+        "sentence": "Worker comp report for GL financial posting for United Services Group",
+        "bullets": [
+          "Generate worker comp report in format required for GL financial posting by United Services Group"
+        ],
+        "tickets": [
+          {"ticket_key": "TIM-19654", "summary": "WC Report for Financial Posting — United Services Group", "status": "Ready for Dev", "customers": ["United Services Group"], "lb": false}
+        ]
+      },
+      {
+        "theme_key": "rpt-wc-aggregation",
+        "epic_name": "WC Aggregation by Class Code",
+        "sentence": "Aggregate worker comp data by class code in reports",
+        "bullets": [
+          "Roll up worker comp figures by class code for consolidated reporting and audit"
+        ],
+        "tickets": [
+          {"ticket_key": "TIM-27196", "summary": "WC Aggregation by Class Code", "status": "Ready for Dev", "customers": [], "lb": false}
+        ]
+      }
+    ]
+  }
+]
