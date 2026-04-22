@@ -19,7 +19,7 @@
                     <!-- Tracking Dropdown -->
                     {% set nav = namespace(has_tracking=false, has_analysis=false, has_tools=false) %}
                     
-                    {% set tracking_pages = ['scoreboard', 'tracker', 'status_tracker', 'trackers_v2', 'todo', 'scrum_notes'] %}
+                    {% set tracking_pages = ['scoreboard', 'tracker', 'status_tracker', 'trackers_v2', 'todo', 'scrum_notes', 'sprint_tracker'] %}
                     {% for p in tracking_pages %}
                         {% if current_user.can_view_page(p) %}{% set nav.has_tracking = true %}{% endif %}
                     {% endfor %}
@@ -67,6 +67,11 @@
                                 <a href="/scrum_notes"
                                     class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white"
                                     role="menuitem">Scrum Notes</a>
+                                {% endif %}
+                                {% if current_user.can_view_page('sprint_tracker') %}
+                                <a href="/sprint_tracker"
+                                    class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white"
+                                    role="menuitem">Sprint Tracker</a>
                                 {% endif %}
                             </div>
                         </div>
@@ -298,6 +303,10 @@
             <a href="/scrum_notes"
                 class="block px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:text-white hover:bg-gray-700">Scrum
                 Notes</a>
+            {% endif %}
+            {% if current_user.can_view_page('sprint_tracker') %}
+            <a href="/sprint_tracker"
+                class="block px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:text-white hover:bg-gray-700">Sprint Tracker</a>
             {% endif %}
             {% endif %}
 

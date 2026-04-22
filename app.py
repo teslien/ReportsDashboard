@@ -646,6 +646,120 @@ def init_db():
     if cursor.fetchone()[0] == 0:
         cursor.execute("INSERT INTO app_config (config_key, config_value) VALUES ('header_title', 'Jira Analytics')")
 
+    # Sprint Tracker - Sprints
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS sprint_tracker_sprints (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(100) NOT NULL UNIQUE,
+            sprint_goal TEXT,
+            goal_edited TINYINT(1) DEFAULT 0,
+            divider_index INT DEFAULT 0,
+            sort_order INT DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        )
+    ''')
+
+    # Sprint Tracker - Themes
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS sprint_tracker_themes (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            sprint_id INT NOT NULL,
+            theme_key VARCHAR(150) NOT NULL,
+            epic_name VARCHAR(500),
+            sentence TEXT,
+            bullets JSON,
+            lb_override TINYINT(1) DEFAULT NULL,
+            notes TEXT,
+            notes_updated_by VARCHAR(255),
+            notes_updated_at DATETIME,
+            sort_order INT DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY unique_theme_in_sprint (sprint_id, theme_key),
+            FOREIGN KEY (sprint_id) REFERENCES sprint_tracker_sprints(id) ON DELETE CASCADE
+        )
+    ''')
+
+    # Backward-compatible migration for existing DBs
+    try:
+        cursor.execute("ALTER TABLE sprint_tracker_themes ADD COLUMN notes_updated_by VARCHAR(255)")
+    except Exception:
+        pass
+    try:
+        cursor.execute("ALTER TABLE sprint_tracker_themes ADD COLUMN notes_updated_at DATETIME")
+    except Exception:
+        pass
+
+    # Sprint Tracker - Tickets
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS sprint_tracker_tickets (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            theme_id INT NOT NULL,
+            ticket_key VARCHAR(100) NOT NULL,
+            summary TEXT,
+            status VARCHAR(100),
+            customers JSON,
+            lb TINYINT(1) DEFAULT 0,
+            description_bullets JSON,
+            last_synced_at DATETIME,
+            sort_order INT DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY unique_ticket_in_theme (theme_id, ticket_key),
+            FOREIGN KEY (theme_id) REFERENCES sprint_tracker_themes(id) ON DELETE CASCADE
+        )
+    ''')
+
+    # Seed Sprint Tracker from JSON if empty
+    cursor.execute("SELECT COUNT(*) FROM sprint_tracker_sprints")
+    if cursor.fetchone()[0] == 0:
+        try:
+            seed_path = os.path.join(os.path.dirname(__file__), "sprint_tracker_seed.json")
+            if os.path.exists(seed_path):
+                with open(seed_path, "r", encoding="utf-8") as f:
+                    seed = json.load(f)
+                for s_idx, sprint in enumerate(seed):
+                    themes = sprint.get("themes", [])
+                    cursor.execute(
+                        """INSERT INTO sprint_tracker_sprints (name, sprint_goal, goal_edited, divider_index, sort_order)
+                           VALUES (%s, %s, 0, %s, %s)""",
+                        (sprint["name"], sprint.get("sprint_goal", ""), len(themes), s_idx)
+                    )
+                    sprint_id = cursor.lastrowid
+                    for t_idx, theme in enumerate(themes):
+                        cursor.execute(
+                            """INSERT INTO sprint_tracker_themes
+                               (sprint_id, theme_key, epic_name, sentence, bullets, notes, sort_order)
+                               VALUES (%s, %s, %s, %s, %s, '', %s)""",
+                            (
+                                sprint_id,
+                                theme["theme_key"],
+                                theme.get("epic_name", ""),
+                                theme.get("sentence", ""),
+                                json.dumps(theme.get("bullets", [])),
+                                t_idx,
+                            ),
+                        )
+                        theme_id = cursor.lastrowid
+                        for k_idx, ticket in enumerate(theme.get("tickets", [])):
+                            cursor.execute(
+                                """INSERT INTO sprint_tracker_tickets
+                                   (theme_id, ticket_key, summary, status, customers, lb, sort_order)
+                                   VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                                (
+                                    theme_id,
+                                    ticket["ticket_key"],
+                                    ticket.get("summary", ""),
+                                    ticket.get("status", "Open"),
+                                    json.dumps(ticket.get("customers", [])),
+                                    1 if ticket.get("lb") else 0,
+                                    k_idx,
+                                ),
+                            )
+        except Exception as _seed_err:
+            print(f"Sprint Tracker seed error: {_seed_err}")
+
     conn.commit()
     conn.close()
 
@@ -716,18 +830,22 @@ def app_config_settings_api():
     
     if request.method == "POST":
         data = request.json or {}
-        header_title = data.get("header_title", "").strip()
-        
-        if not header_title:
+
+        if not data:
             conn.close()
-            return jsonify({"error": "Header title is required"}), 400
-            
+            return jsonify({"error": "No config values provided"}), 400
+
         try:
-            cursor.execute("""
-                INSERT INTO app_config (config_key, config_value)
-                VALUES ('header_title', %s)
-                ON DUPLICATE KEY UPDATE config_value = VALUES(config_value)
-            """, (header_title,))
+            for key, value in data.items():
+                config_key = str(key).strip()
+                if not config_key:
+                    continue
+                config_value = "" if value is None else str(value).strip()
+                cursor.execute("""
+                    INSERT INTO app_config (config_key, config_value)
+                    VALUES (%s, %s)
+                    ON DUPLICATE KEY UPDATE config_value = VALUES(config_value)
+                """, (config_key, config_value))
             conn.commit()
             return jsonify({"success": True})
         except Exception as e:
@@ -902,7 +1020,8 @@ PAGE_PERMISSIONS = [
     {"key": "trackers_v2", "label": "Custom Trackers"},
     {"key": "query_builder", "label": "Query Builder"},
     {"key": "bulk_update", "label": "Bulk Update"},
-    {"key": "merge_pdf", "label": "Merge PDF"}
+    {"key": "merge_pdf", "label": "Merge PDF"},
+    {"key": "sprint_tracker", "label": "Sprint Tracker"}
 ]
 
 @app.route("/admin/roles")
@@ -4189,6 +4308,8 @@ def generate_report_api():
         fixed_count = len(active_cols) - (1 if "summary" in active_cols else 0)
         s_width = "40%" if fixed_count <= 4 else "30%"
 
+        team_members_html = team_members.replace("\n", "<br>")
+
         html_content = f"""
         <html>
         <head>
@@ -4212,7 +4333,7 @@ def generate_report_api():
             </div>
             
             <div class="section-title">Team Members</div>
-            <p>{team_members.replace('\\n', '<br>')}</p>
+            <p>{team_members_html}</p>
             
             <div class="section-title">Issue Distribution</div>
             <div style="text-align: center;">
@@ -4307,6 +4428,1172 @@ def get_audit_logs():
         return jsonify({"error": str(e)}), 500
     finally:
         conn.close()
+
+# =========================
+# SPRINT TRACKER
+# =========================
+
+def _json_load(v, default):
+    if v is None:
+        return default
+    if isinstance(v, (list, dict)):
+        return v
+    try:
+        return json.loads(v)
+    except Exception:
+        return default
+
+def _fetch_sprint_tracker_tree():
+    conn, cursor = get_db_connection(dictionary=True)
+    if not conn:
+        return []
+    try:
+        cursor.execute("""
+            SELECT id, name, sprint_goal, goal_edited, divider_index, sort_order
+            FROM sprint_tracker_sprints ORDER BY sort_order ASC, id ASC
+        """)
+        sprints = cursor.fetchall() or []
+
+        cursor.execute("""
+            SELECT id, sprint_id, theme_key, epic_name, sentence, bullets,
+                   lb_override, notes, notes_updated_by, notes_updated_at, sort_order
+            FROM sprint_tracker_themes ORDER BY sort_order ASC, id ASC
+        """)
+        themes = cursor.fetchall() or []
+
+        cursor.execute("""
+            SELECT id, theme_id, ticket_key, summary, status, customers, lb,
+                   description_bullets, last_synced_at, sort_order
+            FROM sprint_tracker_tickets ORDER BY sort_order ASC, id ASC
+        """)
+        tickets = cursor.fetchall() or []
+
+        tickets_by_theme = {}
+        for t in tickets:
+            tickets_by_theme.setdefault(t["theme_id"], []).append({
+                "id": t["id"],
+                "ticket_key": t["ticket_key"],
+                "summary": t["summary"] or "",
+                "status": t["status"] or "Open",
+                "customers": _json_load(t["customers"], []),
+                "lb": bool(t["lb"]),
+                "description_bullets": _json_load(t["description_bullets"], []),
+                "last_synced_at": t["last_synced_at"].isoformat() if t["last_synced_at"] else None,
+                "sort_order": t["sort_order"],
+            })
+
+        themes_by_sprint = {}
+        for th in themes:
+            themes_by_sprint.setdefault(th["sprint_id"], []).append({
+                "id": th["id"],
+                "theme_key": th["theme_key"],
+                "epic_name": th["epic_name"] or "",
+                "sentence": th["sentence"] or "",
+                "bullets": _json_load(th["bullets"], []),
+                "lb_override": (None if th["lb_override"] is None else bool(th["lb_override"])),
+                "notes": th["notes"] or "",
+                "notes_updated_by": th.get("notes_updated_by") or "",
+                "notes_updated_at": th["notes_updated_at"].isoformat() if th.get("notes_updated_at") else None,
+                "sort_order": th["sort_order"],
+                "tickets": tickets_by_theme.get(th["id"], []),
+            })
+
+        result = []
+        for s in sprints:
+            result.append({
+                "id": s["id"],
+                "name": s["name"],
+                "sprint_goal": s["sprint_goal"] or "",
+                "goal_edited": bool(s["goal_edited"]),
+                "divider_index": s["divider_index"] or 0,
+                "sort_order": s["sort_order"] or 0,
+                "themes": themes_by_sprint.get(s["id"], []),
+            })
+        return result
+    finally:
+        conn.close()
+
+
+@app.route("/sprint_tracker")
+@login_required
+@page_permission_required("sprint_tracker")
+def sprint_tracker_page():
+    return render_template("sprint_tracker.html", project=PROJECT_KEY)
+
+
+@app.route("/api/sprint_tracker/data", methods=["GET"])
+@login_required
+def sprint_tracker_data():
+    return jsonify({"sprints": _fetch_sprint_tracker_tree()})
+
+
+# ---- Sprints CRUD ----
+@app.route("/api/sprint_tracker/sprints", methods=["POST"])
+@login_required
+def sprint_tracker_create_sprint():
+    data = request.json or {}
+    name = (data.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "Name required"}), 400
+    conn, cursor = get_db_connection()
+    if not conn:
+        return jsonify({"error": "Database error"}), 500
+    try:
+        cursor.execute("SELECT COALESCE(MAX(sort_order), -1) + 1 FROM sprint_tracker_sprints")
+        next_order = cursor.fetchone()[0] or 0
+        cursor.execute(
+            """INSERT INTO sprint_tracker_sprints (name, sprint_goal, goal_edited, divider_index, sort_order)
+               VALUES (%s, %s, 0, 0, %s)""",
+            (name, data.get("sprint_goal", ""), next_order),
+        )
+        conn.commit()
+        return jsonify({"id": cursor.lastrowid, "success": True})
+    except Error as e:
+        return jsonify({"error": str(e)}), 400
+    finally:
+        conn.close()
+
+
+@app.route("/api/sprint_tracker/sprints/<int:sprint_id>", methods=["PUT", "DELETE"])
+@login_required
+def sprint_tracker_sprint_detail(sprint_id):
+    conn, cursor = get_db_connection()
+    if not conn:
+        return jsonify({"error": "Database error"}), 500
+    try:
+        if request.method == "DELETE":
+            cursor.execute("DELETE FROM sprint_tracker_sprints WHERE id = %s", (sprint_id,))
+            conn.commit()
+            return jsonify({"success": True})
+
+        data = request.json or {}
+        fields = []
+        values = []
+        for col in ("name", "sprint_goal"):
+            if col in data:
+                fields.append(f"{col} = %s")
+                values.append(data[col])
+        if "goal_edited" in data:
+            fields.append("goal_edited = %s")
+            values.append(1 if data["goal_edited"] else 0)
+        if "divider_index" in data:
+            fields.append("divider_index = %s")
+            values.append(int(data["divider_index"]))
+        if "sort_order" in data:
+            fields.append("sort_order = %s")
+            values.append(int(data["sort_order"]))
+        if not fields:
+            return jsonify({"success": True})
+        values.append(sprint_id)
+        cursor.execute(f"UPDATE sprint_tracker_sprints SET {', '.join(fields)} WHERE id = %s", tuple(values))
+        conn.commit()
+        return jsonify({"success": True})
+    except Error as e:
+        return jsonify({"error": str(e)}), 400
+    finally:
+        conn.close()
+
+
+# ---- Themes CRUD ----
+@app.route("/api/sprint_tracker/themes", methods=["POST"])
+@login_required
+def sprint_tracker_create_theme():
+    data = request.json or {}
+    sprint_id = data.get("sprint_id")
+    theme_key = (data.get("theme_key") or "").strip()
+    if not sprint_id or not theme_key:
+        return jsonify({"error": "sprint_id and theme_key required"}), 400
+    conn, cursor = get_db_connection()
+    if not conn:
+        return jsonify({"error": "Database error"}), 500
+    try:
+        cursor.execute(
+            "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM sprint_tracker_themes WHERE sprint_id = %s",
+            (sprint_id,),
+        )
+        next_order = cursor.fetchone()[0] or 0
+        cursor.execute(
+            """INSERT INTO sprint_tracker_themes
+               (sprint_id, theme_key, epic_name, sentence, bullets, notes, sort_order)
+               VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+            (
+                int(sprint_id),
+                theme_key,
+                data.get("epic_name", ""),
+                data.get("sentence", ""),
+                json.dumps(data.get("bullets", [])),
+                data.get("notes", ""),
+                next_order,
+            ),
+        )
+        conn.commit()
+        return jsonify({"id": cursor.lastrowid, "success": True})
+    except Error as e:
+        return jsonify({"error": str(e)}), 400
+    finally:
+        conn.close()
+
+
+@app.route("/api/sprint_tracker/themes/<int:theme_id>", methods=["PUT", "DELETE"])
+@login_required
+def sprint_tracker_theme_detail(theme_id):
+    conn, cursor = get_db_connection()
+    if not conn:
+        return jsonify({"error": "Database error"}), 500
+    try:
+        if request.method == "DELETE":
+            cursor.execute("DELETE FROM sprint_tracker_themes WHERE id = %s", (theme_id,))
+            conn.commit()
+            return jsonify({"success": True})
+
+        data = request.json or {}
+        fields = []
+        values = []
+        for col in ("theme_key", "epic_name", "sentence", "notes"):
+            if col in data:
+                fields.append(f"{col} = %s")
+                values.append(data[col])
+        notes_updated = False
+        if "bullets" in data:
+            fields.append("bullets = %s")
+            values.append(json.dumps(data["bullets"] or []))
+        if "lb_override" in data:
+            lbv = data["lb_override"]
+            fields.append("lb_override = %s")
+            values.append(None if lbv is None else (1 if lbv else 0))
+        if "notes" in data:
+            notes_updated = True
+            note_text = str(data.get("notes") or "").strip()
+            if note_text:
+                fields.append("notes_updated_by = %s")
+                values.append((current_user.name or current_user.email or "Unknown").strip())
+                fields.append("notes_updated_at = %s")
+                values.append(datetime.utcnow())
+            else:
+                fields.append("notes_updated_by = NULL")
+                fields.append("notes_updated_at = NULL")
+        if "sort_order" in data:
+            fields.append("sort_order = %s")
+            values.append(int(data["sort_order"]))
+        if not fields:
+            return jsonify({"success": True})
+        values.append(theme_id)
+        cursor.execute(f"UPDATE sprint_tracker_themes SET {', '.join(fields)} WHERE id = %s", tuple(values))
+        conn.commit()
+        response = {"success": True}
+        if notes_updated:
+            note_text = str(data.get("notes") or "").strip()
+            if note_text:
+                response["notes_updated_by"] = (current_user.name or current_user.email or "Unknown").strip()
+                response["notes_updated_at"] = datetime.utcnow().isoformat()
+            else:
+                response["notes_updated_by"] = ""
+                response["notes_updated_at"] = None
+        return jsonify(response)
+    except Error as e:
+        return jsonify({"error": str(e)}), 400
+    finally:
+        conn.close()
+
+
+# ---- Tickets CRUD ----
+@app.route("/api/sprint_tracker/tickets", methods=["POST"])
+@login_required
+def sprint_tracker_create_ticket():
+    data = request.json or {}
+    theme_id = data.get("theme_id")
+    ticket_key = (data.get("ticket_key") or "").strip()
+    if not theme_id or not ticket_key:
+        return jsonify({"error": "theme_id and ticket_key required"}), 400
+    conn, cursor = get_db_connection()
+    if not conn:
+        return jsonify({"error": "Database error"}), 500
+    try:
+        cursor.execute(
+            "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM sprint_tracker_tickets WHERE theme_id = %s",
+            (theme_id,),
+        )
+        next_order = cursor.fetchone()[0] or 0
+        cursor.execute(
+            """INSERT INTO sprint_tracker_tickets
+               (theme_id, ticket_key, summary, status, customers, lb, sort_order)
+               VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+            (
+                int(theme_id),
+                ticket_key,
+                data.get("summary", ""),
+                data.get("status", "Open"),
+                json.dumps(data.get("customers", [])),
+                1 if data.get("lb") else 0,
+                next_order,
+            ),
+        )
+        conn.commit()
+        return jsonify({"id": cursor.lastrowid, "success": True})
+    except Error as e:
+        return jsonify({"error": str(e)}), 400
+    finally:
+        conn.close()
+
+
+@app.route("/api/sprint_tracker/tickets/<int:ticket_id>", methods=["PUT", "DELETE"])
+@login_required
+def sprint_tracker_ticket_detail(ticket_id):
+    conn, cursor = get_db_connection()
+    if not conn:
+        return jsonify({"error": "Database error"}), 500
+    try:
+        if request.method == "DELETE":
+            cursor.execute("DELETE FROM sprint_tracker_tickets WHERE id = %s", (ticket_id,))
+            conn.commit()
+            return jsonify({"success": True})
+
+        data = request.json or {}
+        fields = []
+        values = []
+        for col in ("ticket_key", "summary", "status"):
+            if col in data:
+                fields.append(f"{col} = %s")
+                values.append(data[col])
+        if "customers" in data:
+            fields.append("customers = %s")
+            values.append(json.dumps(data["customers"] or []))
+        if "description_bullets" in data:
+            fields.append("description_bullets = %s")
+            values.append(json.dumps(data["description_bullets"] or []))
+        if "lb" in data:
+            fields.append("lb = %s")
+            values.append(1 if data["lb"] else 0)
+        if "sort_order" in data:
+            fields.append("sort_order = %s")
+            values.append(int(data["sort_order"]))
+        if not fields:
+            return jsonify({"success": True})
+        values.append(ticket_id)
+        cursor.execute(f"UPDATE sprint_tracker_tickets SET {', '.join(fields)} WHERE id = %s", tuple(values))
+        conn.commit()
+        return jsonify({"success": True})
+    except Error as e:
+        return jsonify({"error": str(e)}), 400
+    finally:
+        conn.close()
+
+
+# ---- Reorder themes + divider within a sprint ----
+@app.route("/api/sprint_tracker/sprints/<int:sprint_id>/reorder", methods=["POST"])
+@login_required
+def sprint_tracker_reorder(sprint_id):
+    data = request.json or {}
+    theme_ids = data.get("theme_ids") or []
+    divider_index = int(data.get("divider_index", len(theme_ids)))
+    conn, cursor = get_db_connection()
+    if not conn:
+        return jsonify({"error": "Database error"}), 500
+    try:
+        for idx, tid in enumerate(theme_ids):
+            cursor.execute(
+                "UPDATE sprint_tracker_themes SET sort_order = %s WHERE id = %s AND sprint_id = %s",
+                (idx, int(tid), sprint_id),
+            )
+        cursor.execute(
+            "UPDATE sprint_tracker_sprints SET divider_index = %s WHERE id = %s",
+            (divider_index, sprint_id),
+        )
+        conn.commit()
+        return jsonify({"success": True})
+    except Error as e:
+        return jsonify({"error": str(e)}), 400
+    finally:
+        conn.close()
+
+
+# ---- Jira + Claude sync ----
+def _adf_to_text(node):
+    """Flatten Atlassian Document Format to plain text."""
+    if node is None:
+        return ""
+    if isinstance(node, str):
+        return node
+    if isinstance(node, list):
+        return "".join(_adf_to_text(n) for n in node)
+    if isinstance(node, dict):
+        ntype = node.get("type")
+        if ntype == "text":
+            return node.get("text", "")
+        if ntype == "hardBreak":
+            return "\n"
+        content = node.get("content") or []
+        inner = _adf_to_text(content)
+        if ntype in ("paragraph", "heading", "listItem"):
+            return inner + "\n"
+        if ntype in ("bulletList", "orderedList"):
+            return inner
+        return inner
+    return ""
+
+
+def _extract_jira_customers(cust_val):
+    """Normalize Jira Customer field (customfield_10077) into a string list."""
+    if not cust_val:
+        return []
+    values = []
+    if isinstance(cust_val, list):
+        for item in cust_val:
+            if isinstance(item, dict):
+                raw = item.get("value") or item.get("name") or item.get("displayName")
+                if raw:
+                    values.append(str(raw).strip())
+            elif isinstance(item, str):
+                s = item.strip()
+                if s:
+                    values.append(s)
+    elif isinstance(cust_val, dict):
+        raw = cust_val.get("value") or cust_val.get("name") or cust_val.get("displayName")
+        if raw:
+            values.append(str(raw).strip())
+    elif isinstance(cust_val, str):
+        s = cust_val.strip()
+        if s:
+            values.append(s)
+
+    seen = set()
+    result = []
+    for c in values:
+        if c and c not in seen:
+            seen.add(c)
+            result.append(c)
+    return result
+
+
+NON_CUSTOMER_LABELS = {
+    "launch_blocker", "reports-focusteam", "gl-dependent", "ft-req-p0", "fast_follow",
+    "prevailing", "notifications", "quickwins", "payroll", "releasetarget", "canada",
+    "vacation-pay", "console-ui", "off-cycle", "termination", "reporting",
+    "payopsoptimization", "ft-support-p0", "bug_0401",
+}
+
+LABEL_TO_CUSTOMER = {
+    "thestategroup": "The State Group",
+    "bryanconstruction": "Bryan Construction",
+    "stratussystems": "Stratus Systems",
+    "miinc": "MIINC",
+    "precisiongroup": "Precision Group",
+    "wiredhq": "WiredHQ",
+    "pro1electric": "Pro 1 Electric",
+    "qualitywallsandceilings": "Quality Walls & Ceilings",
+    "a-core-concrete": "A-Core Concrete",
+    "bondedlightning": "Bonded Lightning",
+    "yard1": "Yard 1",
+    "wagner": "Wagner Roofing",
+    "sievert": "Sievert",
+    "jmconstruction": "JM Construction",
+    "directtrafficcontrol": "Direct Traffic Control",
+    "evanscontractinggroupllc": "Evans Contracting",
+    "hdconstruction": "HD Construction",
+    "evco": "EVCO",
+    "k2construction": "K2 Construction",
+    "m2roofing": "M2 Roofing",
+    "lynco": "Lynco",
+    "galindoboyd": "Galindo Boyd",
+}
+
+
+def _normalize_label_key(label):
+    return re.sub(r"[^a-z0-9_-]+", "", str(label or "").strip().lower())
+
+
+def _titlecase_label(label):
+    raw = re.sub(r"[_-]+", " ", str(label or "").strip())
+    raw = re.sub(r"\s+", " ", raw).strip()
+    return " ".join(part.capitalize() for part in raw.split(" ")) if raw else ""
+
+
+def _customers_from_labels(labels):
+    out = []
+    for label in (labels or []):
+        original = str(label or "").strip()
+        if not original:
+            continue
+        normalized = _normalize_label_key(original)
+        if not normalized or normalized in NON_CUSTOMER_LABELS or normalized == "launch_blocker":
+            continue
+        mapped = LABEL_TO_CUSTOMER.get(normalized)
+        if mapped:
+            out.append(mapped)
+        else:
+            guessed = _titlecase_label(original)
+            if guessed:
+                out.append(guessed)
+    seen = set()
+    unique = []
+    for c in out:
+        if c not in seen:
+            seen.add(c)
+            unique.append(c)
+    return unique
+
+
+def _merge_customers(field_customers, label_customers):
+    seen = set()
+    merged = []
+    for c in (field_customers or []) + (label_customers or []):
+        cc = str(c or "").strip()
+        if cc and cc not in seen:
+            seen.add(cc)
+            merged.append(cc)
+    return merged
+
+
+def _get_app_config_value(key):
+    conn, cursor = get_db_connection()
+    if not conn:
+        return None
+    try:
+        cursor.execute("SELECT config_value FROM app_config WHERE config_key = %s", (key,))
+        row = cursor.fetchone()
+        return row[0] if row else None
+    finally:
+        conn.close()
+
+
+def _claude_rewrite_description(description_text, anthropic_api_key, model="claude-sonnet-4-20250514"):
+    """Rewrite a Jira description into max 3 concise bullets using Claude."""
+    if not description_text or not anthropic_api_key:
+        return []
+    trimmed = description_text.strip()
+    if len(trimmed) > 8000:
+        trimmed = trimmed[:8000]
+    prompt = (
+        "Rewrite the following Jira ticket description into at most 3 concise, action-oriented "
+        "bullet points that capture what's being built and why. Return ONLY a valid JSON object "
+        'of the form {"bullets": ["...", "..."]}. No markdown, no prose.\n\n'
+        f"Description:\n{trimmed}"
+    )
+    try:
+        res = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "Content-Type": "application/json",
+                "x-api-key": anthropic_api_key,
+                "anthropic-version": "2023-06-01",
+            },
+            json={
+                "model": model,
+                "max_tokens": 600,
+                "messages": [{"role": "user", "content": prompt}],
+            },
+            timeout=45,
+        )
+        if not res.ok:
+            return []
+        data = res.json()
+        text = "".join(b.get("text", "") for b in (data.get("content") or []) if b.get("type") == "text")
+        match = re.search(r"\{[\s\S]*\}", text)
+        if not match:
+            return []
+        parsed = json.loads(match.group(0))
+        bullets = parsed.get("bullets") or []
+        return [str(b).strip() for b in bullets if str(b).strip()][:3]
+    except Exception as e:
+        print(f"Claude rewrite error: {e}")
+        return []
+
+
+@app.route("/api/sprint_tracker/sprints/<int:sprint_id>/sync", methods=["POST"])
+@login_required
+def sprint_tracker_sync(sprint_id):
+    payload = request.json or {}
+    anthropic_key = (payload.get("anthropic_api_key") or "").strip() or _get_app_config_value("anthropic_api_key")
+    rewrite_descriptions = bool(payload.get("rewrite_descriptions", True))
+
+    conn, cursor = get_db_connection(dictionary=True)
+    if not conn:
+        return jsonify({"error": "Database error"}), 500
+    try:
+        cursor.execute(
+            """SELECT t.id, t.ticket_key
+               FROM sprint_tracker_tickets t
+               JOIN sprint_tracker_themes th ON th.id = t.theme_id
+               WHERE th.sprint_id = %s""",
+            (sprint_id,),
+        )
+        rows = cursor.fetchall() or []
+    finally:
+        conn.close()
+
+    if not rows:
+        return jsonify({"synced": 0, "results": []})
+
+    jira_headers = dict(HEADERS)
+    if "Authorization" not in jira_headers:
+        return jsonify({"error": "Jira credentials are not configured. Please set them in Settings."}), 400
+    jira_domain = str(JIRA_DOMAIN)
+
+    results = []
+    status_map = {}
+    now_ts = datetime.utcnow()
+
+    conn, cursor = get_db_connection()
+    if not conn:
+        return jsonify({"error": "Database error"}), 500
+    try:
+        for row in rows:
+            tid = row["id"]
+            key = row["ticket_key"]
+            try:
+                r = requests.get(
+                    f"{jira_domain}/rest/api/3/issue/{key}",
+                    headers=jira_headers,
+                    params={"fields": "status,description,summary,customfield_10077"},
+                    timeout=30,
+                )
+                if not r.ok:
+                    results.append({"key": key, "ok": False, "error": f"Jira {r.status_code}"})
+                    continue
+                issue = r.json()
+                fields = issue.get("fields") or {}
+                status_name = ((fields.get("status") or {}).get("name")) or ""
+                summary = fields.get("summary") or ""
+                desc_text = _adf_to_text(fields.get("description"))
+                customers = _extract_jira_customers(fields.get("customfield_10077"))
+
+                bullets = []
+                if rewrite_descriptions and anthropic_key and desc_text.strip():
+                    bullets = _claude_rewrite_description(desc_text, anthropic_key)
+
+                updates = ["status = %s", "summary = %s", "customers = %s", "last_synced_at = %s"]
+                vals = [status_name or "Open", summary, json.dumps(customers), now_ts]
+                if bullets:
+                    updates.append("description_bullets = %s")
+                    vals.append(json.dumps(bullets))
+                vals.append(tid)
+                cursor.execute(
+                    f"UPDATE sprint_tracker_tickets SET {', '.join(updates)} WHERE id = %s",
+                    tuple(vals),
+                )
+                status_map[key] = status_name
+                results.append({
+                    "key": key,
+                    "ok": True,
+                    "status": status_name,
+                    "customers": customers,
+                    "description_bullets": bullets,
+                })
+            except Exception as e:
+                results.append({"key": key, "ok": False, "error": str(e)})
+        conn.commit()
+    finally:
+        conn.close()
+
+    return jsonify({
+        "synced": sum(1 for r in results if r.get("ok")),
+        "total": len(results),
+        "results": results,
+        "status_map": status_map,
+    })
+
+
+@app.route("/api/sprint_tracker/tickets/<int:ticket_id>/rewrite", methods=["POST"])
+@login_required
+def sprint_tracker_ticket_rewrite(ticket_id):
+    payload = request.json or {}
+    anthropic_key = (payload.get("anthropic_api_key") or "").strip() or _get_app_config_value("anthropic_api_key")
+    if not anthropic_key:
+        return jsonify({"error": "Anthropic API key missing. Save it in Settings (key: anthropic_api_key)."}), 400
+
+    conn, cursor = get_db_connection(dictionary=True)
+    if not conn:
+        return jsonify({"error": "Database error"}), 500
+    try:
+        cursor.execute("SELECT id, ticket_key FROM sprint_tracker_tickets WHERE id = %s", (ticket_id,))
+        row = cursor.fetchone()
+    finally:
+        conn.close()
+    if not row:
+        return jsonify({"error": "Ticket not found"}), 404
+
+    jira_headers = dict(HEADERS)
+    if "Authorization" not in jira_headers:
+        return jsonify({"error": "Jira credentials missing"}), 400
+    jira_domain = str(JIRA_DOMAIN)
+
+    try:
+        r = requests.get(
+            f"{jira_domain}/rest/api/3/issue/{row['ticket_key']}",
+            headers=jira_headers,
+            params={"fields": "description,summary,status,customfield_10077"},
+            timeout=30,
+        )
+        if not r.ok:
+            return jsonify({"error": f"Jira {r.status_code}"}), 400
+        issue = r.json()
+        fields = issue.get("fields") or {}
+        desc_text = _adf_to_text(fields.get("description"))
+        customers = _extract_jira_customers(fields.get("customfield_10077"))
+        bullets = _claude_rewrite_description(desc_text, anthropic_key) if desc_text.strip() else []
+
+        conn, cursor = get_db_connection()
+        try:
+            cursor.execute(
+                "UPDATE sprint_tracker_tickets SET description_bullets = %s, customers = %s, last_synced_at = %s WHERE id = %s",
+                (json.dumps(bullets), json.dumps(customers), datetime.utcnow(), ticket_id),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        return jsonify({"success": True, "description_bullets": bullets})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/sprint_tracker/themes/generate_from_tickets", methods=["POST"])
+@login_required
+def sprint_tracker_generate_theme_from_tickets():
+    payload = request.json or {}
+    ticket_keys = payload.get("ticket_keys") or []
+    anthropic_key = (payload.get("anthropic_api_key") or "").strip() or _get_app_config_value("anthropic_api_key")
+    model = payload.get("model") or "claude-sonnet-4-20250514"
+
+    if not isinstance(ticket_keys, list) or not ticket_keys:
+        return jsonify({"error": "ticket_keys is required"}), 400
+
+    normalized_keys = []
+    seen = set()
+    for k in ticket_keys:
+        kk = str(k).strip().upper()
+        if kk and kk not in seen:
+            seen.add(kk)
+            normalized_keys.append(kk)
+    if not normalized_keys:
+        return jsonify({"error": "No valid ticket keys"}), 400
+
+    if not anthropic_key:
+        return jsonify({"error": "Anthropic API key missing. Save it in Settings (key: anthropic_api_key)."}), 400
+
+    jira_headers = dict(HEADERS)
+    if "Authorization" not in jira_headers:
+        return jsonify({"error": "Jira credentials are not configured. Please set them in Settings."}), 400
+    jira_domain = str(JIRA_DOMAIN)
+
+    fetched_tickets = []
+    for key in normalized_keys:
+        try:
+            r = requests.get(
+                f"{jira_domain}/rest/api/3/issue/{key}",
+                headers=jira_headers,
+                params={"fields": "summary,status,description,customfield_10077"},
+                timeout=30,
+            )
+            if not r.ok:
+                fetched_tickets.append({
+                    "ticket_key": key,
+                    "summary": "",
+                    "status": "Open",
+                    "description_text": "",
+                    "error": f"Jira {r.status_code}",
+                })
+                continue
+            issue = r.json()
+            fields = issue.get("fields") or {}
+            fetched_tickets.append({
+                "ticket_key": key,
+                "summary": fields.get("summary") or "",
+                "status": ((fields.get("status") or {}).get("name")) or "Open",
+                "description_text": _adf_to_text(fields.get("description")).strip(),
+                "customers": _extract_jira_customers(fields.get("customfield_10077")),
+            })
+        except Exception as e:
+            fetched_tickets.append({
+                "ticket_key": key,
+                "summary": "",
+                "status": "Open",
+                "description_text": "",
+                "customers": [],
+                "error": str(e),
+            })
+
+    llm_input = []
+    for t in fetched_tickets:
+        llm_input.append({
+            "key": t["ticket_key"],
+            "summary": t.get("summary") or "",
+            "status": t.get("status") or "Open",
+            "description": (t.get("description_text") or "")[:2000],
+        })
+
+    prompt = (
+        "You are generating a sprint theme from Jira tickets.\n"
+        "Given ticket summaries and descriptions, infer one coherent theme.\n"
+        "Return ONLY valid JSON with this exact shape:\n"
+        "{\n"
+        "  \"theme_key\": \"short-kebab-case-key\",\n"
+        "  \"epic_name\": \"Readable theme title\",\n"
+        "  \"sentence\": \"One line 'What we are building'\",\n"
+        "  \"bullets\": [\"bullet 1\", \"bullet 2\", \"bullet 3\"]\n"
+        "}\n"
+        "Rules:\n"
+        "- bullets max 3\n"
+        "- concise, action-oriented\n"
+        "- do not include markdown\n\n"
+        f"Tickets:\n{json.dumps(llm_input, ensure_ascii=False)}"
+    )
+
+    suggestion = {
+        "theme_key": "generated-theme",
+        "epic_name": "Generated Theme",
+        "sentence": "Theme generated from selected tickets",
+        "bullets": [],
+    }
+    try:
+        resp = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "Content-Type": "application/json",
+                "x-api-key": anthropic_key,
+                "anthropic-version": "2023-06-01",
+            },
+            json={
+                "model": model,
+                "max_tokens": 700,
+                "messages": [{"role": "user", "content": prompt}],
+            },
+            timeout=60,
+        )
+        if resp.ok:
+            data = resp.json()
+            text = "".join(b.get("text", "") for b in (data.get("content") or []) if b.get("type") == "text")
+            m = re.search(r"\{[\s\S]*\}", text)
+            if m:
+                parsed = json.loads(m.group(0))
+                suggestion = {
+                    "theme_key": str(parsed.get("theme_key") or suggestion["theme_key"]).strip(),
+                    "epic_name": str(parsed.get("epic_name") or suggestion["epic_name"]).strip(),
+                    "sentence": str(parsed.get("sentence") or suggestion["sentence"]).strip(),
+                    "bullets": [str(b).strip() for b in (parsed.get("bullets") or []) if str(b).strip()][:3],
+                }
+    except Exception as e:
+        print(f"Theme generation error: {e}")
+
+    tickets_payload = [{
+        "ticket_key": t["ticket_key"],
+        "summary": t.get("summary") or "",
+        "status": t.get("status") or "Open",
+        "customers": t.get("customers") or [],
+        "lb": False,
+    } for t in fetched_tickets]
+
+    return jsonify({
+        "success": True,
+        "suggestion": suggestion,
+        "tickets": tickets_payload,
+        "fetched": len(tickets_payload),
+    })
+
+
+def _fetch_jira_issues_from_jql(jql_query):
+    jira_headers = dict(HEADERS)
+    if "Authorization" not in jira_headers:
+        raise ValueError("Jira credentials are not configured. Please set them in Settings.")
+    jira_domain = str(JIRA_DOMAIN)
+    all_issues = []
+    start_at = 0
+    page_size = 100
+    while True:
+        params = {
+            "jql": jql_query,
+            "startAt": start_at,
+            "maxResults": page_size,
+            "fields": "summary,status,description,labels,customfield_10077,customfield_10014,issuetype,parent",
+        }
+        resp = requests.get(
+            f"{jira_domain}/rest/api/3/search/jql",
+            headers=jira_headers,
+            params=params,
+            timeout=45,
+        )
+        # Compatibility fallback for older Jira APIs/workspaces
+        if resp.status_code in (404, 405):
+            resp = requests.get(
+                f"{jira_domain}/rest/api/3/search",
+                headers=jira_headers,
+                params=params,
+                timeout=45,
+            )
+        if not resp.ok:
+            raise ValueError(f"Jira search failed: {resp.status_code} {resp.text[:180]}")
+        data = resp.json()
+        issues = data.get("issues") or []
+        all_issues.extend(issues)
+        total = data.get("total", len(all_issues))
+        start_at += len(issues)
+        if not issues or start_at >= total:
+            break
+    return all_issues
+
+
+def _resolve_epic_summary(issue, jira_domain, jira_headers, epic_cache):
+    fields = issue.get("fields") or {}
+    issue_type = ((fields.get("issuetype") or {}).get("name") or "").strip().lower()
+    if issue_type == "epic":
+        return fields.get("summary") or issue.get("key") or "_no_epic"
+
+    epic_key = fields.get("customfield_10014")
+    if not epic_key and isinstance(fields.get("parent"), dict):
+        parent = fields.get("parent") or {}
+        p_fields = parent.get("fields") or {}
+        p_type = ((p_fields.get("issuetype") or {}).get("name") or "").strip().lower()
+        if p_type == "epic":
+            return p_fields.get("summary") or parent.get("key") or "_no_epic"
+        epic_key = parent.get("key")
+
+    if not epic_key:
+        return "_no_epic"
+    epic_key = str(epic_key).strip()
+    if not epic_key:
+        return "_no_epic"
+    if epic_key in epic_cache:
+        return epic_cache[epic_key]
+    try:
+        r = requests.get(
+            f"{jira_domain}/rest/api/3/issue/{epic_key}",
+            headers=jira_headers,
+            params={"fields": "summary"},
+            timeout=30,
+        )
+        if r.ok:
+            summary = (r.json().get("fields") or {}).get("summary") or epic_key
+        else:
+            summary = epic_key
+    except Exception:
+        summary = epic_key
+    epic_cache[epic_key] = summary
+    return summary
+
+
+def _generate_themes_with_claude(grouped, anthropic_key):
+    prompt = (
+        "You are preparing sprint tracker themes from Jira ticket groups.\n"
+        "For EACH group return:\n"
+        "- theme_key: short kebab-case\n"
+        "- epic_name: readable title\n"
+        "- sentence: under 12 words, outcome-oriented\n"
+        "- bullets: exactly 2 bullets, each under 12 words (if only 1 ticket, 1 bullet allowed)\n"
+        "Return ONLY valid JSON:\n"
+        "{ \"themes\": [ { \"group_key\": \"...\", \"theme_key\": \"...\", \"epic_name\": \"...\", \"sentence\": \"...\", \"bullets\": [\"...\"] } ] }\n"
+        f"Groups:\n{json.dumps(grouped, ensure_ascii=False)}"
+    )
+    try:
+        resp = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "Content-Type": "application/json",
+                "x-api-key": anthropic_key,
+                "anthropic-version": "2023-06-01",
+            },
+            json={
+                "model": "claude-sonnet-4-20250514",
+                "max_tokens": 1800,
+                "messages": [{"role": "user", "content": prompt}],
+            },
+            timeout=70,
+        )
+        if not resp.ok:
+            return {}
+        data = resp.json()
+        text = "".join(b.get("text", "") for b in (data.get("content") or []) if b.get("type") == "text")
+        m = re.search(r"\{[\s\S]*\}", text)
+        if not m:
+            return {}
+        parsed = json.loads(m.group(0))
+        items = parsed.get("themes") or []
+        by_group = {}
+        for t in items:
+            gk = str(t.get("group_key") or "").strip()
+            if not gk:
+                continue
+            bullets = [str(b).strip() for b in (t.get("bullets") or []) if str(b).strip()]
+            by_group[gk] = {
+                "theme_key": str(t.get("theme_key") or "").strip(),
+                "epic_name": str(t.get("epic_name") or "").strip(),
+                "sentence": str(t.get("sentence") or "").strip(),
+                "bullets": bullets[:3],
+            }
+        return by_group
+    except Exception as e:
+        print(f"Claude theme generation error: {e}")
+        return {}
+
+
+@app.route("/api/sprint_tracker/jql/preview", methods=["POST"])
+@login_required
+def sprint_tracker_jql_preview():
+    payload = request.json or {}
+    jql = (payload.get("jql") or "").strip()
+    if not jql:
+        return jsonify({"error": "JQL is required"}), 400
+    anthropic_key = (payload.get("anthropic_api_key") or "").strip() or _get_app_config_value("anthropic_api_key")
+    if not anthropic_key:
+        return jsonify({"error": "Anthropic API key missing. Save it in settings first."}), 400
+
+    jira_headers = dict(HEADERS)
+    if "Authorization" not in jira_headers:
+        return jsonify({"error": "Jira credentials are not configured. Please set them in Settings."}), 400
+    jira_domain = str(JIRA_DOMAIN)
+
+    try:
+        issues = _fetch_jira_issues_from_jql(jql)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+    if not issues:
+        return jsonify({"error": "No issues found for the provided JQL"}), 400
+
+    epic_cache = {}
+    grouped = {}
+    for issue in issues:
+        fields = issue.get("fields") or {}
+        labels = [str(l).strip() for l in (fields.get("labels") or []) if str(l).strip()]
+        lb = any(str(l).strip().lower() == "launch_blocker" for l in labels)
+        field_customers = _extract_jira_customers(fields.get("customfield_10077"))
+        label_customers = _customers_from_labels(labels)
+        customers = _merge_customers(field_customers, label_customers)
+        epic_summary = _resolve_epic_summary(issue, jira_domain, jira_headers, epic_cache)
+        group_key = epic_summary if epic_summary else "_no_epic"
+        grouped.setdefault(group_key, []).append({
+            "ticket_key": issue.get("key"),
+            "summary": fields.get("summary") or "",
+            "status": ((fields.get("status") or {}).get("name")) or "Open",
+            "labels": labels,
+            "description": _adf_to_text(fields.get("description")).strip()[:2500],
+            "customers": customers,
+            "lb": lb,
+        })
+
+    claude_groups = []
+    for group_key, tickets in grouped.items():
+        claude_groups.append({
+            "group_key": group_key,
+            "epic_summary": group_key,
+            "ticket_count": len(tickets),
+            "tickets": [{"key": t["ticket_key"], "summary": t["summary"], "description": t["description"]} for t in tickets],
+        })
+
+    generated = _generate_themes_with_claude(claude_groups, anthropic_key)
+
+    themes = []
+    for idx, (group_key, tickets) in enumerate(grouped.items()):
+        g = generated.get(group_key) or {}
+        fallback_key = re.sub(r"[^a-z0-9]+", "-", group_key.lower()).strip("-") or f"theme-{idx+1}"
+        fallback_sentence = (group_key if group_key != "_no_epic" else "General improvements").strip()
+        bullet_seed = [t["summary"] for t in tickets if t.get("summary")]
+        fallback_bullets = bullet_seed[:2] if len(tickets) > 1 else bullet_seed[:1]
+        themes.append({
+            "theme_key": g.get("theme_key") or fallback_key,
+            "epic_name": g.get("epic_name") or (group_key if group_key != "_no_epic" else "No Epic"),
+            "sentence": g.get("sentence") or fallback_sentence,
+            "bullets": (g.get("bullets") or fallback_bullets)[:3],
+            "tickets": [{
+                "ticket_key": t["ticket_key"],
+                "summary": t["summary"],
+                "status": t["status"],
+                "customers": t["customers"],
+                "lb": t["lb"],
+            } for t in tickets],
+        })
+
+    top = sorted(themes, key=lambda th: len(th.get("tickets") or []), reverse=True)[:3]
+    top_sentences = [str(t.get("sentence") or "").strip().lower().rstrip(".") for t in top if str(t.get("sentence") or "").strip()]
+    if not top_sentences:
+        inferred_goal = "Ship sprint commitments from selected Jira scope"
+    elif len(top_sentences) == 1:
+        inferred_goal = f"Ship {top_sentences[0]}"
+    elif len(top_sentences) == 2:
+        inferred_goal = f"Ship {top_sentences[0]} and {top_sentences[1]}"
+    else:
+        inferred_goal = f"Ship {top_sentences[0]}, {top_sentences[1]}, and {top_sentences[2]}"
+
+    return jsonify({
+        "success": True,
+        "jql": jql,
+        "ticket_count": len(issues),
+        "theme_count": len(themes),
+        "sprint_goal": inferred_goal,
+        "themes": themes,
+    })
+
+
+@app.route("/api/sprint_tracker/sprints/from_generated", methods=["POST"])
+@login_required
+def sprint_tracker_create_sprint_from_generated():
+    payload = request.json or {}
+    sprint_name = (payload.get("sprint_name") or "").strip()
+    sprint_goal = (payload.get("sprint_goal") or "").strip()
+    themes = payload.get("themes") or []
+    if not sprint_name:
+        return jsonify({"error": "sprint_name is required"}), 400
+    if not isinstance(themes, list) or not themes:
+        return jsonify({"error": "themes is required"}), 400
+
+    conn, cursor = get_db_connection()
+    if not conn:
+        return jsonify({"error": "Database error"}), 500
+    try:
+        cursor.execute("SELECT COALESCE(MAX(sort_order), -1) + 1 FROM sprint_tracker_sprints")
+        sprint_order = cursor.fetchone()[0] or 0
+        cursor.execute(
+            """INSERT INTO sprint_tracker_sprints (name, sprint_goal, goal_edited, divider_index, sort_order)
+               VALUES (%s, %s, 1, %s, %s)""",
+            (sprint_name, sprint_goal, len(themes), sprint_order),
+        )
+        sprint_id = cursor.lastrowid
+
+        used_theme_keys = set()
+        for t_idx, theme in enumerate(themes):
+            raw_key = str(theme.get("theme_key") or "").strip() or f"theme-{t_idx+1}"
+            key = raw_key
+            suffix = 2
+            while key in used_theme_keys:
+                key = f"{raw_key}-{suffix}"
+                suffix += 1
+            used_theme_keys.add(key)
+
+            cursor.execute(
+                """INSERT INTO sprint_tracker_themes
+                   (sprint_id, theme_key, epic_name, sentence, bullets, notes, sort_order)
+                   VALUES (%s, %s, %s, %s, %s, '', %s)""",
+                (
+                    sprint_id,
+                    key,
+                    str(theme.get("epic_name") or "").strip(),
+                    str(theme.get("sentence") or "").strip(),
+                    json.dumps(theme.get("bullets") or []),
+                    t_idx,
+                ),
+            )
+            theme_id = cursor.lastrowid
+            tickets = theme.get("tickets") or []
+            for k_idx, tk in enumerate(tickets):
+                cursor.execute(
+                    """INSERT INTO sprint_tracker_tickets
+                       (theme_id, ticket_key, summary, status, customers, lb, sort_order)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                    (
+                        theme_id,
+                        str(tk.get("ticket_key") or "").strip().upper(),
+                        str(tk.get("summary") or "").strip(),
+                        str(tk.get("status") or "Open").strip(),
+                        json.dumps(tk.get("customers") or []),
+                        1 if tk.get("lb") else 0,
+                        k_idx,
+                    ),
+                )
+        conn.commit()
+        return jsonify({"success": True, "sprint_id": sprint_id})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"error": str(e)}), 400
+    finally:
+        conn.close()
+
 
 if __name__ == "__main__":
     app.run(debug=True)

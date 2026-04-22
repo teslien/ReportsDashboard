@@ -1,0 +1,1164 @@
+{% extends 'base.html' %}
+{% block title %}Sprint Tracker{% endblock %}
+{% block body_class %}st-page{% endblock %}
+{% block main_class %}pt-20 pb-6 px-3 w-full{% endblock %}
+
+{% block extra_head %}
+<style>
+  body.st-page nav > div { max-width: 100% !important; padding-left: 16px !important; padding-right: 16px !important; }
+  body.st-page main { max-width: 100% !important; }
+  .st-shell { background: #f8fafc; color: #1e293b; border-radius: 0; border: 1px solid #e2e8f0; overflow: hidden; }
+  .st-shell * { box-sizing: border-box; }
+  .st-shell .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; position: relative; top: -1px; }
+  .st-shell .chip { display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px; border-radius: 10px; font-size: 11px; font-weight: 500; text-decoration: none; white-space: nowrap; margin: 2px 1px; border: 1px solid rgba(0,0,0,0.08); background: #f1f5f9; color: #334155; }
+  .st-shell .chip:hover { opacity: 0.85; }
+  .st-shell .drag-handle { cursor: grab; user-select: none; color: #cbd5e1; font-size: 14px; padding: 0 4px; }
+  .st-shell .drag-handle:hover { color: #94a3b8; }
+  .st-shell tr.dragging-row { opacity: 0.3; }
+  .st-shell tr.drag-over-top td { border-top: 2px solid #6366f1 !important; }
+  .st-shell tr.drag-over-bottom td { border-bottom: 2px solid #6366f1 !important; }
+  .st-shell .below-divider { opacity: 0.5; }
+  .st-shell .below-divider td { background: #f8fafc !important; }
+  .st-shell .divider-row td { background: #f1f5f9 !important; border-top: 2px dashed #cbd5e1 !important; border-bottom: 2px dashed #cbd5e1 !important; }
+  .st-shell .lb-pill { padding: 2px 9px; border-radius: 10px; font-size: 11px; font-weight: 600; cursor: pointer; border: 1px solid; display: inline-block; transition: all 0.1s; }
+  .st-shell .lb-yes { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+  .st-shell .lb-no { background: #f1f5f9; color: #94a3b8; border-color: #e2e8f0; }
+  .st-shell .customer-tag { background: #eff6ff; color: #1d4ed8; padding: 2px 7px; border-radius: 8px; font-size: 11px; display: inline-block; margin: 1px; border: 1px solid #bfdbfe; }
+  .st-shell [contenteditable] { outline: none; }
+  .st-shell [contenteditable]:focus { background: #fefce8; border-radius: 3px; padding: 1px 3px; }
+  .st-shell .editable-cell { cursor: text; }
+  .st-shell .editable-cell:hover { background: #f0f9ff; border-radius: 3px; }
+  .st-shell .pencil { opacity: 0; font-size: 10px; cursor: pointer; color: #94a3b8; transition: opacity 0.15s; margin-left: 4px; }
+  .st-shell .theme-row:hover .pencil, .st-shell .goal-wrapper:hover .pencil { opacity: 1; }
+  .st-shell .notes-cell { min-width: 150px; font-size: 12px; color: #374151; }
+  .st-shell .comment-card { border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; overflow: hidden; }
+  .st-shell .comment-meta { display: flex; align-items: center; gap: 6px; font-size: 10px; color: #64748b; padding: 6px 8px; border-bottom: 1px solid #e2e8f0; background: #f1f5f9; }
+  .st-shell .comment-avatar { width: 18px; height: 18px; border-radius: 50%; background: #4f46e5; color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; }
+  .st-shell .comment-author { font-weight: 600; color: #334155; }
+  .st-shell .comment-delete { margin-left: auto; border: none; background: transparent; color: #dc2626; font-size: 10px; font-weight: 600; cursor: pointer; padding: 0; }
+  .st-shell .comment-delete:hover { text-decoration: underline; }
+  .st-shell .notes-area { min-height: 54px; padding: 8px; font-size: 12px; color: #334155; cursor: text; background: #fff; }
+  .st-shell .notes-area:focus { background: #fffbeb; }
+  .st-shell .notes-placeholder { color: #94a3b8; font-style: italic; }
+  .st-shell .tab-btn { padding: 9px 18px; font-size: 13px; font-weight: 500; border: none; cursor: pointer; border-bottom: 3px solid transparent; background: transparent; transition: all 0.15s; color: #64748b; }
+  .st-shell .tab-btn.active { border-bottom-color: #6366f1; color: #4f46e5; }
+  .st-shell .tab-btn:not(.active):hover { color: #334155; background: #f1f5f9; }
+  .st-shell .tab-add { padding: 6px 10px; font-size: 12px; color: #64748b; cursor: pointer; border-radius: 6px; }
+  .st-shell .tab-add:hover { background: #e2e8f0; color: #334155; }
+  .st-shell .goal-input { font-weight: 600; font-size: 14px; color: #1e293b; min-width: 300px; display: inline-block; }
+  .st-shell .goal-input:empty:before { content: "Click to set sprint goal…"; color: #94a3b8; font-weight: 400; }
+  .st-shell .summary-bar { font-size: 12px; color: #64748b; }
+  .st-shell .badge-done { background: #dcfce7; color: #166534; padding: 1px 7px; border-radius: 8px; font-size: 11px; font-weight: 600; }
+  .st-shell .badge-lb { background: #fee2e2; color: #991b1b; padding: 1px 7px; border-radius: 8px; font-size: 11px; font-weight: 600; }
+  .st-shell .sync-btn { background: #4f46e5; color: white; border: none; padding: 6px 14px; border-radius: 7px; font-size: 12px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+  .st-shell .sync-btn:hover { background: #4338ca; }
+  .st-shell .sync-btn:disabled { background: #a5b4fc; cursor: not-allowed; }
+  .st-shell .sync-status { font-size: 11px; color: #64748b; margin-left: 8px; }
+  .st-shell .sync-ok { color: #16a34a; }
+  .st-shell .sync-err { color: #dc2626; }
+  .st-shell th { font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.04em; background: #f8fafc; padding: 8px 10px; border-bottom: 1px solid #e2e8f0; text-align: left; position: sticky; top: 0; z-index: 1; }
+  .st-shell td { padding: 9px 10px; border-bottom: 1px solid #f1f5f9; vertical-align: top; font-size: 13px; color: #1e293b; background: #fff; }
+  .st-shell tr:last-child td { border-bottom: none; }
+  .st-shell .legend-toggle { font-size: 12px; color: #6366f1; cursor: pointer; user-select: none; }
+  .st-shell .legend-toggle:hover { text-decoration: underline; }
+  .st-shell .legend-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+  .st-shell .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid #c7d2fe; border-top-color: white; border-radius: 50%; animation: st-spin 0.6s linear infinite; }
+  @keyframes st-spin { to { transform: rotate(360deg); } }
+  .st-shell .api-key-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+  .st-shell .api-key-input { border: 1px solid #e2e8f0; border-radius: 6px; padding: 4px 8px; font-size: 12px; width: 260px; background: #fff; color: #1e293b; }
+  .st-shell .saved-badge { font-size: 11px; color: #94a3b8; margin-left: 6px; }
+  .st-shell .theme-sentence { font-size: 13px; font-weight: 500; color: #1e293b; line-height: 1.4; }
+  .st-shell .bullet-list { list-style: none; padding: 0; margin: 0; }
+  .st-shell .bullet-list li { font-size: 12px; color: #475569; line-height: 1.5; padding-left: 12px; position: relative; margin-bottom: 3px; }
+  .st-shell .bullet-list li:before { content: "•"; position: absolute; left: 0; color: #94a3b8; }
+  .st-shell .row-actions { display: inline-flex; gap: 6px; margin-left: 6px; }
+  .st-shell .row-actions button { background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 12px; }
+  .st-shell .row-actions button:hover { color: #dc2626; }
+  .st-shell .btn-ghost { font-size: 12px; color: #4f46e5; background: #eef2ff; border: 1px solid #c7d2fe; padding: 4px 10px; border-radius: 6px; cursor: pointer; }
+  .st-shell .btn-ghost:hover { background: #e0e7ff; }
+  .st-shell .ticket-bullets { margin-top: 4px; padding-left: 2px; font-size: 11px; color: #475569; }
+  .st-shell .ticket-bullets li { list-style: disc; margin-left: 14px; margin-bottom: 2px; }
+  .st-shell .wrapper { background: #fff; border-radius: 0; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 1px 2px rgba(15,23,42,0.04); }
+  .st-dialog-backdrop { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); display: none; align-items: center; justify-content: center; z-index: 1100; }
+  .st-dialog-backdrop.open { display: flex; }
+  .st-dialog { width: min(560px, calc(100vw - 24px)); background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 12px 40px rgba(15, 23, 42, 0.28); }
+  .st-dialog-header { padding: 14px 16px 10px; border-bottom: 1px solid #f1f5f9; }
+  .st-dialog-title { font-size: 15px; font-weight: 700; color: #0f172a; }
+  .st-dialog-body { padding: 12px 16px; color: #334155; font-size: 13px; }
+  .st-dialog-message { margin-bottom: 10px; color: #475569; }
+  .st-dialog-fields { display: flex; flex-direction: column; gap: 8px; }
+  .st-dialog-field label { display: block; font-size: 12px; color: #475569; margin-bottom: 4px; }
+  .st-dialog-field input, .st-dialog-field textarea { width: 100%; border: 1px solid #dbeafe; background: #f8fafc; color: #0f172a; border-radius: 8px; font-size: 13px; padding: 8px 10px; outline: none; }
+  .st-dialog-field input:focus, .st-dialog-field textarea:focus { border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15); background: #fff; }
+  .st-dialog-actions { padding: 10px 16px 14px; border-top: 1px solid #f1f5f9; display: flex; justify-content: flex-end; gap: 8px; }
+  .st-dialog-btn { border: 1px solid #cbd5e1; background: #fff; color: #334155; border-radius: 8px; font-size: 12px; font-weight: 600; padding: 7px 12px; cursor: pointer; }
+  .st-dialog-btn:hover { background: #f8fafc; }
+  .st-dialog-btn.primary { background: #4f46e5; border-color: #4f46e5; color: #fff; }
+  .st-dialog-btn.primary:hover { background: #4338ca; }
+  .st-dialog-btn.danger { background: #dc2626; border-color: #dc2626; color: #fff; }
+  .st-dialog-btn.danger:hover { background: #b91c1c; }
+  .st-loader-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.35); backdrop-filter: blur(1px); display: none; align-items: center; justify-content: center; z-index: 1200; }
+  .st-loader-overlay.open { display: flex; }
+  .st-loader-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px 16px; display: inline-flex; align-items: center; gap: 10px; color: #334155; font-size: 13px; box-shadow: 0 10px 32px rgba(15,23,42,0.2); }
+  .st-loader-spinner { width: 16px; height: 16px; border: 2px solid #c7d2fe; border-top-color: #4f46e5; border-radius: 50%; animation: st-spin 0.7s linear infinite; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="st-shell">
+  <div id="st-app" class="wrapper"></div>
+</div>
+<div id="st-dialog-backdrop" class="st-dialog-backdrop">
+  <div class="st-dialog" role="dialog" aria-modal="true" aria-labelledby="st-dialog-title">
+    <div class="st-dialog-header">
+      <div id="st-dialog-title" class="st-dialog-title">Dialog</div>
+    </div>
+    <div class="st-dialog-body">
+      <div id="st-dialog-message" class="st-dialog-message"></div>
+      <div id="st-dialog-fields" class="st-dialog-fields"></div>
+    </div>
+    <div class="st-dialog-actions">
+      <button id="st-dialog-cancel" class="st-dialog-btn" type="button">Cancel</button>
+      <button id="st-dialog-confirm" class="st-dialog-btn primary" type="button">Confirm</button>
+    </div>
+  </div>
+</div>
+<div id="st-loader-overlay" class="st-loader-overlay" aria-live="polite" aria-busy="true">
+  <div class="st-loader-card">
+    <span class="st-loader-spinner"></span>
+    <span id="st-loader-text">Loading...</span>
+  </div>
+</div>
+
+<script>
+(function(){
+  // ─── Constants ──────────────────────────────────────────────
+  const JIRA_BASE = (window.JIRA_DOMAIN || "").replace(/\/$/, "") + "/browse/";
+  const STATUS_COLORS = {
+    "Done":"#0891b2","Resolved":"#0891b2","Deployed":"#0891b2",
+    "In Development":"#d97706","In Progress":"#d97706",
+    "Ready for Dev":"#6366f1","Ready for Dev Review":"#8b5cf6",
+    "Ready for Internal Demo":"#0ea5e9","Ready for QA":"#a855f7",
+    "Ready for Design":"#f59e0b","Dev Corrections Needed":"#f97316",
+    "Open":"#94a3b8","On Hold":"#7c3aed"
+  };
+
+  // ─── State ──────────────────────────────────────────────────
+  let sprints = [];        // [{id,name,sprint_goal,goal_edited,divider_index,themes:[...]}]
+  let activeSprintId = null;
+  let anthropicKey = "";
+  let rewriteOnSync = true;
+  let pendingRequests = 0;
+
+  // ─── Helpers ────────────────────────────────────────────────
+  const esc = s => (s == null ? "" : String(s)
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"));
+  const $ = sel => document.querySelector(sel);
+  const activeSprint = () => sprints.find(s => s.id === activeSprintId) || sprints[0];
+  const dialogState = { resolver: null, escHandler: null };
+
+  function closeDialog(payload) {
+    const backdrop = document.getElementById("st-dialog-backdrop");
+    backdrop.classList.remove("open");
+    if (dialogState.escHandler) {
+      document.removeEventListener("keydown", dialogState.escHandler);
+      dialogState.escHandler = null;
+    }
+    if (dialogState.resolver) {
+      dialogState.resolver(payload);
+      dialogState.resolver = null;
+    }
+  }
+
+  function showDialog(options) {
+    const opts = Object.assign({
+      title: "Confirm",
+      message: "",
+      confirmText: "Confirm",
+      cancelText: "Cancel",
+      danger: false,
+      fields: [],
+    }, options || {});
+    const backdrop = document.getElementById("st-dialog-backdrop");
+    const titleEl = document.getElementById("st-dialog-title");
+    const msgEl = document.getElementById("st-dialog-message");
+    const fieldsEl = document.getElementById("st-dialog-fields");
+    const cancelBtn = document.getElementById("st-dialog-cancel");
+    const confirmBtn = document.getElementById("st-dialog-confirm");
+
+    titleEl.textContent = opts.title;
+    msgEl.textContent = opts.message || "";
+    msgEl.style.display = opts.message ? "block" : "none";
+
+    fieldsEl.innerHTML = (opts.fields || []).map((f, i) => `
+      <div class="st-dialog-field">
+        <label for="st-dialog-field-${i}">${esc(f.label || f.name || `Field ${i + 1}`)}</label>
+        ${f.multiline
+          ? `<textarea id="st-dialog-field-${i}" data-name="${esc(f.name || `field_${i}`)}" rows="${f.rows || 3}" placeholder="${esc(f.placeholder || "")}">${esc(f.value || "")}</textarea>`
+          : `<input id="st-dialog-field-${i}" data-name="${esc(f.name || `field_${i}`)}" type="${esc(f.type || "text")}" value="${esc(f.value || "")}" placeholder="${esc(f.placeholder || "")}" />`}
+      </div>
+    `).join("");
+
+    cancelBtn.textContent = opts.cancelText || "Cancel";
+    confirmBtn.textContent = opts.confirmText || "Confirm";
+    confirmBtn.className = `st-dialog-btn ${opts.danger ? "danger" : "primary"}`;
+
+    backdrop.classList.add("open");
+    const firstInput = fieldsEl.querySelector("input, textarea");
+    if (firstInput) firstInput.focus();
+    else confirmBtn.focus();
+
+    return new Promise((resolve) => {
+      dialogState.resolver = resolve;
+
+      cancelBtn.onclick = () => closeDialog({ confirmed: false, values: {} });
+      confirmBtn.onclick = () => {
+        const values = {};
+        fieldsEl.querySelectorAll("[data-name]").forEach((el) => {
+          values[el.dataset.name] = el.value.trim();
+        });
+        closeDialog({ confirmed: true, values });
+      };
+      backdrop.onclick = (e) => {
+        if (e.target === backdrop) closeDialog({ confirmed: false, values: {} });
+      };
+      dialogState.escHandler = (e) => {
+        if (e.key === "Escape") closeDialog({ confirmed: false, values: {} });
+      };
+      document.addEventListener("keydown", dialogState.escHandler);
+    });
+  }
+
+  function setLoader(open, text) {
+    const overlay = document.getElementById("st-loader-overlay");
+    const textEl = document.getElementById("st-loader-text");
+    if (!overlay) return;
+    if (textEl && text) textEl.textContent = text;
+    overlay.classList.toggle("open", !!open);
+  }
+
+  async function api(path, opts={}) {
+    const finalOpts = Object.assign({
+      method: "GET",
+      headers: { "Content-Type": "application/json" }
+    }, opts);
+    const silent = !!finalOpts.silent;
+    const loaderText = finalOpts.loaderText || "Processing request...";
+    delete finalOpts.silent;
+    delete finalOpts.loaderText;
+    if (!silent) {
+      pendingRequests += 1;
+      setLoader(true, loaderText);
+    }
+    try {
+      const res = await fetch(path, finalOpts);
+      if (!res.ok) {
+        let msg = "Request failed";
+        try { const d = await res.json(); msg = d.error || msg; } catch(_) {}
+        throw new Error(msg);
+      }
+      return res.json();
+    } finally {
+      if (!silent) {
+        pendingRequests = Math.max(0, pendingRequests - 1);
+        if (pendingRequests === 0) setLoader(false);
+      }
+    }
+  }
+
+  function statusDot(status) {
+    const col = STATUS_COLORS[status] || STATUS_COLORS["Open"];
+    return `<span class="status-dot" style="background:${col};" title="${esc(status)}"></span>`;
+  }
+
+  function themeLB(theme) {
+    if (theme.lb_override !== null && theme.lb_override !== undefined) return !!theme.lb_override;
+    return (theme.tickets || []).some(t => t.lb);
+  }
+  function themeCustomers(theme) {
+    const set = new Set();
+    (theme.tickets || []).forEach(t => (t.customers || []).forEach(c => set.add(c)));
+    return [...set];
+  }
+
+  function initials(name) {
+    const s = String(name || "").trim();
+    if (!s) return "?";
+    const parts = s.split(/\s+/).filter(Boolean);
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
+
+  function formatWhen(iso) {
+    if (!iso) return "just now";
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "just now";
+    return d.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  }
+
+  // ─── Data load ──────────────────────────────────────────────
+  async function load() {
+    const data = await api("/api/sprint_tracker/data");
+    sprints = data.sprints || [];
+    if (sprints.length && !sprints.find(s => s.id === activeSprintId)) {
+      activeSprintId = sprints[0].id;
+    }
+    render();
+  }
+
+  // ─── Render ─────────────────────────────────────────────────
+  function render() {
+    const app = document.getElementById("st-app");
+    if (!sprints.length) {
+      app.innerHTML = `
+        <div class="px-5 py-8 text-center">
+          <div class="text-lg font-bold text-slate-800 mb-2">Sprint Tracker</div>
+          <div class="text-sm text-slate-500 mb-4">No sprints yet. Create one to get started.</div>
+          <button class="btn-ghost" id="st-add-first">+ New sprint</button>
+        </div>`;
+      document.getElementById("st-add-first").onclick = promptNewSprint;
+      return;
+    }
+
+    app.innerHTML = `
+      <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between flex-wrap gap-2">
+        <div>
+          <h1 class="text-lg font-bold text-slate-800">Sprint Tracker</h1>
+          <p class="text-xs text-slate-400 mt-0.5">Dynamic sprint scope, themes & Jira status</p>
+        </div>
+        <div class="flex items-center gap-3">
+          <span id="st-saved" class="saved-badge"></span>
+          <div class="api-key-row">
+            <label class="text-slate-500 font-medium">Anthropic Key</label>
+            <input id="st-api-key" class="api-key-input" type="password" placeholder="sk-ant-…" />
+            <button id="st-save-key" class="btn-ghost">Save</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center border-b border-slate-100 bg-slate-50">
+        ${sprints.map(s => `
+          <button class="tab-btn ${s.id === activeSprintId ? 'active' : ''}" data-sid="${s.id}">${esc(s.name)}</button>
+        `).join("")}
+        <span class="tab-add" id="st-new-tab" title="New sprint">+ New</span>
+        <span class="tab-add" id="st-new-jql-tab" title="Create sprint from JQL">+ JQL Sprint</span>
+        <span style="flex:1"></span>
+        <button class="tab-add" id="st-delete-sprint" title="Delete this sprint" style="color:#dc2626;">Delete sprint</button>
+      </div>
+
+      <div class="px-5 py-2 border-b border-slate-100 bg-slate-50">
+        <span class="legend-toggle" id="st-legend-toggle">▶ Show status key</span>
+        <div id="st-legend" class="hidden mt-2 flex flex-wrap gap-x-4 gap-y-1 pb-1"></div>
+      </div>
+
+      <div id="st-tab-body"></div>
+    `;
+
+    document.getElementById("st-api-key").value = anthropicKey || "";
+    document.querySelectorAll(".tab-btn").forEach(b => b.onclick = () => { activeSprintId = parseInt(b.dataset.sid, 10); renderTab(); });
+    document.getElementById("st-new-tab").onclick = promptNewSprint;
+    document.getElementById("st-new-jql-tab").onclick = promptNewSprintFromJql;
+    document.getElementById("st-delete-sprint").onclick = onDeleteSprint;
+    document.getElementById("st-save-key").onclick = onSaveAnthropicKey;
+    document.getElementById("st-legend-toggle").onclick = () => {
+      const el = document.getElementById("st-legend");
+      const tog = document.getElementById("st-legend-toggle");
+      if (el.classList.contains("hidden")) { el.classList.remove("hidden"); tog.textContent = "▼ Hide status key"; }
+      else { el.classList.add("hidden"); tog.textContent = "▶ Show status key"; }
+    };
+
+    const legend = document.getElementById("st-legend");
+    const statuses = new Set();
+    sprints.forEach(s => s.themes.forEach(t => t.tickets.forEach(tk => statuses.add(tk.status || "Open"))));
+    legend.innerHTML = [...statuses].sort().map(s => {
+      const col = STATUS_COLORS[s] || STATUS_COLORS["Open"];
+      return `<div class="flex items-center gap-1.5"><span class="legend-dot" style="background:${col};"></span><span style="font-size:11px;color:#475569;">${esc(s)}</span></div>`;
+    }).join("");
+
+    renderTab();
+  }
+
+  function renderTab() {
+    const sprint = activeSprint();
+    if (!sprint) return;
+    const order = sprint.themes.slice().sort((a,b) => a.sort_order - b.sort_order);
+    const divIdx = Math.min(Math.max(sprint.divider_index || 0, 0), order.length);
+    const allTickets = order.flatMap(t => t.tickets);
+    const doneCount = allTickets.filter(t => t.status === "Done" || t.status === "Resolved" || t.status === "Deployed").length;
+    const lbCount = order.filter(t => themeLB(t)).length;
+    const inScope = order.slice(0, divIdx).length;
+
+    // Update tab button highlights
+    document.querySelectorAll(".tab-btn").forEach(b => {
+      b.classList.toggle("active", parseInt(b.dataset.sid,10) === sprint.id);
+    });
+
+    const body = document.getElementById("st-tab-body");
+    body.innerHTML = `
+      <div class="px-5 py-3 border-b border-slate-100 flex items-start gap-3">
+        <span class="text-xl mt-0.5">🎯</span>
+        <div class="goal-wrapper flex items-center gap-1 flex-1">
+          <span class="goal-input" contenteditable="true" data-sprint="${sprint.id}">${esc(sprint.sprint_goal || "")}</span>
+          <span class="pencil" title="Edit goal">✎</span>
+        </div>
+      </div>
+      <div class="px-5 py-2.5 border-b border-slate-100 flex items-center justify-between flex-wrap gap-2">
+        <div class="summary-bar flex items-center gap-3">
+          <span><strong>${inScope}</strong> themes in scope</span>
+          <span>·</span>
+          <span><strong>${allTickets.length}</strong> tickets total</span>
+          ${doneCount ? `<span>·</span><span class="badge-done">${doneCount} done</span>` : ""}
+          ${lbCount ? `<span>·</span><span class="badge-lb">🚨 ${lbCount} launch blocker${lbCount>1?'s':''}</span>` : ""}
+        </div>
+        <div class="flex items-center gap-2">
+          <label style="font-size:11px;color:#475569;display:inline-flex;align-items:center;gap:4px;">
+            <input type="checkbox" id="st-rewrite" ${rewriteOnSync ? "checked":""}/>
+            rewrite descriptions (Claude)
+          </label>
+        </div>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full border-collapse" id="st-table">
+          <thead>
+            <tr>
+              <th style="width:30px;"></th>
+              <th style="width:15%;">Theme</th>
+              <th style="width:26%;">What We're Building</th>
+              <th style="width:24%;">Tickets</th>
+              <th style="width:90px;">Launch Blocker</th>
+              <th style="width:16%;">Customers</th>
+              <th style="width:13%;">Notes</th>
+              <th style="width:60px;"></th>
+            </tr>
+          </thead>
+          <tbody id="st-tbody">${buildRows(sprint, order, divIdx)}</tbody>
+        </table>
+      </div>
+    `;
+
+    // Goal editing
+    const goalEl = body.querySelector(`.goal-input[data-sprint="${sprint.id}"]`);
+    if (goalEl) {
+      goalEl.addEventListener("blur", async () => {
+        const val = goalEl.textContent.trim();
+        sprint.sprint_goal = val;
+        sprint.goal_edited = !!val;
+        try {
+          await api(`/api/sprint_tracker/sprints/${sprint.id}`, {
+            method: "PUT", body: JSON.stringify({ sprint_goal: val, goal_edited: !!val })
+          });
+          markSaved();
+        } catch(e) { flashError(e.message); }
+      });
+    }
+
+    // Notes placeholder behaviour
+    body.querySelectorAll(".notes-area").forEach(el => {
+      if (!el.textContent.trim()) el.classList.add("notes-placeholder");
+      el.addEventListener("focus", () => el.classList.remove("notes-placeholder"));
+      el.addEventListener("blur", () => { if (!el.textContent.trim()) el.classList.add("notes-placeholder"); });
+    });
+
+    // Inline editing hooks
+    body.querySelectorAll("[data-field]").forEach(el => {
+      el.addEventListener("blur", onCellBlur);
+    });
+
+    // LB pill toggle
+    body.querySelectorAll(".lb-pill").forEach(el => {
+      el.addEventListener("click", () => onToggleLB(parseInt(el.dataset.themeid, 10)));
+    });
+
+    // Delete theme buttons
+    body.querySelectorAll(".st-del-theme").forEach(el => {
+      el.addEventListener("click", () => onDeleteTheme(parseInt(el.dataset.themeid, 10)));
+    });
+    body.querySelectorAll(".st-del-note").forEach(el => {
+      el.addEventListener("click", () => onDeleteNote(parseInt(el.dataset.themeid, 10)));
+    });
+
+    // Rewrite ticket buttons
+    body.querySelectorAll(".st-rewrite-ticket").forEach(el => {
+      el.addEventListener("click", () => onRewriteTicket(parseInt(el.dataset.tid, 10)));
+    });
+
+    // Tab actions
+    document.getElementById("st-rewrite").onchange = (e) => { rewriteOnSync = e.target.checked; };
+
+    // Drag-and-drop attach
+    attachDragAndDrop();
+  }
+
+  function buildRows(sprint, order, divIdx) {
+    let html = "";
+    order.forEach((theme, idx) => {
+      if (idx === divIdx) html += dividerRow();
+      html += themeRow(sprint, theme, idx >= divIdx);
+    });
+    if (divIdx >= order.length) html += dividerRow();
+    return html || `<tr><td colspan="8" class="text-center py-6 text-slate-400">No themes yet. Click "+ Theme" to add one.</td></tr>`;
+  }
+
+  function dividerRow() {
+    return `
+      <tr class="divider-row" draggable="true" data-type="divider">
+        <td class="drag-handle text-center">⋮⋮</td>
+        <td colspan="7" class="text-center py-2">
+          <span style="font-size:12px;color:#94a3b8;font-style:italic;">↓ Next Sprint — not in scope (drag items here)</span>
+        </td>
+      </tr>
+    `;
+  }
+
+  function themeRow(sprint, theme, belowDivider) {
+    const lb = themeLB(theme);
+    const customers = themeCustomers(theme);
+    return `
+      <tr class="theme-row${belowDivider ? ' below-divider' : ''}" draggable="true"
+        data-type="theme" data-themeid="${theme.id}">
+        <td class="drag-handle text-center text-slate-300">⋮⋮</td>
+        <td>
+          <div class="editable-cell flex items-start gap-1">
+            <span class="theme-sentence" contenteditable="true"
+              data-themeid="${theme.id}" data-field="sentence">${esc(theme.sentence)}</span>
+            <span class="pencil">✎</span>
+          </div>
+          <div class="text-xs text-slate-400 mt-1 editable-cell">
+            <span contenteditable="true" data-themeid="${theme.id}" data-field="epic_name">${esc(theme.epic_name)}</span>
+          </div>
+        </td>
+        <td>
+          <ul class="bullet-list" data-themeid="${theme.id}" data-field="bullets">
+            ${(theme.bullets || []).map(b => `<li contenteditable="true" class="st-bullet">${esc(b)}</li>`).join("")}
+            <li><span class="btn-ghost" onclick="window.stAddBullet(${theme.id})" style="font-size:10px;padding:2px 6px;">+ bullet</span></li>
+          </ul>
+        </td>
+        <td>
+          <div class="flex flex-wrap">
+            ${(theme.tickets || []).map(t => ticketChip(t)).join("")}
+            <span class="btn-ghost" style="font-size:10px;padding:2px 6px;margin:2px;" onclick="window.stAddTicket(${theme.id})">+ ticket</span>
+          </div>
+          ${renderTicketBullets(theme)}
+        </td>
+        <td>
+          <span class="lb-pill ${lb ? 'lb-yes' : 'lb-no'}" data-themeid="${theme.id}" title="Click to toggle launch blocker">${lb ? '🚨 Yes' : 'No'}</span>
+        </td>
+        <td>
+          <div class="flex flex-wrap gap-0.5">${customers.map(c => `<span class="customer-tag">${esc(c)}</span>`).join("")}</div>
+        </td>
+        <td class="notes-cell">
+          ${(theme.notes || "").trim()
+            ? `<div class="comment-card">
+                <div class="comment-meta">
+                  <span class="comment-avatar">${initials(theme.notes_updated_by || "U")}</span>
+                  <span class="comment-author">${esc(theme.notes_updated_by || "Unknown user")}</span>
+                  <span>•</span>
+                  <span>${esc(formatWhen(theme.notes_updated_at))}</span>
+                  <button class="comment-delete st-del-note" data-themeid="${theme.id}" title="Delete note">Delete note</button>
+                </div>
+                <div contenteditable="true" class="notes-area"
+                  data-themeid="${theme.id}" data-field="notes"
+                  data-placeholder="Add comment...">${esc(theme.notes || "")}</div>
+              </div>`
+            : `<div contenteditable="true" class="notes-area"
+                 data-themeid="${theme.id}" data-field="notes"
+                 data-placeholder="Add comment..."></div>`
+          }
+        </td>
+        <td>
+          <div class="row-actions">
+            <button class="st-del-theme" data-themeid="${theme.id}" title="Delete theme">✕</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }
+
+  function ticketChip(t) {
+    const status = t.status || "Open";
+    const dot = statusDot(status);
+    return `<span style="display:inline-flex;align-items:center;gap:2px;margin:2px 1px;">
+      <a href="${JIRA_BASE}${encodeURIComponent(t.ticket_key)}" target="_blank" class="chip">
+        ${dot}
+        <span title="${esc(t.summary)}">${esc(t.ticket_key)}</span>
+      </a>
+      <button class="st-rewrite-ticket" data-tid="${t.id}" title="Rewrite description (Claude)"
+        style="border:none;background:transparent;color:#94a3b8;cursor:pointer;font-size:10px;">✨</button>
+    </span>`;
+  }
+
+  function renderTicketBullets(theme) {
+    const hasAny = (theme.tickets || []).some(t => (t.description_bullets || []).length);
+    if (!hasAny) return "";
+    return `<div class="ticket-bullets">${
+      (theme.tickets || []).filter(t => (t.description_bullets || []).length).map(t => `
+        <div style="margin-top:4px;">
+          <span style="font-weight:600;color:#475569;">${esc(t.ticket_key)}</span>
+          <ul>${t.description_bullets.map(b => `<li>${esc(b)}</li>`).join("")}</ul>
+        </div>
+      `).join("")
+    }</div>`;
+  }
+
+  // ─── Event handlers ────────────────────────────────────────
+  async function onCellBlur(e) {
+    const el = e.target;
+    const themeId = parseInt(el.dataset.themeid, 10);
+    const field = el.dataset.field;
+    const sprint = activeSprint();
+    const theme = (sprint.themes || []).find(t => t.id === themeId);
+    if (!theme) return;
+    let payload = {};
+    if (field === "notes") {
+      const val = el.textContent.trim();
+      theme.notes = val; payload.notes = val;
+    } else if (field === "sentence") {
+      const val = el.textContent.trim();
+      theme.sentence = val; payload.sentence = val;
+    } else if (field === "epic_name") {
+      const val = el.textContent.trim();
+      theme.epic_name = val; payload.epic_name = val;
+    }
+    if (!Object.keys(payload).length) return;
+    try {
+      const res = await api(`/api/sprint_tracker/themes/${themeId}`, { method: "PUT", body: JSON.stringify(payload) });
+      if (field === "notes") {
+        theme.notes_updated_by = res.notes_updated_by || theme.notes_updated_by || "";
+        theme.notes_updated_at = res.notes_updated_at || new Date().toISOString();
+        renderTab();
+      }
+      markSaved();
+    } catch(err) { flashError(err.message); }
+  }
+
+  async function onToggleLB(themeId) {
+    const sprint = activeSprint();
+    const theme = sprint.themes.find(t => t.id === themeId); if (!theme) return;
+    const cur = themeLB(theme);
+    const next = !cur;
+    theme.lb_override = next;
+    try {
+      await api(`/api/sprint_tracker/themes/${themeId}`, { method: "PUT", body: JSON.stringify({ lb_override: next }) });
+      renderTab();
+    } catch(e) { flashError(e.message); }
+  }
+
+  async function onDeleteTheme(themeId) {
+    const result = await showDialog({
+      title: "Delete Theme",
+      message: "Delete this theme and all its tickets?",
+      confirmText: "Delete",
+      danger: true,
+    });
+    if (!result.confirmed) return;
+    try {
+      await api(`/api/sprint_tracker/themes/${themeId}`, { method: "DELETE" });
+      const sprint = activeSprint();
+      sprint.themes = sprint.themes.filter(t => t.id !== themeId);
+      renderTab();
+    } catch(e) { flashError(e.message); }
+  }
+
+  async function onDeleteNote(themeId) {
+    const sprint = activeSprint();
+    const theme = (sprint.themes || []).find(t => t.id === themeId);
+    if (!theme || !(theme.notes || "").trim()) return;
+    const result = await showDialog({
+      title: "Delete Note",
+      message: "Delete this note?",
+      confirmText: "Delete",
+      danger: true,
+    });
+    if (!result.confirmed) return;
+    try {
+      const res = await api(`/api/sprint_tracker/themes/${themeId}`, {
+        method: "PUT",
+        body: JSON.stringify({ notes: "" }),
+      });
+      theme.notes = "";
+      theme.notes_updated_by = res.notes_updated_by || "";
+      theme.notes_updated_at = res.notes_updated_at || null;
+      renderTab();
+      markSaved();
+    } catch (e) {
+      flashError(e.message);
+    }
+  }
+
+  async function onDeleteSprint() {
+    const sprint = activeSprint(); if (!sprint) return;
+    const result = await showDialog({
+      title: "Delete Sprint",
+      message: `Delete sprint "${sprint.name}" and everything in it?`,
+      confirmText: "Delete Sprint",
+      danger: true,
+    });
+    if (!result.confirmed) return;
+    try {
+      await api(`/api/sprint_tracker/sprints/${sprint.id}`, { method: "DELETE" });
+      activeSprintId = null;
+      await load();
+    } catch(e) { flashError(e.message); }
+  }
+
+  async function promptNewSprint() {
+    const result = await showDialog({
+      title: "New Sprint",
+      message: "Create a new sprint tab.",
+      confirmText: "Create Sprint",
+      fields: [{ name: "name", label: "Sprint Name", placeholder: "e.g. CP 0502" }],
+    });
+    const name = (result.values.name || "").trim();
+    if (!result.confirmed || !name) return;
+    try {
+      const res = await api(`/api/sprint_tracker/sprints`, { method: "POST", body: JSON.stringify({ name }) });
+      activeSprintId = res.id;
+      await load();
+    } catch(e) { flashError(e.message); }
+  }
+
+  async function promptNewTheme() {
+    const sprint = activeSprint(); if (!sprint) return;
+    const result = await showDialog({
+      title: "New Theme",
+      message: `Add a theme to ${sprint.name}.`,
+      confirmText: "Add Theme",
+      fields: [
+        { name: "key", label: "Theme Key", placeholder: "my-new-theme" },
+        { name: "epic", label: "Epic Name", placeholder: "Payroll Notifications Centre" },
+        { name: "sentence", label: "What We're Building", placeholder: "One-line summary", multiline: true, rows: 2 },
+      ],
+    });
+    const key = (result.values.key || "").trim();
+    if (!result.confirmed || !key) return;
+    const epic = (result.values.epic || "").trim();
+    const sentence = (result.values.sentence || "").trim();
+    try {
+      await api(`/api/sprint_tracker/themes`, {
+        method: "POST",
+        body: JSON.stringify({ sprint_id: sprint.id, theme_key: key, epic_name: epic, sentence, bullets: [] })
+      });
+      await load();
+    } catch(e) { flashError(e.message); }
+  }
+
+  async function promptNewSprintFromJql() {
+    const inputDialog = await showDialog({
+      title: "Create Sprint From JQL",
+      message: "Enter sprint name and Jira JQL. We will fetch tickets, generate themes via Claude, then ask confirmation.",
+      confirmText: "Preview Sprint",
+      fields: [
+        { name: "sprint_name", label: "Sprint Name", placeholder: "e.g. PR 0502" },
+        { name: "jql", label: "JQL Query", placeholder: "project = TIM AND sprint in openSprints()", multiline: true, rows: 4 }
+      ]
+    });
+    if (!inputDialog.confirmed) return;
+    const sprintName = (inputDialog.values.sprint_name || "").trim();
+    const jql = (inputDialog.values.jql || "").trim();
+    if (!sprintName || !jql) {
+      flashError("Sprint name and JQL are required.");
+      return;
+    }
+    const key = await ensureAnthropicKeyWithDialog("Anthropic API key is required to generate theme sentences and bullets from JQL results.");
+    if (!key) return;
+
+    try {
+      const preview = await api("/api/sprint_tracker/jql/preview", {
+        method: "POST",
+        body: JSON.stringify({ jql, anthropic_api_key: key }),
+        loaderText: "Fetching Jira tickets and generating themes..."
+      });
+      const previewText = [
+        `Tickets fetched: ${preview.ticket_count}`,
+        `Themes generated: ${preview.theme_count}`,
+        `Inferred sprint goal: ${preview.sprint_goal}`,
+        "",
+        "Themes:",
+        ...(preview.themes || []).slice(0, 8).map(t => `- ${t.epic_name || t.theme_key} (${(t.tickets || []).length} tickets)`),
+      ].join("\n");
+      const confirmDialog = await showDialog({
+        title: "Confirm Generated Sprint",
+        message: "Review details and confirm sprint creation.",
+        confirmText: "Create Sprint",
+        fields: [
+          { name: "sprint_name", label: "Sprint Name", value: sprintName },
+          { name: "sprint_goal", label: "Sprint Goal", value: preview.sprint_goal || "", multiline: true, rows: 2 },
+          { name: "preview", label: "Preview (read-only copy)", value: previewText, multiline: true, rows: 10 },
+        ]
+      });
+      if (!confirmDialog.confirmed) return;
+      const finalSprintName = (confirmDialog.values.sprint_name || "").trim();
+      const finalSprintGoal = (confirmDialog.values.sprint_goal || "").trim();
+      if (!finalSprintName) {
+        flashError("Sprint name is required.");
+        return;
+      }
+
+      const created = await api("/api/sprint_tracker/sprints/from_generated", {
+        method: "POST",
+        body: JSON.stringify({
+          sprint_name: finalSprintName,
+          sprint_goal: finalSprintGoal,
+          themes: preview.themes || []
+        }),
+        loaderText: "Creating sprint and importing tickets..."
+      });
+      activeSprintId = created.sprint_id;
+      await load();
+      flashOk(`Created sprint "${finalSprintName}" from JQL`);
+    } catch (e) {
+      flashError(e.message);
+    }
+  }
+
+  window.stAddBullet = async function(themeId) {
+    const sprint = activeSprint();
+    const theme = sprint.themes.find(t => t.id === themeId); if (!theme) return;
+    const result = await showDialog({
+      title: "Add Bullet",
+      message: `Add a new bullet for "${theme.epic_name || theme.theme_key}".`,
+      confirmText: "Add Bullet",
+      fields: [{ name: "bullet", label: "Bullet Text", multiline: true, rows: 3 }],
+    });
+    const val = (result.values.bullet || "").trim();
+    if (!result.confirmed || !val) return;
+    const bullets = [...(theme.bullets || []), val];
+    theme.bullets = bullets;
+    try {
+      await api(`/api/sprint_tracker/themes/${themeId}`, { method: "PUT", body: JSON.stringify({ bullets }) });
+      renderTab();
+    } catch(e) { flashError(e.message); }
+  };
+
+  window.stAddTicket = async function(themeId) {
+    const result = await showDialog({
+      title: "Add Ticket",
+      message: "Add a ticket to this theme.",
+      confirmText: "Add Ticket",
+      fields: [
+        { name: "key", label: "Ticket Key", placeholder: "TIM-1234" },
+        { name: "summary", label: "Summary (optional)", multiline: true, rows: 2 },
+      ],
+    });
+    const key = (result.values.key || "").trim();
+    if (!result.confirmed || !key) return;
+    const summary = (result.values.summary || "").trim();
+    try {
+      await api(`/api/sprint_tracker/tickets`, {
+        method: "POST",
+        body: JSON.stringify({ theme_id: themeId, ticket_key: key, summary, status: "Open", customers: [], lb: false })
+      });
+      await load();
+    } catch(e) { flashError(e.message); }
+  };
+
+  function parseTicketKeys(input) {
+    return [...new Set(
+      String(input || "")
+        .split(/[\n,\s]+/)
+        .map(s => s.trim().toUpperCase())
+        .filter(Boolean)
+    )];
+  }
+
+  async function ensureAnthropicKeyWithDialog(message) {
+    if (anthropicKey) return anthropicKey;
+    const result = await showDialog({
+      title: "Anthropic API Key Required",
+      message: message || "Enter your key to continue.",
+      confirmText: "Save Key",
+      fields: [{ name: "api_key", label: "Anthropic API Key", placeholder: "sk-ant-...", type: "password" }],
+    });
+    const k = (result.values.api_key || "").trim();
+    if (!result.confirmed || !k) return "";
+    anthropicKey = k;
+    await onSaveAnthropicKey(true);
+    return anthropicKey;
+  }
+
+  async function promptCreateRowFromTickets() {
+    const sprint = activeSprint(); if (!sprint) return;
+    const inputDialog = await showDialog({
+      title: "Create Theme From Tickets",
+      message: "Paste Jira ticket keys (comma, space, or newline separated). We will fetch details, ask Claude to generate theme title/description, then ask for your confirmation.",
+      confirmText: "Generate Theme",
+      fields: [{
+        name: "ticket_keys",
+        label: "Ticket Keys",
+        placeholder: "TIM-1234, TIM-5678",
+        multiline: true,
+        rows: 5
+      }]
+    });
+    if (!inputDialog.confirmed) return;
+    const ticketKeys = parseTicketKeys(inputDialog.values.ticket_keys);
+    if (!ticketKeys.length) {
+      flashError("Please provide at least one ticket key.");
+      return;
+    }
+
+    const key = await ensureAnthropicKeyWithDialog(
+      "Anthropic API key is needed to generate theme title and summary from ticket descriptions."
+    );
+    if (!key) return;
+
+    try {
+      const generated = await api("/api/sprint_tracker/themes/generate_from_tickets", {
+        method: "POST",
+        body: JSON.stringify({
+          ticket_keys: ticketKeys,
+          anthropic_api_key: key
+        })
+      });
+
+      const suggestion = generated.suggestion || {};
+      const confirmDialog = await showDialog({
+        title: "Confirm Generated Theme",
+        message: `Fetched ${generated.fetched || ticketKeys.length} tickets. Review/edit before creating row.`,
+        confirmText: "Create Row",
+        fields: [
+          { name: "theme_key", label: "Theme Key", value: suggestion.theme_key || "generated-theme" },
+          { name: "epic_name", label: "Theme Title", value: suggestion.epic_name || "Generated Theme" },
+          { name: "sentence", label: "What We're Building", value: suggestion.sentence || "", multiline: true, rows: 2 },
+          {
+            name: "bullets",
+            label: "Bullets (one per line)",
+            value: (suggestion.bullets || []).join("\n"),
+            multiline: true,
+            rows: 4
+          }
+        ]
+      });
+      if (!confirmDialog.confirmed) return;
+
+      const finalThemeKey = (confirmDialog.values.theme_key || "").trim();
+      if (!finalThemeKey) {
+        flashError("Theme key is required.");
+        return;
+      }
+      const finalBullets = String(confirmDialog.values.bullets || "")
+        .split("\n")
+        .map(x => x.trim())
+        .filter(Boolean)
+        .slice(0, 6);
+
+      const themeRes = await api(`/api/sprint_tracker/themes`, {
+        method: "POST",
+        body: JSON.stringify({
+          sprint_id: sprint.id,
+          theme_key: finalThemeKey,
+          epic_name: (confirmDialog.values.epic_name || "").trim(),
+          sentence: (confirmDialog.values.sentence || "").trim(),
+          bullets: finalBullets
+        })
+      });
+
+      const themeId = themeRes.id;
+      const tickets = generated.tickets || ticketKeys.map(k => ({ ticket_key: k, summary: "", status: "Open", customers: [], lb: false }));
+      for (const t of tickets) {
+        await api(`/api/sprint_tracker/tickets`, {
+          method: "POST",
+          body: JSON.stringify({
+            theme_id: themeId,
+            ticket_key: t.ticket_key,
+            summary: t.summary || "",
+            status: t.status || "Open",
+            customers: t.customers || [],
+            lb: !!t.lb
+          })
+        });
+      }
+
+      await load();
+      flashOk(`Created row with ${tickets.length} tickets`);
+    } catch (e) {
+      flashError(e.message);
+    }
+  }
+
+  // Persist bullet edits on blur (delegated)
+  document.addEventListener("blur", async (e) => {
+    const el = e.target;
+    if (!el || !el.classList || !el.classList.contains("st-bullet")) return;
+    const ul = el.closest("ul[data-themeid]"); if (!ul) return;
+    const themeId = parseInt(ul.dataset.themeid, 10);
+    const bullets = [...ul.querySelectorAll(".st-bullet")].map(li => li.textContent.trim()).filter(Boolean);
+    const sprint = activeSprint();
+    const theme = sprint.themes.find(t => t.id === themeId); if (!theme) return;
+    theme.bullets = bullets;
+    try {
+      await api(`/api/sprint_tracker/themes/${themeId}`, { method: "PUT", body: JSON.stringify({ bullets }) });
+      markSaved();
+    } catch(err) { flashError(err.message); }
+  }, true);
+
+  async function onRewriteTicket(ticketId) {
+    if (!anthropicKey) {
+      const k = await ensureAnthropicKeyWithDialog("Enter your key to rewrite ticket description into max three bullets.");
+      if (!k) return;
+    }
+    try {
+      const res = await api(`/api/sprint_tracker/tickets/${ticketId}/rewrite`, {
+        method: "POST",
+        body: JSON.stringify({ anthropic_api_key: anthropicKey })
+      });
+      await load();
+      flashOk(`Rewrote ${res.description_bullets?.length || 0} bullets`);
+    } catch(e) { flashError(e.message); }
+  }
+
+  async function onSync() {
+    const sprint = activeSprint(); if (!sprint) return;
+    const btn = document.getElementById("st-sync-btn");
+    const statusEl = document.getElementById("st-sync-status");
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Syncing…';
+    statusEl.textContent = "";
+    try {
+      if (rewriteOnSync && !anthropicKey) {
+        const k = await ensureAnthropicKeyWithDialog("Description rewrite is enabled. Enter key to continue sync.");
+        if (!k) {
+          throw new Error("Anthropic key is required for rewrite-enabled sync");
+        }
+      }
+      const res = await api(`/api/sprint_tracker/sprints/${sprint.id}/sync`, {
+        method: "POST",
+        body: JSON.stringify({
+          anthropic_api_key: anthropicKey,
+          rewrite_descriptions: rewriteOnSync,
+        })
+      });
+      await load();
+      const now = new Date();
+      statusEl.className = "sync-status sync-ok";
+      statusEl.textContent = `Synced ${res.synced}/${res.total} at ${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}`;
+    } catch(e) {
+      statusEl.className = "sync-status sync-err";
+      statusEl.textContent = `Sync failed: ${e.message}`;
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<span>⟳</span> Sync from Jira';
+    }
+  }
+
+  async function onSaveAnthropicKey(silent) {
+    const input = document.getElementById("st-api-key");
+    const val = (input ? input.value : anthropicKey || "").trim();
+    anthropicKey = val;
+    try {
+      await api(`/api/settings/app_config`, {
+        method: "POST", body: JSON.stringify({ anthropic_api_key: val })
+      });
+      if (!silent) flashOk("Key saved");
+    } catch(e) { flashError(e.message); }
+  }
+
+  async function loadAnthropicKey() {
+    try {
+      const res = await fetch("/api/settings/app_config");
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.anthropic_api_key) anthropicKey = data.anthropic_api_key;
+      }
+    } catch(_) {}
+  }
+
+  // ─── Drag and Drop ─────────────────────────────────────────
+  let dragSrc = null, dragSrcType = null;
+  function attachDragAndDrop() {
+    const tbody = document.getElementById("st-tbody"); if (!tbody) return;
+    tbody.querySelectorAll("tr").forEach(tr => {
+      tr.addEventListener("dragstart", (e) => {
+        dragSrc = tr; dragSrcType = tr.dataset.type;
+        e.dataTransfer.effectAllowed = "move";
+        setTimeout(() => tr.classList.add("dragging-row"), 0);
+      });
+      tr.addEventListener("dragover", (e) => {
+        e.preventDefault(); e.dataTransfer.dropEffect = "move";
+        if (tr === dragSrc) return;
+        const rect = tr.getBoundingClientRect();
+        const mid = rect.top + rect.height/2;
+        clearDragIndicators();
+        if (e.clientY < mid) tr.classList.add("drag-over-top");
+        else tr.classList.add("drag-over-bottom");
+      });
+      tr.addEventListener("drop", async (e) => {
+        e.preventDefault(); clearDragIndicators();
+        if (!dragSrc || tr === dragSrc) { if (dragSrc) dragSrc.classList.remove("dragging-row"); dragSrc = null; return; }
+
+        const sprint = activeSprint();
+        const order = sprint.themes.slice().sort((a,b) => a.sort_order - b.sort_order);
+        const DIVIDER = -1;
+        let display = [];
+        for (let i = 0; i <= order.length; i++) {
+          if (i === sprint.divider_index) display.push(DIVIDER);
+          if (i < order.length) display.push(order[i].id);
+        }
+
+        const srcId = dragSrcType === "divider" ? DIVIDER : parseInt(dragSrc.dataset.themeid, 10);
+        const tgtId = tr.dataset.type === "divider" ? DIVIDER : parseInt(tr.dataset.themeid, 10);
+        let srcIdx = display.indexOf(srcId);
+        display.splice(srcIdx, 1);
+        let tgtIdx = display.indexOf(tgtId);
+        const rect = tr.getBoundingClientRect();
+        const insertAfter = e.clientY >= rect.top + rect.height/2;
+        const insertAt = insertAfter ? tgtIdx + 1 : tgtIdx;
+        display.splice(insertAt, 0, srcId);
+
+        const newIds = display.filter(x => x !== DIVIDER);
+        const newDiv = display.indexOf(DIVIDER);
+        sprint.divider_index = newDiv === -1 ? newIds.length : newDiv;
+        // apply sort orders locally
+        newIds.forEach((id, i) => {
+          const t = sprint.themes.find(t => t.id === id);
+          if (t) t.sort_order = i;
+        });
+
+        try {
+          await api(`/api/sprint_tracker/sprints/${sprint.id}/reorder`, {
+            method: "POST",
+            body: JSON.stringify({ theme_ids: newIds, divider_index: sprint.divider_index })
+          });
+          markSaved();
+        } catch(err) { flashError(err.message); }
+        renderTab();
+      });
+      tr.addEventListener("dragend", () => { clearDragIndicators(); if (dragSrc) dragSrc.classList.remove("dragging-row"); dragSrc = null; });
+    });
+  }
+  function clearDragIndicators() {
+    document.querySelectorAll(".drag-over-top").forEach(el => el.classList.remove("drag-over-top"));
+    document.querySelectorAll(".drag-over-bottom").forEach(el => el.classList.remove("drag-over-bottom"));
+  }
+
+  // ─── Saved / error badges ─────────────────────────────────
+  function markSaved() {
+    const el = document.getElementById("st-saved"); if (!el) return;
+    const t = new Date();
+    el.textContent = `Saved ${t.getHours()}:${String(t.getMinutes()).padStart(2,'0')}`;
+    el.style.color = "#16a34a";
+  }
+  function flashError(msg) {
+    const el = document.getElementById("st-saved"); if (!el) return;
+    el.textContent = `Error: ${msg}`;
+    el.style.color = "#dc2626";
+  }
+  function flashOk(msg) {
+    const el = document.getElementById("st-saved"); if (!el) return;
+    el.textContent = msg;
+    el.style.color = "#16a34a";
+  }
+
+  // ─── Init ─────────────────────────────────────────────────
+  (async function init(){
+    await loadAnthropicKey();
+    try {
+      await load();
+    } catch(e) {
+      document.getElementById("st-app").innerHTML =
+        `<div class="px-5 py-8 text-center text-red-600">Failed to load sprint tracker: ${esc(e.message)}</div>`;
+    }
+  })();
+})();
+</script>
+{% endblock %}

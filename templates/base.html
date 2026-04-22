@@ -39,12 +39,12 @@
     
     {% block extra_head %}{% endblock %}
 </head>
-<body class="bg-gray-900 min-h-screen text-white font-sans">
+<body class="bg-gray-900 min-h-screen text-white font-sans {% block body_class %}{% endblock %}">
     <!-- Navigation -->
     {% include 'navbar.html' %}
 
     <!-- Main Content -->
-    <main class="pt-24 pb-12 px-6 max-w-7xl mx-auto">
+    <main class="{% block main_class %}pt-24 pb-12 px-6 max-w-7xl mx-auto{% endblock %}">
         {% block content %}{% endblock %}
     </main>
 
