@@ -1,0 +1,978 @@
+{% extends 'base.html' %}
+{% block title %}Customer Dashboard{% endblock %}
+{% block body_class %}cd-page{% endblock %}
+{% block main_class %}pt-24 pb-10 px-4 w-full max-w-none{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<style>
+  body { background: #f8fafc !important; color: #0f172a !important; }
+  body.cd-nav-hidden nav { display: none !important; }
+  body.cd-nav-hidden main { padding-top: 16px !important; }
+  .cd-card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04); }
+  .cd-label { font-size: 12px; color: #475569; margin-bottom: 6px; display: block; font-weight: 600; }
+  .cd-input { width: 100%; background: #ffffff; border: 1px solid #cbd5e1; color: #0f172a; border-radius: 8px; padding: 9px 10px; font-size: 13px; }
+  .cd-kpi-title { font-size: 12px; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+  .cd-kpi-value { font-size: 24px; font-weight: 700; color: #0f172a; margin-top: 4px; }
+  .cd-kpi-sub { font-size: 12px; color: #64748b; margin-top: 2px; }
+  .cd-table th { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: .03em; font-weight: 700; }
+  .cd-table td { font-size: 13px; color: #1f2937; }
+  .cd-pill { display: inline-flex; align-items: center; padding: 2px 7px; border-radius: 999px; font-size: 11px; border: 1px solid #cbd5e1; background: #f8fafc; color: #334155; }
+  .cd-pill.lb { border-color: #fecaca; background: #fee2e2; color: #b91c1c; }
+  .cd-chart { width: 100%; height: 300px; position: relative; }
+  .cd-chart svg { width: 100%; height: 100%; }
+  .cd-tooltip {
+    position: absolute;
+    pointer-events: none;
+    background: #0f172a;
+    color: #f8fafc;
+    font-size: 11px;
+    line-height: 1.3;
+    padding: 6px 8px;
+    border-radius: 6px;
+    box-shadow: 0 6px 16px rgba(15, 23, 42, 0.25);
+    opacity: 0;
+    transform: translate(-50%, -110%);
+    white-space: nowrap;
+    z-index: 20;
+  }
+  .cd-tooltip-list { margin: 4px 0 0; padding-left: 14px; }
+  .cd-tooltip-list li { margin: 1px 0; }
+  .cd-lb-card { background: linear-gradient(180deg, #fff, #f8fafc); border: 1px solid #e2e8f0; border-radius: 12px; padding: 10px; margin-top: 10px; }
+  .cd-lb-row { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: #475569; }
+  .cd-lb-bar { width: 100%; height: 8px; background: #e2e8f0; border-radius: 999px; overflow: hidden; margin-top: 7px; }
+  .cd-lb-fill { height: 100%; background: #ef4444; border-radius: 999px; transition: width 0.2s ease; }
+  .cd-hidden { display: none; }
+  .cd-legend { display: flex; flex-wrap: wrap; gap: 8px 12px; margin-bottom: 8px; }
+  .cd-legend-item { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: #475569; }
+  .cd-legend-swatch { width: 10px; height: 10px; border-radius: 3px; border: 1px solid rgba(15, 23, 42, 0.15); }
+  .cd-icon-btn { width: 34px; height: 34px; border-radius: 999px; border: 1px solid #cbd5e1; background: #fff; color: #475569; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: all .15s; }
+  .cd-icon-btn:hover { background: #f1f5f9; color: #0f172a; }
+  .cd-empty { border: 1px dashed #cbd5e1; border-radius: 12px; padding: 22px; background: #ffffff; text-align: center; color: #64748b; }
+  .cd-customer-top { min-width: 280px; max-width: 360px; }
+  .cd-modal-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,0.45); display: none; align-items: center; justify-content: center; z-index: 1100; }
+  .cd-modal-backdrop.open { display: flex; }
+  .cd-modal { width: min(860px, calc(100vw - 24px)); background: #fff; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 16px 44px rgba(15,23,42,.28); }
+  .cd-modal-head { padding: 12px 14px; border-bottom: 1px solid #e2e8f0; font-size: 14px; font-weight: 700; color: #0f172a; }
+  .cd-modal-body { padding: 14px; }
+  .cd-modal-actions { padding: 10px 14px 14px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 8px; }
+  .cd-btn-secondary { border: 1px solid #cbd5e1; background: #fff; color: #334155; border-radius: 8px; padding: 8px 12px; font-size: 12px; font-weight: 600; }
+  .cd-settings-btn { width: 34px; height: 34px; border-radius: 999px; border: 1px solid #cbd5e1; background: #fff; color: #475569; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: all .15s; }
+  .cd-settings-btn:hover { background: #f1f5f9; color: #0f172a; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <div class="flex items-start justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-bold text-slate-900">Customer Dashboard</h1>
+      <p class="text-sm text-slate-500 mt-1">Build customer-focused insights from JQL and explore interactive graphs.</p>
+    </div>
+    <div class="flex items-center gap-2">
+      <select id="cd-customer" class="cd-input cd-customer-top" disabled>
+        <option value="">All Customers</option>
+      </select>
+      <button id="cd-open-builder" class="cd-icon-btn" title="Create / Edit Dashboard">
+        <span id="cd-open-builder-icon" style="font-size:18px;line-height:1;">+</span>
+      </button>
+      <button id="cd-open-settings" class="cd-settings-btn" title="Jira Settings">
+        <span style="font-size:14px;line-height:1;">⚙</span>
+      </button>
+    </div>
+  </div>
+
+  <div id="cd-empty-state" class="cd-empty">
+    <div class="text-sm font-semibold text-slate-700">No dashboard configured yet</div>
+    <div class="text-xs mt-1">Click <strong>+</strong> to add JQL and create your dashboard view.</div>
+  </div>
+  <div class="flex items-center gap-3 -mt-2">
+    <span id="cd-status" class="text-xs text-slate-500"></span>
+    <span id="cd-fetched-count" class="text-xs text-slate-500"></span>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div class="cd-card p-4">
+      <div class="cd-kpi-title">Total Issues</div>
+      <div id="kpi-total" class="cd-kpi-value">0</div>
+      <div class="cd-kpi-sub" id="kpi-customer">All Customers</div>
+    </div>
+    <div class="cd-card p-4">
+      <div class="cd-kpi-title">High Priority Issues</div>
+      <div id="kpi-high" class="cd-kpi-value">0</div>
+      <div class="cd-kpi-sub">High / Critical / Blocker</div>
+    </div>
+    <div class="cd-card p-4">
+      <div class="cd-kpi-title">Launch Blockers</div>
+      <div id="kpi-lb" class="cd-kpi-value">0</div>
+      <div class="cd-kpi-sub">Labels: launch_blocker / similar</div>
+      <div class="cd-lb-card">
+        <div class="cd-lb-row">
+          <span>Launch blocker ratio</span>
+          <span id="kpi-lb-ratio">0%</span>
+        </div>
+        <div class="cd-lb-bar">
+          <div id="kpi-lb-bar" class="cd-lb-fill" style="width:0%"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+    <div class="cd-card p-4">
+      <h3 class="text-sm font-semibold text-slate-700 mb-3">Tickets Created Timeline</h3>
+      <div id="cd-timeline-legend" class="cd-legend"></div>
+      <div id="cd-timeline" class="cd-chart"></div>
+    </div>
+    <div class="cd-card p-4">
+      <h3 class="text-sm font-semibold text-slate-700 mb-3">Priority Distribution</h3>
+      <div id="cd-priority-legend" class="cd-legend"></div>
+      <div id="cd-priority" class="cd-chart"></div>
+    </div>
+    <div class="cd-card p-4 xl:col-span-2">
+      <h3 class="text-sm font-semibold text-slate-700 mb-3">Status Distribution</h3>
+      <div id="cd-status-legend" class="cd-legend"></div>
+      <div id="cd-status-chart" class="cd-chart" style="height:270px;"></div>
+    </div>
+    <div id="cd-customer-dist-card" class="cd-card p-4 xl:col-span-2 cd-hidden">
+      <h3 class="text-sm font-semibold text-slate-700 mb-3">Customer-wise Tickets (Top 12)</h3>
+      <div id="cd-customer-dist-legend" class="cd-legend"></div>
+      <div id="cd-customer-dist-chart" class="cd-chart" style="height:420px;"></div>
+    </div>
+    <div id="cd-customer-race-card" class="cd-card p-4 xl:col-span-2 cd-hidden">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="text-sm font-semibold text-slate-700">Customer Timeline Race (Cumulative)</h3>
+      </div>
+      <div id="cd-customer-race-chart" class="cd-chart" style="height:520px;"></div>
+      <div id="cd-customer-race-month" class="text-5xl font-black text-slate-700 text-right leading-none -mt-2 pr-1"></div>
+    </div>
+    <div class="cd-card p-4 xl:col-span-2">
+      <h3 class="text-sm font-semibold text-slate-700 mb-3">Launch Blocker vs Non-Blocker</h3>
+      <div id="cd-lb-split-legend" class="cd-legend"></div>
+      <div id="cd-lb-split-chart" class="cd-chart" style="height:260px;"></div>
+    </div>
+    <div class="cd-card p-4 xl:col-span-2">
+      <h3 class="text-sm font-semibold text-slate-700 mb-3">Team Ticket Trend (Monthly, Top 5 Teams)</h3>
+      <div id="cd-team-dist-legend" class="cd-legend"></div>
+      <div id="cd-team-dist-chart" class="cd-chart" style="height:320px;"></div>
+    </div>
+  </div>
+
+  <div class="cd-card p-4">
+    <div class="flex items-center justify-between mb-3">
+      <h3 class="text-sm font-semibold text-slate-700">Customer Tickets</h3>
+      <div class="text-xs text-slate-500" id="cd-pagination-info">0 results</div>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full cd-table">
+        <thead>
+          <tr class="border-b border-gray-700">
+            <th class="py-2 px-2 text-left">Issue</th>
+            <th class="py-2 px-2 text-left">Summary</th>
+            <th class="py-2 px-2 text-left">Priority</th>
+            <th class="py-2 px-2 text-left">Status</th>
+            <th class="py-2 px-2 text-left">Customers</th>
+            <th class="py-2 px-2 text-left">Launch Blocker</th>
+            <th class="py-2 px-2 text-left">Created</th>
+            <th class="py-2 px-2 text-left">Assignee</th>
+          </tr>
+        </thead>
+        <tbody id="cd-table-body">
+          <tr><td colspan="8" class="py-6 px-2 text-center text-slate-400">Click + to enter JQL and fetch tickets.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="mt-4 flex items-center justify-between">
+      <button id="cd-prev" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded text-xs text-slate-700 disabled:opacity-50" disabled>Previous</button>
+      <button id="cd-next" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded text-xs text-slate-700 disabled:opacity-50" disabled>Next</button>
+    </div>
+  </div>
+</div>
+
+<div id="cd-jql-modal" class="cd-modal-backdrop">
+  <div class="cd-modal" role="dialog" aria-modal="true" aria-labelledby="cd-jql-title">
+    <div id="cd-jql-title" class="cd-modal-head">Build Dashboard from JQL</div>
+    <div class="cd-modal-body">
+      <label class="cd-label">JQL</label>
+      <textarea id="cd-jql-input" class="cd-input" rows="6" placeholder='Example: project = "TIM" AND created >= -30d ORDER BY created DESC'></textarea>
+    </div>
+    <div class="cd-modal-actions">
+      <button id="cd-jql-cancel" class="cd-btn-secondary">Cancel</button>
+      <button id="cd-jql-apply" class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold px-4 py-2 rounded-md">Fetch Dashboard</button>
+    </div>
+  </div>
+</div>
+<div id="cd-settings-modal" class="cd-modal-backdrop">
+  <div class="cd-modal" role="dialog" aria-modal="true" aria-labelledby="cd-settings-title">
+    <div id="cd-settings-title" class="cd-modal-head">Jira Credentials (Local)</div>
+    <div class="cd-modal-body">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="cd-label">Jira Email</label>
+          <input id="cd-setting-email" class="cd-input" type="email" placeholder="you@company.com" />
+        </div>
+        <div>
+          <label class="cd-label">Jira API Token</label>
+          <input id="cd-setting-token" class="cd-input" type="password" placeholder="ATATT..." />
+        </div>
+      </div>
+      <p class="text-xs text-slate-500 mt-3">Stored in your browser local storage and reused after reload.</p>
+    </div>
+    <div class="cd-modal-actions">
+      <button id="cd-settings-cancel" class="cd-btn-secondary">Cancel</button>
+      <button id="cd-settings-save" class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold px-4 py-2 rounded-md">Save Settings</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(() => {
+  const state = { page: 1, perPage: 20, totalPages: 0, rows: [], hasData: false, currentJql: "", raceTimer: null };
+  const LS_KEYS = {
+    email: "customer_dashboard_jira_email",
+    token: "customer_dashboard_jira_token",
+    jql: "customer_dashboard_jql",
+    customer: "customer_dashboard_selected_customer",
+  };
+
+  function getStoredSettings() {
+    return {
+      email: localStorage.getItem(LS_KEYS.email) || "",
+      token: localStorage.getItem(LS_KEYS.token) || "",
+      jql: localStorage.getItem(LS_KEYS.jql) || "",
+      customer: localStorage.getItem(LS_KEYS.customer) || "",
+    };
+  }
+
+  function saveStoredSettings({ email, token, jql, customer }) {
+    if (email !== undefined) localStorage.setItem(LS_KEYS.email, email || "");
+    if (token !== undefined) localStorage.setItem(LS_KEYS.token, token || "");
+    if (jql !== undefined) localStorage.setItem(LS_KEYS.jql, jql || "");
+    if (customer !== undefined) localStorage.setItem(LS_KEYS.customer, customer || "");
+  }
+
+  function getOrCreateTooltip(container) {
+    let tip = container.querySelector(".cd-tooltip");
+    if (!tip) {
+      tip = document.createElement("div");
+      tip.className = "cd-tooltip";
+      container.appendChild(tip);
+    }
+    return tip;
+  }
+
+  function showTooltip(container, tooltip, event, html) {
+    const rect = container.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    tooltip.innerHTML = html;
+    tooltip.style.left = `${x}px`;
+    tooltip.style.top = `${y}px`;
+    tooltip.style.opacity = "1";
+  }
+
+  function hideTooltip(tooltip) {
+    tooltip.style.opacity = "0";
+  }
+
+  function randomColorFor(label) {
+    // Deterministic pastel color by label text.
+    let hash = 0;
+    const s = String(label || "");
+    for (let i = 0; i < s.length; i++) hash = ((hash << 5) - hash) + s.charCodeAt(i);
+    const hue = Math.abs(hash) % 360;
+    return `hsla(${hue}, 70%, 68%, 0.65)`;
+  }
+
+  function colorForCategory(label) {
+    const k = String(label || "").toLowerCase();
+    if (k === "unspecified") return "hsla(220, 8%, 62%, 0.75)";
+    if (k === "none") return "hsla(220, 8%, 72%, 0.85)";
+    if (k.includes("launch blocker")) return "hsla(0, 80%, 68%, 0.7)";
+    if (k.includes("non-blocker")) return "hsla(210, 30%, 72%, 0.75)";
+    return randomColorFor(label);
+  }
+
+  function vividTeamColor(label) {
+    const palette = [
+      "#3b82f6", "#f59e0b", "#22c55e", "#ef4444",
+      "#a855f7", "#14b8a6", "#84cc16", "#f97316",
+      "#6366f1", "#ec4899", "#06b6d4", "#eab308",
+    ];
+    let hash = 0;
+    const s = String(label || "");
+    for (let i = 0; i < s.length; i++) hash = ((hash << 5) - hash) + s.charCodeAt(i);
+    return palette[Math.abs(hash) % palette.length];
+  }
+
+  function renderLegend(legendId, items) {
+    const legend = document.getElementById(legendId);
+    if (!legend) return;
+    if (!items || !items.length) {
+      legend.innerHTML = "";
+      return;
+    }
+    legend.innerHTML = items.map(i => `
+      <span class="cd-legend-item">
+        <span class="cd-legend-swatch" style="background:${i.color};"></span>
+        <span>${escapeHtml(i.label)}</span>
+      </span>
+    `).join("");
+  }
+
+  function renderLineChart(containerId, labels, values, color, tooltipMeta = []) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container.innerHTML = "";
+    if (!labels.length) {
+      container.innerHTML = `<div class="text-xs text-slate-400 h-full flex items-center justify-center">No data</div>`;
+      return;
+    }
+    const tooltip = getOrCreateTooltip(container);
+    renderLegend("cd-timeline-legend", [{ label: "Tickets Created", color: "hsla(213, 72%, 62%, 0.6)" }]);
+    const width = container.clientWidth || 600;
+    const height = container.clientHeight || 230;
+    const margin = { top: 18, right: 16, bottom: 34, left: 36 };
+    const w = width - margin.left - margin.right;
+    const h = height - margin.top - margin.bottom;
+
+    const svg = d3.select(container).append("svg")
+      .attr("viewBox", `0 0 ${width} ${height}`)
+      .attr("preserveAspectRatio", "xMidYMid meet");
+    const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+    const points = labels.map((label, i) => ({ label, value: values[i] || 0 }));
+    const x = d3.scalePoint().domain(labels).range([0, w]);
+    const y = d3.scaleLinear().domain([0, d3.max(points, d => d.value) || 1]).nice().range([h, 0]);
+
+    g.append("g").attr("transform", `translate(0,${h})`)
+      .call(d3.axisBottom(x).tickSizeOuter(0))
+      .call(s => s.selectAll("text").style("font-size", "10px").style("fill", "#64748b"));
+    g.append("g")
+      .call(d3.axisLeft(y).ticks(4))
+      .call(s => s.selectAll("text").style("font-size", "10px").style("fill", "#64748b"));
+
+    g.selectAll(".grid-h").data(y.ticks(4)).enter().append("line")
+      .attr("x1", 0).attr("x2", w)
+      .attr("y1", d => y(d)).attr("y2", d => y(d))
+      .attr("stroke", "#e2e8f0");
+
+    const line = d3.line().x(d => x(d.label)).y(d => y(d.value)).curve(d3.curveMonotoneX);
+    g.append("path").datum(points).attr("fill", "none").attr("stroke", "hsla(213, 72%, 50%, 0.95)").attr("stroke-width", 2).attr("d", line);
+    g.selectAll("circle").data(points).enter().append("circle")
+      .attr("cx", d => x(d.label)).attr("cy", d => y(d.value)).attr("r", 3).attr("fill", "hsla(213, 72%, 60%, 0.75)");
+    g.selectAll("circle")
+      .on("mousemove", function(event, d) {
+        const meta = tooltipMeta.find(m => m.label === d.label) || {};
+        const companies = (meta.customers || []).slice(0, 8);
+        const more = (meta.customers || []).length > 8 ? `<li>+${(meta.customers || []).length - 8} more</li>` : "";
+        const companyList = companies.length
+          ? companies.map(c => `<li>${escapeHtml(c)}</li>`).join("")
+          : `<li>N/A</li>`;
+        showTooltip(
+          container,
+          tooltip,
+          event,
+          `<strong>${escapeHtml(d.label)}</strong>
+           <ul class="cd-tooltip-list">
+             <li><strong>Tickets:</strong> ${d.value}</li>
+             <li><strong>Companies:</strong></li>
+             ${companyList}
+             ${more}
+           </ul>`
+        );
+      })
+      .on("mouseleave", () => hideTooltip(tooltip));
+  }
+
+  function renderBarChart(containerId, labels, values, color, multiColor = false) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container.innerHTML = "";
+    if (!labels.length) {
+      container.innerHTML = `<div class="text-xs text-slate-400 h-full flex items-center justify-center">No data</div>`;
+      return;
+    }
+    const tooltip = getOrCreateTooltip(container);
+    const legendMap = {
+      "cd-priority": "cd-priority-legend",
+      "cd-status-chart": "cd-status-legend",
+      "cd-customer-dist-chart": "cd-customer-dist-legend",
+      "cd-lb-split-chart": "cd-lb-split-legend",
+      "cd-team-dist-chart": "cd-team-dist-legend",
+    };
+    const legendItems = labels.map(lbl => ({ label: lbl, color: colorForCategory(lbl) }));
+    renderLegend(legendMap[containerId], legendItems);
+    const width = container.clientWidth || 600;
+    const height = container.clientHeight || 230;
+    const margin = containerId === "cd-customer-dist-chart"
+      ? { top: 18, right: 16, bottom: 78, left: 38 }
+      : { top: 18, right: 16, bottom: 40, left: 38 };
+    const w = width - margin.left - margin.right;
+    const h = height - margin.top - margin.bottom;
+
+    const svg = d3.select(container).append("svg")
+      .attr("viewBox", `0 0 ${width} ${height}`)
+      .attr("preserveAspectRatio", "xMidYMid meet");
+    const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+    const bars = labels.map((label, i) => ({ label, value: values[i] || 0, color: colorForCategory(label) }));
+    const x = d3.scaleBand().domain(labels).range([0, w]).padding(0.25);
+    const y = d3.scaleLinear().domain([0, d3.max(bars, d => d.value) || 1]).nice().range([h, 0]);
+
+    g.selectAll(".grid-h").data(y.ticks(4)).enter().append("line")
+      .attr("x1", 0).attr("x2", w)
+      .attr("y1", d => y(d)).attr("y2", d => y(d))
+      .attr("stroke", "#e2e8f0");
+    g.selectAll("rect").data(bars).enter().append("rect")
+      .attr("x", d => x(d.label)).attr("y", d => y(d.value))
+      .attr("width", x.bandwidth()).attr("height", d => h - y(d.value))
+      .attr("fill", d => d.color).attr("rx", 3);
+    g.selectAll("rect")
+      .on("mousemove", function(event, d) {
+        showTooltip(container, tooltip, event, `<strong>${escapeHtml(d.label)}</strong><br/>Count: ${d.value}`);
+      })
+      .on("mouseleave", () => hideTooltip(tooltip));
+
+    g.append("g").attr("transform", `translate(0,${h})`)
+      .call(d3.axisBottom(x).tickSizeOuter(0))
+      .call(s => s.selectAll("text")
+        .style("font-size", "10px").style("fill", "#64748b")
+        .attr("transform", containerId === "cd-customer-dist-chart" ? "rotate(-28)" : "rotate(-20)")
+        .style("text-anchor", "end"));
+    g.append("g")
+      .call(d3.axisLeft(y).ticks(4))
+      .call(s => s.selectAll("text").style("font-size", "10px").style("fill", "#64748b"));
+  }
+
+  function buildTeamTrend(rows) {
+    const monthSet = new Set();
+    const teamByMonth = {};
+    const teamTotals = {};
+
+    for (const r of rows) {
+      const team = (r.team_name || "Unspecified").trim() || "Unspecified";
+      const monthKey = /^\d{4}-\d{2}-\d{2}$/.test(r.created_date || "")
+        ? (r.created_date || "").slice(0, 7)
+        : "Unknown";
+      monthSet.add(monthKey);
+      if (!teamByMonth[team]) teamByMonth[team] = {};
+      teamByMonth[team][monthKey] = (teamByMonth[team][monthKey] || 0) + 1;
+      teamTotals[team] = (teamTotals[team] || 0) + 1;
+    }
+
+    const monthKeys = [...monthSet].sort((a, b) => a.localeCompare(b));
+    const monthLabels = monthKeys.map(k => {
+      if (/^\d{4}-\d{2}$/.test(k)) {
+        const dt = new Date(`${k}-01T00:00:00`);
+        return dt.toLocaleString([], { month: "short", year: "numeric" });
+      }
+      return k;
+    });
+    const topTeams = Object.keys(teamTotals).sort((a, b) => teamTotals[b] - teamTotals[a]).slice(0, 5);
+    const series = topTeams.map(team => ({
+      team,
+      color: vividTeamColor(team),
+      values: monthKeys.map(m => (teamByMonth[team] && teamByMonth[team][m]) ? teamByMonth[team][m] : 0)
+    }));
+    return { monthLabels, series };
+  }
+
+  function renderTeamTrendChart(containerId, legendId, trend) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container.innerHTML = "";
+    const series = (trend && trend.series) || [];
+    const labels = (trend && trend.monthLabels) || [];
+    renderLegend(legendId, series.map(s => ({ label: s.team, color: s.color })));
+    if (!series.length || !labels.length) {
+      container.innerHTML = `<div class="text-xs text-slate-400 h-full flex items-center justify-center">No data</div>`;
+      return;
+    }
+
+    const tooltip = getOrCreateTooltip(container);
+    const width = container.clientWidth || 700;
+    const height = container.clientHeight || 320;
+    const margin = { top: 16, right: 20, bottom: 52, left: 40 };
+    const w = width - margin.left - margin.right;
+    const h = height - margin.top - margin.bottom;
+
+    const svg = d3.select(container).append("svg")
+      .attr("viewBox", `0 0 ${width} ${height}`)
+      .attr("preserveAspectRatio", "xMidYMid meet");
+    const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+    const x = d3.scalePoint().domain(labels).range([0, w]);
+    const maxY = d3.max(series.flatMap(s => s.values)) || 1;
+    const y = d3.scaleLinear().domain([0, maxY]).nice().range([h, 0]);
+
+    g.selectAll(".grid-h").data(y.ticks(5)).enter().append("line")
+      .attr("x1", 0).attr("x2", w)
+      .attr("y1", d => y(d)).attr("y2", d => y(d))
+      .attr("stroke", "#e2e8f0");
+
+    g.append("g").attr("transform", `translate(0,${h})`)
+      .call(d3.axisBottom(x).tickSizeOuter(0))
+      .call(s => s.selectAll("text")
+        .style("font-size", "10px").style("fill", "#64748b")
+        .attr("transform", "rotate(-20)").style("text-anchor", "end"));
+    g.append("g")
+      .call(d3.axisLeft(y).ticks(5))
+      .call(s => s.selectAll("text").style("font-size", "10px").style("fill", "#64748b"));
+
+    for (const s of series) {
+      const points = labels.map((label, idx) => ({ label, value: s.values[idx], team: s.team, color: s.color }));
+      const line = d3.line().x(d => x(d.label)).y(d => y(d.value)).curve(d3.curveMonotoneX);
+      const path = g.append("path")
+        .datum(points)
+        .attr("fill", "none")
+        .attr("stroke", s.color)
+        .attr("stroke-width", 2)
+        .attr("d", line);
+
+      const totalLength = path.node().getTotalLength();
+      path
+        .attr("stroke-dasharray", `${totalLength} ${totalLength}`)
+        .attr("stroke-dashoffset", totalLength)
+        .transition()
+        .duration(900)
+        .ease(d3.easeCubicOut)
+        .attr("stroke-dashoffset", 0);
+
+      g.selectAll(`.pt-${s.team.replace(/[^a-zA-Z0-9]/g, "")}`)
+        .data(points)
+        .enter()
+        .append("circle")
+        .attr("cx", d => x(d.label))
+        .attr("cy", d => y(d.value))
+        .attr("r", 3)
+        .attr("fill", s.color)
+        .on("mousemove", function(event, d) {
+          showTooltip(
+            container,
+            tooltip,
+            event,
+            `<strong>${escapeHtml(d.team)}</strong><ul class="cd-tooltip-list"><li>${escapeHtml(d.label)}</li><li><strong>Tickets:</strong> ${d.value}</li></ul>`
+          );
+        })
+        .on("mouseleave", () => hideTooltip(tooltip));
+    }
+  }
+
+  function buildCustomerRaceFrames(rows) {
+    const monthSet = new Set();
+    const monthlyCustomerCounts = {};
+    for (const r of rows) {
+      const monthKey = /^\d{4}-\d{2}-\d{2}$/.test(r.created_date || "")
+        ? (r.created_date || "").slice(0, 7)
+        : "Unknown";
+      monthSet.add(monthKey);
+      const customers = (r.customers || []).length ? r.customers : ["Unspecified"];
+      if (!monthlyCustomerCounts[monthKey]) monthlyCustomerCounts[monthKey] = {};
+      customers.forEach(c => {
+        monthlyCustomerCounts[monthKey][c] = (monthlyCustomerCounts[monthKey][c] || 0) + 1;
+      });
+    }
+
+    const months = [...monthSet].sort((a, b) => a.localeCompare(b));
+    const cumulative = {};
+    const frames = [];
+    for (const month of months) {
+      const monthCounts = monthlyCustomerCounts[month] || {};
+      Object.keys(monthCounts).forEach(c => {
+        cumulative[c] = (cumulative[c] || 0) + monthCounts[c];
+      });
+      const ranked = Object.keys(cumulative)
+        .map(name => ({ name, value: cumulative[name], color: colorForCategory(name) }))
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 10);
+      const label = /^\d{4}-\d{2}$/.test(month)
+        ? new Date(`${month}-01T00:00:00`).toLocaleString([], { month: "short", year: "numeric" })
+        : month;
+      frames.push({ month, label, data: ranked });
+    }
+    return frames;
+  }
+
+  function renderCustomerRace(containerId, monthLabelId, frames) {
+    const container = document.getElementById(containerId);
+    const monthEl = document.getElementById(monthLabelId);
+    if (!container || !monthEl) return;
+    container.innerHTML = "";
+    monthEl.textContent = "";
+    if (state.raceTimer) {
+      clearInterval(state.raceTimer);
+      state.raceTimer = null;
+    }
+    if (!frames || !frames.length) {
+      container.innerHTML = `<div class="text-xs text-slate-400 h-full flex items-center justify-center">No race data</div>`;
+      return;
+    }
+
+    const width = container.clientWidth || 1000;
+    const height = container.clientHeight || 520;
+    const margin = { top: 22, right: 14, bottom: 18, left: 16 };
+    const w = width - margin.left - margin.right;
+    const h = height - margin.top - margin.bottom;
+
+    const svg = d3.select(container).append("svg")
+      .attr("viewBox", `0 0 ${width} ${height}`)
+      .attr("preserveAspectRatio", "xMidYMid meet");
+    const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+    const x = d3.scaleLinear().range([0, w]);
+    const y = d3.scaleBand().range([0, h]).padding(0.2);
+
+    const barsG = g.append("g");
+    const labelsG = g.append("g");
+    const valuesG = g.append("g");
+    const axisG = g.append("g").attr("transform", `translate(0,0)`);
+
+    function draw(frame) {
+      const data = frame.data;
+      monthEl.textContent = frame.label;
+      x.domain([0, d3.max(data, d => d.value) || 1]).nice();
+      y.domain(data.map(d => d.name));
+
+      axisG.transition().duration(700).call(d3.axisTop(x).ticks(6))
+        .call(s => s.selectAll("text").style("font-size", "10px").style("fill", "#64748b"));
+      axisG.call(s => s.select(".domain").attr("stroke", "#cbd5e1"));
+      axisG.call(s => s.selectAll(".tick line").attr("stroke", "#e2e8f0").attr("y2", h));
+
+      const bars = barsG.selectAll("rect").data(data, d => d.name);
+      bars.enter().append("rect")
+        .attr("x", 0.5)
+        .attr("y", d => y(d.name))
+        .attr("height", y.bandwidth())
+        .attr("width", 0)
+        .attr("fill", d => d.color)
+        .merge(bars)
+        .transition().duration(700)
+        .attr("y", d => y(d.name))
+        .attr("height", y.bandwidth())
+        .attr("width", d => x(d.value));
+      bars.exit().remove();
+
+      const names = labelsG.selectAll("text").data(data, d => d.name);
+      names.enter().append("text")
+        .attr("x", d => Math.max(8, x(d.value) - 6))
+        .attr("y", d => y(d.name) + y.bandwidth() / 2 - 6)
+        .attr("text-anchor", "end").attr("dominant-baseline", "middle")
+        .style("font-size", "12px").style("font-weight", "700").style("fill", "#111827")
+        .text(d => d.name)
+        .merge(names)
+        .transition().duration(700)
+        .attr("x", d => Math.max(8, x(d.value) - 6))
+        .attr("y", d => y(d.name) + y.bandwidth() / 2 - 6)
+        .text(d => d.name);
+      names.exit().remove();
+
+      const vals = valuesG.selectAll("text").data(data, d => d.name);
+      vals.enter().append("text")
+        .attr("x", d => Math.max(8, x(d.value) - 6)).attr("y", d => y(d.name) + y.bandwidth() / 2 + 9)
+        .attr("dominant-baseline", "middle")
+        .attr("text-anchor", "end")
+        .style("font-size", "11px").style("fill", "#334155")
+        .text(d => d.value)
+        .merge(vals)
+        .transition().duration(700)
+        .attr("x", d => Math.max(8, x(d.value) - 6))
+        .attr("y", d => y(d.name) + y.bandwidth() / 2 + 9)
+        .text(d => d.value);
+      vals.exit().remove();
+    }
+
+    let idx = 0;
+    draw(frames[idx]);
+    if (frames.length > 1) {
+      state.raceTimer = setInterval(() => {
+        idx += 1;
+        if (idx >= frames.length) {
+          clearInterval(state.raceTimer);
+          state.raceTimer = null;
+          return;
+        }
+        draw(frames[idx]);
+      }, 1300);
+    }
+  }
+
+  function escapeHtml(v) {
+    return String(v == null ? "" : v)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function filteredRows() {
+    const selectedCustomer = (document.getElementById("cd-customer").value || "").trim().toLowerCase();
+    if (!selectedCustomer) return [...state.rows];
+    return state.rows.filter(r => (r.customers || []).some(c => String(c).toLowerCase() === selectedCustomer));
+  }
+
+  function buildStats(rows) {
+    const timelineMap = {};
+    const priorityCounts = {};
+    const statusCounts = {};
+    const customerCounts = {};
+    const teamCounts = {};
+    let high = 0;
+    let launchBlockers = 0;
+    for (const r of rows) {
+      if (r.launch_blocker) launchBlockers += 1;
+      const p = (r.priority || "").toLowerCase();
+      if (["highest", "high", "critical", "blocker", "p0", "p1", "sev1", "sev-1"].some(tok => p.includes(tok))) high += 1;
+      const monthKey = /^\d{4}-\d{2}-\d{2}$/.test(r.created_date || "")
+        ? (r.created_date || "").slice(0, 7)
+        : "Unknown";
+      if (!timelineMap[monthKey]) timelineMap[monthKey] = { count: 0, customers: new Set() };
+      timelineMap[monthKey].count += 1;
+      const rowCustomers = (r.customers || []).length ? r.customers : ["Unspecified"];
+      rowCustomers.forEach(c => timelineMap[monthKey].customers.add(c));
+      priorityCounts[r.priority || "Unspecified"] = (priorityCounts[r.priority || "Unspecified"] || 0) + 1;
+      statusCounts[r.status || "Unknown"] = (statusCounts[r.status || "Unknown"] || 0) + 1;
+      const customers = (r.customers || []).length ? r.customers : ["Unspecified"];
+      for (const c of customers) {
+        customerCounts[c] = (customerCounts[c] || 0) + 1;
+      }
+      const teamName = (r.team_name || "Unspecified").trim() || "Unspecified";
+      teamCounts[teamName] = (teamCounts[teamName] || 0) + 1;
+    }
+    const timeline = Object.keys(timelineMap)
+      .sort((a, b) => a.localeCompare(b))
+      .map(k => {
+        let label = k;
+        if (/^\d{4}-\d{2}$/.test(k)) {
+          const dt = new Date(`${k}-01T00:00:00`);
+          label = dt.toLocaleString([], { month: "short", year: "numeric" });
+        }
+        return { key: k, label, count: timelineMap[k].count, customers: [...timelineMap[k].customers].sort() };
+      });
+
+    return { timeline, priorityCounts, statusCounts, customerCounts, teamCounts, high, launchBlockers };
+  }
+
+  function updateTable(rows) {
+    const body = document.getElementById("cd-table-body");
+    const info = document.getElementById("cd-pagination-info");
+    const total = rows.length;
+    state.totalPages = total ? Math.ceil(total / state.perPage) : 0;
+    if (state.page > state.totalPages && state.totalPages > 0) state.page = state.totalPages;
+    const start = (state.page - 1) * state.perPage;
+    const pageRows = rows.slice(start, start + state.perPage);
+    info.textContent = `${total} results`;
+
+    if (!pageRows.length) {
+      body.innerHTML = `<tr><td colspan="8" class="py-6 px-2 text-center text-slate-400">No issues found for current filters.</td></tr>`;
+    } else {
+      body.innerHTML = pageRows.map(r => `
+        <tr class="border-b border-slate-200">
+          <td class="py-2 px-2"><a class="text-blue-400 hover:underline" target="_blank" href="${window.JIRA_DOMAIN}/browse/${r.issue_key}">${r.issue_key}</a></td>
+          <td class="py-2 px-2">${escapeHtml(r.summary || "")}</td>
+          <td class="py-2 px-2">${escapeHtml(r.priority || "")}</td>
+          <td class="py-2 px-2">${escapeHtml(r.status || "")}</td>
+          <td class="py-2 px-2">${(r.customers || []).map(c => `<span class="cd-pill mr-1 mb-1">${escapeHtml(c)}</span>`).join("")}</td>
+          <td class="py-2 px-2">${r.launch_blocker ? `<span class="cd-pill lb">Yes</span>` : `<span class="cd-pill">No</span>`}</td>
+          <td class="py-2 px-2">${escapeHtml(r.created_date || "")}</td>
+          <td class="py-2 px-2">${escapeHtml(r.assignee_name || "Unassigned")}</td>
+        </tr>
+      `).join("");
+    }
+
+    const prev = document.getElementById("cd-prev");
+    const next = document.getElementById("cd-next");
+    prev.disabled = state.page <= 1;
+    next.disabled = state.page >= state.totalPages || total === 0;
+  }
+
+  function updateDashboard() {
+    const rows = filteredRows();
+    const stats = buildStats(rows);
+    const selectedCustomer = document.getElementById("cd-customer").value || "All Customers";
+    document.getElementById("kpi-total").textContent = rows.length;
+    document.getElementById("kpi-high").textContent = stats.high;
+    document.getElementById("kpi-lb").textContent = stats.launchBlockers;
+    const lbRatio = rows.length ? Math.round((stats.launchBlockers / rows.length) * 100) : 0;
+    document.getElementById("kpi-lb-ratio").textContent = `${lbRatio}%`;
+    document.getElementById("kpi-lb-bar").style.width = `${lbRatio}%`;
+    document.getElementById("kpi-customer").textContent = selectedCustomer || "All Customers";
+
+    renderLineChart(
+      "cd-timeline",
+      stats.timeline.map(t => t.label),
+      stats.timeline.map(t => t.count),
+      "#2563eb",
+      stats.timeline.map(t => ({ label: t.label, customers: t.customers }))
+    );
+    const pri = Object.keys(stats.priorityCounts).sort((a, b) => stats.priorityCounts[b] - stats.priorityCounts[a]);
+    renderBarChart("cd-priority", pri, pri.map(k => stats.priorityCounts[k]), "#7c3aed");
+    const st = Object.keys(stats.statusCounts).sort((a, b) => stats.statusCounts[b] - stats.statusCounts[a]);
+    renderBarChart("cd-status-chart", st, st.map(k => stats.statusCounts[k]), "#0ea5e9");
+    renderBarChart("cd-lb-split-chart", ["Launch Blocker", "Non-Blocker"], [stats.launchBlockers, Math.max(0, rows.length - stats.launchBlockers)], "#ef4444");
+    const teamTrend = buildTeamTrend(rows);
+    renderTeamTrendChart("cd-team-dist-chart", "cd-team-dist-legend", teamTrend);
+
+    const isAllCustomersView = !document.getElementById("cd-customer").value;
+    const customerDistCard = document.getElementById("cd-customer-dist-card");
+    const customerRaceCard = document.getElementById("cd-customer-race-card");
+    if (isAllCustomersView) {
+      const customerKeys = Object.keys(stats.customerCounts)
+        .sort((a, b) => stats.customerCounts[b] - stats.customerCounts[a])
+        .slice(0, 12);
+      renderBarChart("cd-customer-dist-chart", customerKeys, customerKeys.map(k => stats.customerCounts[k]), "#2563eb", true);
+      customerDistCard.classList.remove("cd-hidden");
+      const raceFrames = buildCustomerRaceFrames(rows);
+      renderCustomerRace("cd-customer-race-chart", "cd-customer-race-month", raceFrames);
+      customerRaceCard.classList.remove("cd-hidden");
+    } else {
+      customerDistCard.classList.add("cd-hidden");
+      document.getElementById("cd-customer-dist-chart").innerHTML = "";
+      customerRaceCard.classList.add("cd-hidden");
+      document.getElementById("cd-customer-race-chart").innerHTML = "";
+      document.getElementById("cd-customer-race-month").textContent = "";
+      if (state.raceTimer) {
+        clearInterval(state.raceTimer);
+        state.raceTimer = null;
+      }
+    }
+
+    updateTable(rows);
+  }
+
+  function fillCustomerDropdown(customers) {
+    const sel = document.getElementById("cd-customer");
+    const previous = localStorage.getItem(LS_KEYS.customer) || "";
+    sel.innerHTML = '<option value="">All Customers</option>';
+    customers.forEach(c => {
+      const op = document.createElement("option");
+      op.value = c;
+      op.textContent = c;
+      sel.appendChild(op);
+    });
+    if (previous && customers.includes(previous)) sel.value = previous;
+    sel.disabled = false;
+  }
+
+  function openJqlDialog() {
+    const modal = document.getElementById("cd-jql-modal");
+    const input = document.getElementById("cd-jql-input");
+    input.value = state.currentJql || `project = "{{ project }}" AND created >= -30d ORDER BY created DESC`;
+    modal.classList.add("open");
+    setTimeout(() => input.focus(), 0);
+  }
+
+  function closeJqlDialog() {
+    document.getElementById("cd-jql-modal").classList.remove("open");
+  }
+
+  function openSettingsDialog() {
+    const modal = document.getElementById("cd-settings-modal");
+    const stored = getStoredSettings();
+    document.getElementById("cd-setting-email").value = stored.email;
+    document.getElementById("cd-setting-token").value = stored.token;
+    modal.classList.add("open");
+  }
+
+  function closeSettingsDialog() {
+    document.getElementById("cd-settings-modal").classList.remove("open");
+  }
+
+  async function fetchByJql(jql) {
+    const status = document.getElementById("cd-status");
+    const finalJql = (jql || "").trim();
+    const stored = getStoredSettings();
+    if (!finalJql) {
+      status.textContent = "Please enter JQL first.";
+      status.classList.add("text-red-400");
+      return;
+    }
+    if (!stored.email || !stored.token) {
+      status.textContent = "Add Jira email and API token in settings.";
+      status.classList.add("text-red-400");
+      openSettingsDialog();
+      return;
+    }
+    state.currentJql = finalJql;
+    saveStoredSettings({ jql: finalJql });
+    status.textContent = "Loading...";
+    status.classList.remove("text-red-400");
+    try {
+      const res = await fetch("/api/customer_dashboard/data", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Jira-Email": stored.email,
+          "X-Jira-Token": stored.token,
+        },
+        body: JSON.stringify({ jql: finalJql })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to load dashboard");
+      state.rows = data.rows || [];
+      state.page = 1;
+      fillCustomerDropdown(data.customers || []);
+      document.getElementById("cd-fetched-count").textContent = `Fetched: ${state.rows.length} tickets`;
+      updateDashboard();
+      setDashboardReady(state.rows.length > 0);
+      document.getElementById("cd-open-builder-icon").textContent = "✎";
+      status.textContent = "";
+      closeJqlDialog();
+    } catch (e) {
+      status.textContent = e.message;
+      status.classList.add("text-red-400");
+    }
+  }
+
+  function wireEvents() {
+    document.getElementById("cd-customer").addEventListener("change", () => {
+      saveStoredSettings({ customer: document.getElementById("cd-customer").value || "" });
+      state.page = 1;
+      updateDashboard();
+    });
+    document.getElementById("cd-prev").addEventListener("click", () => { if (state.page > 1) { state.page -= 1; updateDashboard(); } });
+    document.getElementById("cd-next").addEventListener("click", () => { if (state.page < state.totalPages) { state.page += 1; updateDashboard(); } });
+    document.getElementById("cd-open-builder").addEventListener("click", openJqlDialog);
+    document.getElementById("cd-open-settings").addEventListener("click", openSettingsDialog);
+    document.getElementById("cd-jql-cancel").addEventListener("click", closeJqlDialog);
+    document.getElementById("cd-jql-apply").addEventListener("click", () => fetchByJql(document.getElementById("cd-jql-input").value));
+    document.getElementById("cd-jql-modal").addEventListener("click", (e) => {
+      if (e.target.id === "cd-jql-modal") closeJqlDialog();
+    });
+    document.getElementById("cd-settings-cancel").addEventListener("click", closeSettingsDialog);
+    document.getElementById("cd-settings-save").addEventListener("click", () => {
+      const email = (document.getElementById("cd-setting-email").value || "").trim();
+      const token = (document.getElementById("cd-setting-token").value || "").trim();
+      saveStoredSettings({ email, token });
+      closeSettingsDialog();
+      const status = document.getElementById("cd-status");
+      status.textContent = "Settings saved locally.";
+      status.classList.remove("text-red-400");
+    });
+    document.getElementById("cd-settings-modal").addEventListener("click", (e) => {
+      if (e.target.id === "cd-settings-modal") closeSettingsDialog();
+    });
+  }
+
+  function setDashboardReady(hasData) {
+    state.hasData = !!hasData;
+    document.getElementById("cd-empty-state").style.display = state.hasData ? "none" : "block";
+  }
+
+  async function init() {
+    wireEvents();
+    const stored = getStoredSettings();
+    state.currentJql = stored.jql || `project = "{{ project }}" AND created >= -30d ORDER BY created DESC`;
+    setDashboardReady(false);
+    document.getElementById("cd-open-builder-icon").textContent = "+";
+    if (stored.jql && stored.email && stored.token) {
+      fetchByJql(stored.jql);
+    }
+  }
+
+  init();
+})();
+</script>
+{% endblock %}

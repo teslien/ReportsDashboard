@@ -41,7 +41,9 @@
 </head>
 <body class="bg-gray-900 min-h-screen text-white font-sans {% block body_class %}{% endblock %}">
     <!-- Navigation -->
+    {% if show_navbar is not defined or show_navbar %}
     {% include 'navbar.html' %}
+    {% endif %}
 
     <!-- Main Content -->
     <main class="{% block main_class %}pt-24 pb-12 px-6 max-w-7xl mx-auto{% endblock %}">

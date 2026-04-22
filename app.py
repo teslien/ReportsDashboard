@@ -37,6 +37,8 @@ import time
 # =========================
 JIRA_CACHE = {}
 CACHE_TTL = 300 # 5 minutes default
+CUSTOMER_CACHE = {"expires_at": 0, "values": []}
+CUSTOMER_CACHE_TTL = 1800  # 30 minutes
 
 def get_jira_cached(url, headers, params, ttl=CACHE_TTL, force_refresh=False):
     """
@@ -397,16 +399,19 @@ def init_db():
                 perms['allowed_pages'] = ['dashboard']
                 cursor.execute("UPDATE roles SET permissions = %s WHERE name = 'Viewer'", (json.dumps(perms),))
 
-        # Ensure Editor role has access to sprint_tracker by default. If the role has
+        # Ensure Editor role has access to key pages by default. If the role has
         # an explicit allowed_pages list (added later via the admin UI), make sure
-        # sprint_tracker is included so existing Editors aren't locked out of the page.
+        # these pages are included so existing Editors aren't locked out.
         cursor.execute("SELECT permissions FROM roles WHERE name = 'Editor'")
         row = cursor.fetchone()
         if row:
             perms = json.loads(row[0]) if row[0] else {}
             allowed = perms.get('allowed_pages')
-            if isinstance(allowed, list) and 'sprint_tracker' not in allowed:
-                allowed.append('sprint_tracker')
+            default_editor_pages = ['sprint_tracker', 'customer_dashboard']
+            if isinstance(allowed, list):
+                for page in default_editor_pages:
+                    if page not in allowed:
+                        allowed.append(page)
                 perms['allowed_pages'] = allowed
                 cursor.execute("UPDATE roles SET permissions = %s WHERE name = 'Editor'", (json.dumps(perms),))
 
@@ -1020,6 +1025,7 @@ def update_user_role(user_id):
 PAGE_PERMISSIONS = [
     {"key": "dashboard", "label": "Dashboard"},
     {"key": "scoreboard", "label": "Scoreboard"},
+    {"key": "customer_dashboard", "label": "Customer Dashboard"},
     {"key": "explorer", "label": "Explorer"},
     {"key": "custom_reports", "label": "Custom Reports"},
     {"key": "scrum_notes", "label": "Scrum Notes"},
@@ -1228,21 +1234,32 @@ def jira_search():
 @app.route("/api/customers", methods=["GET"])
 def customers():
     query = request.args.get('q') or request.args.get('term')
+    now_ts = time.time()
+    q = (query or "").strip().lower()
+
+    def build_results(values):
+        out = []
+        for c in sorted(values):
+            if not q or q in c.lower():
+                out.append({"id": c, "name": c})
+        return out
+
+    # Serve cached "all customers" for fast dropdown load.
+    if CUSTOMER_CACHE["values"] and CUSTOMER_CACHE["expires_at"] > now_ts:
+        return jsonify(build_results(CUSTOMER_CACHE["values"]))
+
     unique_customers = set()
-    
-    # Explicitly cast LocalProxy objects
     headers_dict = dict(HEADERS)
-    
-    # If a query is provided, search specifically for matching customers
-    if query:
-        jql = f'"Customer" ~ "{query}*"'
-        # We only need to scan a few issues to find the variations
+
+    # For free-text search without cache, do a focused Jira query.
+    if q:
+        jql = f'"Customer" ~ "{q}*"'
         scan_range = [0, 100]
     else:
         jql = 'Customer is not EMPTY'
-        # Broaden scan to find more unique clients - huge scan (1500 issues)
+        # First-time warmup: scan enough pages once, then cache.
         scan_range = range(0, 1500, 100)
-    
+
     for start_at in scan_range:
         jira_res = requests.get(
             f"{JIRA_DOMAIN}/rest/api/3/search/jql",
@@ -1254,37 +1271,38 @@ def customers():
                 "fields": "customfield_10077"
             }
         )
-        
+
         if jira_res.status_code != 200:
             break
-            
+
         res = jira_res.json()
         issues = res.get("issues", [])
         if not issues:
             break
-            
+
         for i in issues:
             cust_val = i["fields"].get("customfield_10077")
             if isinstance(cust_val, list):
                 for c in cust_val:
                     if isinstance(c, dict):
                         val = c.get("value")
-                        if val: unique_customers.add(val)
+                        if val:
+                            unique_customers.add(str(val).strip())
                     elif c:
-                        unique_customers.add(c)
+                        unique_customers.add(str(c).strip())
             elif isinstance(cust_val, dict):
                 val = cust_val.get("value")
-                if val: unique_customers.add(val)
+                if val:
+                    unique_customers.add(str(val).strip())
             elif cust_val:
-                unique_customers.add(cust_val)
-                
-    # Filter results by query locally as well for double safety
-    results = []
-    for c in sorted(list(unique_customers)):
-        if not query or query.lower() in c.lower():
-            results.append({"id": c, "name": c})
-            
-    return jsonify(results)
+                unique_customers.add(str(cust_val).strip())
+
+    # Cache only full-list refreshes (no query).
+    if not q and unique_customers:
+        CUSTOMER_CACHE["values"] = sorted(unique_customers)
+        CUSTOMER_CACHE["expires_at"] = now_ts + CUSTOMER_CACHE_TTL
+
+    return jsonify(build_results(unique_customers))
 
 # =========================
 # JQL SEARCH PROXY
@@ -1311,6 +1329,136 @@ def search():
 @page_permission_required("scoreboard")
 def scoreboard():
     return render_template("scoreboard.html", project=PROJECT_KEY)
+
+@app.route("/customer_dashboard")
+def customer_dashboard_page():
+    return render_template("customer_dashboard.html", project=PROJECT_KEY, show_navbar=False)
+
+def _extract_customer_values(raw_value):
+    customers = []
+    if isinstance(raw_value, list):
+        for item in raw_value:
+            if isinstance(item, dict):
+                val = (item.get("value") or "").strip()
+                if val:
+                    customers.append(val)
+            elif item:
+                customers.append(str(item).strip())
+    elif isinstance(raw_value, dict):
+        val = (raw_value.get("value") or "").strip()
+        if val:
+            customers.append(val)
+    elif raw_value:
+        customers.append(str(raw_value).strip())
+    # Keep stable order but remove duplicates
+    deduped = []
+    seen = set()
+    for c in customers:
+        k = c.lower()
+        if k in seen:
+            continue
+        seen.add(k)
+        deduped.append(c)
+    return deduped
+
+def _is_launch_blocker(labels):
+    normalized = [str(l).strip().lower().replace("-", "_").replace(" ", "_") for l in (labels or [])]
+    strong_matches = {"launch_blocker", "launchblocker", "lb", "launch_blocked"}
+    if any(v in strong_matches for v in normalized):
+        return True
+    return any(("launch" in v and "block" in v) for v in normalized)
+
+def _is_high_priority(priority_name):
+    p = (priority_name or "").strip().lower()
+    if not p:
+        return False
+    high_tokens = ("highest", "high", "critical", "blocker", "p0", "p1", "sev1", "sev-1")
+    return any(tok in p for tok in high_tokens)
+
+def _escape_jql_value(value):
+    return str(value or "").replace("\\", "\\\\").replace('"', '\\"')
+
+@app.route("/api/customer_dashboard/data", methods=["POST"])
+def customer_dashboard_data():
+    payload = request.get_json(silent=True) or {}
+    jql = (payload.get("jql") or "").strip()
+    if not jql:
+        return jsonify({"error": "JQL is required"}), 400
+
+    project_key_str = str(PROJECT_KEY).strip()
+    if not project_key_str:
+        return jsonify({"error": "Missing project key. Save it in Settings first."}), 400
+    if "Authorization" not in dict(HEADERS):
+        return jsonify({"error": "Missing Jira credentials. Save them in Settings first."}), 401
+
+    # customfield_10001 is commonly the Team field (team[team]) in Jira.
+    fields = "summary,status,priority,created,labels,customfield_10077,customfield_10001,assignee"
+
+    all_issues = []
+    headers_dict = dict(HEADERS)
+    for start_at in range(0, 5000, 100):
+        jira_res = requests.get(
+            f"{JIRA_DOMAIN}/rest/api/3/search/jql",
+            headers=headers_dict,
+            params={"jql": jql, "maxResults": 100, "startAt": start_at, "fields": fields}
+        )
+        if jira_res.status_code != 200:
+            return jsonify({"error": f"Jira API error: {jira_res.text}"}), jira_res.status_code
+        data = jira_res.json()
+        issues = data.get("issues", [])
+        if not issues:
+            break
+        all_issues.extend(issues)
+        if len(issues) < 100:
+            break
+
+    rows = []
+    unique_customers = set()
+
+    for issue in all_issues:
+        fields_obj = issue.get("fields") or {}
+        customers = _extract_customer_values(fields_obj.get("customfield_10077"))
+        for c in customers:
+            unique_customers.add(c)
+        labels = fields_obj.get("labels") or []
+        launch_blocker = _is_launch_blocker(labels)
+        priority_name = ((fields_obj.get("priority") or {}).get("name") or "Unspecified").strip()
+        status_name = ((fields_obj.get("status") or {}).get("name") or "Unknown").strip()
+        created_raw = (fields_obj.get("created") or "")[:10]
+        created_for_chart = created_raw if re.match(r"^\d{4}-\d{2}-\d{2}$", created_raw) else "Unknown"
+        assignee = fields_obj.get("assignee") or {}
+        team_raw = fields_obj.get("customfield_10001")
+        if isinstance(team_raw, dict):
+            team_name = (team_raw.get("name") or team_raw.get("value") or "").strip()
+        elif isinstance(team_raw, list) and team_raw:
+            first = team_raw[0]
+            if isinstance(first, dict):
+                team_name = (first.get("name") or first.get("value") or "").strip()
+            else:
+                team_name = str(first).strip()
+        elif team_raw:
+            team_name = str(team_raw).strip()
+        else:
+            team_name = "Unspecified"
+
+        rows.append({
+            "issue_key": issue.get("key"),
+            "summary": fields_obj.get("summary") or "",
+            "status": status_name,
+            "priority": priority_name,
+            "created_date": created_for_chart if created_for_chart != "Unknown" else "",
+            "customers": customers,
+            "launch_blocker": launch_blocker,
+            "labels": labels,
+            "assignee_name": assignee.get("displayName") or "Unassigned",
+            "team_name": team_name or "Unspecified"
+        })
+
+    return jsonify({
+        "rows": rows,
+        "customers": sorted(unique_customers),
+        "count": len(rows)
+    })
 
 # =========================
 # FETCH SCOREBOARD DATA
