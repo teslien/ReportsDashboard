@@ -397,6 +397,19 @@ def init_db():
                 perms['allowed_pages'] = ['dashboard']
                 cursor.execute("UPDATE roles SET permissions = %s WHERE name = 'Viewer'", (json.dumps(perms),))
 
+        # Ensure Editor role has access to sprint_tracker by default. If the role has
+        # an explicit allowed_pages list (added later via the admin UI), make sure
+        # sprint_tracker is included so existing Editors aren't locked out of the page.
+        cursor.execute("SELECT permissions FROM roles WHERE name = 'Editor'")
+        row = cursor.fetchone()
+        if row:
+            perms = json.loads(row[0]) if row[0] else {}
+            allowed = perms.get('allowed_pages')
+            if isinstance(allowed, list) and 'sprint_tracker' not in allowed:
+                allowed.append('sprint_tracker')
+                perms['allowed_pages'] = allowed
+                cursor.execute("UPDATE roles SET permissions = %s WHERE name = 'Editor'", (json.dumps(perms),))
+
     # Trackers Table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS trackers (

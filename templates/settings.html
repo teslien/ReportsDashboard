@@ -114,6 +114,46 @@
                 </div>
             </div>
         </div>
+
+        <!-- Anthropic API Key (Admin Only) -->
+        <div class="max-w-2xl mx-auto bg-gray-800 rounded-lg shadow-xl p-6 border border-gray-700 mt-8">
+            <h2 class="text-xl font-bold text-white mb-4 flex items-center">
+                <i class="fas fa-robot mr-2 text-purple-400"></i>
+                Anthropic API Key
+            </h2>
+            <p class="text-xs text-gray-400 mb-6">Used to power Claude-based features such as Sprint Tracker theme generation and description rewrites.</p>
+
+            <div class="space-y-6">
+                <div>
+                    <label class="block text-sm font-medium text-gray-400 mb-2">API Key</label>
+                    <div class="relative">
+                        <input type="password" id="anthropic_api_key"
+                            class="w-full bg-gray-700 border border-gray-600 rounded-md px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            placeholder="sk-ant-...">
+                        <button type="button" onclick="toggleVisibility('anthropic_api_key')"
+                            class="absolute right-3 top-2.5 text-gray-400 hover:text-white">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                        </button>
+                    </div>
+                    <p class="mt-1 text-xs text-gray-500">Create a key at <a
+                            href="https://console.anthropic.com/settings/keys" target="_blank"
+                            class="text-purple-400 hover:underline">console.anthropic.com</a>.</p>
+                </div>
+
+                <div class="pt-2 flex justify-end">
+                    <button id="saveAnthropicBtn" onclick="saveAnthropicKey()"
+                        class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-6 rounded-md transition-colors flex items-center">
+                        <i class="fas fa-save mr-2"></i>
+                        Save API Key
+                    </button>
+                </div>
+            </div>
+        </div>
         {% endif %}
 
         <!-- To-Do Tags Configuration -->
@@ -222,12 +262,15 @@
             loadTodoTags();
 
             // Load App Config (Admin Only)
-            if (document.getElementById('header_title')) {
+            if (document.getElementById('header_title') || document.getElementById('anthropic_api_key')) {
                 try {
                     const appRes = await fetch('/api/settings/app_config');
                     if (appRes.ok) {
                         const appData = await appRes.json();
-                        document.getElementById('header_title').value = appData.header_title || 'Jira Analytics';
+                        const headerEl = document.getElementById('header_title');
+                        if (headerEl) headerEl.value = appData.header_title || 'Jira Analytics';
+                        const anthropicEl = document.getElementById('anthropic_api_key');
+                        if (anthropicEl) anthropicEl.value = appData.anthropic_api_key || '';
                     }
                 } catch (err) {
                     console.error("Failed to load app config:", err);
@@ -398,6 +441,40 @@
                 input.type = 'text';
             } else {
                 input.type = 'password';
+            }
+        }
+
+        async function saveAnthropicKey() {
+            const keyInput = document.getElementById('anthropic_api_key');
+            const btn = document.getElementById('saveAnthropicBtn');
+            if (!keyInput || !btn) return;
+            const originalHTML = btn.innerHTML;
+            const value = keyInput.value.trim();
+
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-circle-notch fa-spin mr-2"></i> Saving...';
+
+            try {
+                const res = await fetch('/api/settings/app_config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ anthropic_api_key: value })
+                });
+
+                if (res.ok) {
+                    btn.innerHTML = '<i class="fas fa-check mr-2"></i> Saved';
+                    setTimeout(() => { btn.innerHTML = originalHTML; }, 1500);
+                } else {
+                    const data = await res.json().catch(() => ({}));
+                    alert('Error: ' + (data.error || 'Failed to save API key'));
+                    btn.innerHTML = originalHTML;
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Connection error');
+                btn.innerHTML = originalHTML;
+            } finally {
+                btn.disabled = false;
             }
         }
 

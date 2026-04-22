@@ -64,8 +64,6 @@
   .st-shell .legend-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 6px; }
   .st-shell .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid #c7d2fe; border-top-color: white; border-radius: 50%; animation: st-spin 0.6s linear infinite; }
   @keyframes st-spin { to { transform: rotate(360deg); } }
-  .st-shell .api-key-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
-  .st-shell .api-key-input { border: 1px solid #e2e8f0; border-radius: 6px; padding: 4px 8px; font-size: 12px; width: 260px; background: #fff; color: #1e293b; }
   .st-shell .saved-badge { font-size: 11px; color: #94a3b8; margin-left: 6px; }
   .st-shell .theme-sentence { font-size: 13px; font-weight: 500; color: #1e293b; line-height: 1.4; }
   .st-shell .bullet-list { list-style: none; padding: 0; margin: 0; }
@@ -328,11 +326,10 @@
         </div>
         <div class="flex items-center gap-3">
           <span id="st-saved" class="saved-badge"></span>
-          <div class="api-key-row">
-            <label class="text-slate-500 font-medium">Anthropic Key</label>
-            <input id="st-api-key" class="api-key-input" type="password" placeholder="sk-ant-…" />
-            <button id="st-save-key" class="btn-ghost">Save</button>
-          </div>
+          <a href="/settings" class="btn-ghost" title="Manage Anthropic API key in Settings" style="text-decoration:none;">
+            <span style="font-size:11px;color:#64748b;">Anthropic key</span>
+            <span id="st-api-key-status" style="font-size:11px;font-weight:600;color:#94a3b8;">Not set</span>
+          </a>
         </div>
       </div>
 
@@ -354,12 +351,20 @@
       <div id="st-tab-body"></div>
     `;
 
-    document.getElementById("st-api-key").value = anthropicKey || "";
+    const keyStatusEl = document.getElementById("st-api-key-status");
+    if (keyStatusEl) {
+      if (anthropicKey) {
+        keyStatusEl.textContent = "Configured";
+        keyStatusEl.style.color = "#16a34a";
+      } else {
+        keyStatusEl.textContent = "Not set";
+        keyStatusEl.style.color = "#dc2626";
+      }
+    }
     document.querySelectorAll(".tab-btn").forEach(b => b.onclick = () => { activeSprintId = parseInt(b.dataset.sid, 10); renderTab(); });
     document.getElementById("st-new-tab").onclick = promptNewSprint;
     document.getElementById("st-new-jql-tab").onclick = promptNewSprintFromJql;
     document.getElementById("st-delete-sprint").onclick = onDeleteSprint;
-    document.getElementById("st-save-key").onclick = onSaveAnthropicKey;
     document.getElementById("st-legend-toggle").onclick = () => {
       const el = document.getElementById("st-legend");
       const tog = document.getElementById("st-legend-toggle");
@@ -477,11 +482,6 @@
       el.addEventListener("click", () => onDeleteNote(parseInt(el.dataset.themeid, 10)));
     });
 
-    // Rewrite ticket buttons
-    body.querySelectorAll(".st-rewrite-ticket").forEach(el => {
-      el.addEventListener("click", () => onRewriteTicket(parseInt(el.dataset.tid, 10)));
-    });
-
     // Tab actions
     document.getElementById("st-rewrite").onchange = (e) => { rewriteOnSync = e.target.checked; };
 
@@ -582,8 +582,6 @@
         ${dot}
         <span title="${esc(t.summary)}">${esc(t.ticket_key)}</span>
       </a>
-      <button class="st-rewrite-ticket" data-tid="${t.id}" title="Rewrite description (Claude)"
-        style="border:none;background:transparent;color:#94a3b8;cursor:pointer;font-size:10px;">✨</button>
     </span>`;
   }
 
@@ -865,15 +863,15 @@
     if (anthropicKey) return anthropicKey;
     const result = await showDialog({
       title: "Anthropic API Key Required",
-      message: message || "Enter your key to continue.",
-      confirmText: "Save Key",
-      fields: [{ name: "api_key", label: "Anthropic API Key", placeholder: "sk-ant-...", type: "password" }],
+      message: (message ? message + " " : "") + "The key is managed in Settings. Ask an admin to add it under Settings → Anthropic API Key.",
+      confirmText: "Open Settings",
+      cancelText: "Close",
+      fields: [],
     });
-    const k = (result.values.api_key || "").trim();
-    if (!result.confirmed || !k) return "";
-    anthropicKey = k;
-    await onSaveAnthropicKey(true);
-    return anthropicKey;
+    if (result.confirmed) {
+      window.location.href = "/settings";
+    }
+    return "";
   }
 
   async function promptCreateRowFromTickets() {
@@ -1039,18 +1037,6 @@
       btn.disabled = false;
       btn.innerHTML = '<span>⟳</span> Sync from Jira';
     }
-  }
-
-  async function onSaveAnthropicKey(silent) {
-    const input = document.getElementById("st-api-key");
-    const val = (input ? input.value : anthropicKey || "").trim();
-    anthropicKey = val;
-    try {
-      await api(`/api/settings/app_config`, {
-        method: "POST", body: JSON.stringify({ anthropic_api_key: val })
-      });
-      if (!silent) flashOk("Key saved");
-    } catch(e) { flashError(e.message); }
   }
 
   async function loadAnthropicKey() {
