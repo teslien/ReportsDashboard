@@ -47,6 +47,8 @@
   .cd-legend { display: flex; flex-wrap: wrap; gap: 8px 12px; margin-bottom: 8px; }
   .cd-legend-item { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: #475569; }
   .cd-legend-swatch { width: 10px; height: 10px; border-radius: 3px; border: 1px solid rgba(15, 23, 42, 0.15); }
+  .cd-team-cell { display: inline-flex; align-items: center; gap: 6px; }
+  .cd-team-dot { width: 10px; height: 10px; border-radius: 50%; border: 1px solid rgba(15, 23, 42, 0.2); display: inline-block; }
   .cd-icon-btn { width: 34px; height: 34px; border-radius: 999px; border: 1px solid #cbd5e1; background: #fff; color: #475569; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: all .15s; }
   .cd-icon-btn:hover { background: #f1f5f9; color: #0f172a; }
   .cd-empty { border: 1px dashed #cbd5e1; border-radius: 12px; padding: 22px; background: #ffffff; text-align: center; color: #64748b; }
@@ -67,6 +69,8 @@
   .cd-loader-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 10px 14px; box-shadow: 0 8px 24px rgba(15,23,42,.22); display: inline-flex; align-items: center; gap: 8px; color: #334155; font-size: 12px; }
   .cd-loader-spin { width: 14px; height: 14px; border: 2px solid #c7d2fe; border-top-color: #4f46e5; border-radius: 50%; animation: cd-spin .75s linear infinite; }
   @keyframes cd-spin { to { transform: rotate(360deg); } }
+  .cd-pack-label { font-size: 12px; fill: #334155; text-anchor: middle; pointer-events: none; font-weight: 600; }
+  .cd-pack-value { font-size: 10px; fill: #64748b; text-anchor: middle; pointer-events: none; }
 </style>
 {% endblock %}
 
@@ -142,11 +146,6 @@
       <div id="cd-status-legend" class="cd-legend"></div>
       <div id="cd-status-chart" class="cd-chart" style="height:270px;"></div>
     </div>
-    <div id="cd-customer-dist-card" class="cd-card p-4 xl:col-span-2 cd-hidden">
-      <h3 class="text-sm font-semibold text-slate-700 mb-3">Customer-wise Tickets (Top 12)</h3>
-      <div id="cd-customer-dist-legend" class="cd-legend"></div>
-      <div id="cd-customer-dist-chart" class="cd-chart" style="height:500px;"></div>
-    </div>
     <div id="cd-customer-race-card" class="cd-card p-4 xl:col-span-2 cd-hidden">
       <div class="flex items-center justify-between mb-2">
         <h3 class="text-sm font-semibold text-slate-700">Customer Timeline Race (Cumulative)</h3>
@@ -167,6 +166,12 @@
   </div>
 
   <div class="cd-card p-4">
+    <h3 class="text-sm font-semibold text-slate-700 mb-3">Team Ticket Bubbles</h3>
+    <div id="cd-team-pack-legend" class="cd-legend mb-2"></div>
+    <div id="cd-team-pack-chart" class="cd-chart" style="height:520px;"></div>
+  </div>
+
+  <div class="cd-card p-4">
     <div class="flex items-center justify-between mb-3">
       <h3 class="text-sm font-semibold text-slate-700">Customer Tickets</h3>
       <div class="text-xs text-slate-500" id="cd-pagination-info">0 results</div>
@@ -180,13 +185,14 @@
             <th class="py-2 px-2 text-left">Priority</th>
             <th class="py-2 px-2 text-left">Status</th>
             <th class="py-2 px-2 text-left">Customers</th>
+            <th class="py-2 px-2 text-left">Team</th>
             <th class="py-2 px-2 text-left">Launch Blocker</th>
             <th class="py-2 px-2 text-left">Created</th>
             <th class="py-2 px-2 text-left">Assignee</th>
           </tr>
         </thead>
         <tbody id="cd-table-body">
-          <tr><td colspan="8" class="py-6 px-2 text-center text-slate-400">Click + to enter JQL and fetch tickets.</td></tr>
+          <tr><td colspan="9" class="py-6 px-2 text-center text-slate-400">Click + to enter JQL and fetch tickets.</td></tr>
         </tbody>
       </table>
     </div>
@@ -195,6 +201,7 @@
       <button id="cd-next" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded text-xs text-slate-700 disabled:opacity-50" disabled>Next</button>
     </div>
   </div>
+
 </div>
 
 <div id="cd-jql-modal" class="cd-modal-backdrop">
@@ -419,7 +426,6 @@
     const legendMap = {
       "cd-priority": "cd-priority-legend",
       "cd-status-chart": "cd-status-legend",
-      "cd-customer-dist-chart": "cd-customer-dist-legend",
       "cd-lb-split-chart": "cd-lb-split-legend",
       "cd-team-dist-chart": "cd-team-dist-legend",
     };
@@ -593,6 +599,74 @@
         })
         .on("mouseleave", () => hideTooltip(tooltip));
     }
+  }
+
+  function renderTeamPackChart(containerId, teamCounts) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container.innerHTML = "";
+    const entries = Object.entries(teamCounts || {}).map(([name, value]) => ({ name, value: Number(value) || 0 }))
+      .filter(d => d.value > 0);
+    renderLegend("cd-team-pack-legend", entries.slice(0, 12).map(d => ({ label: d.name, color: colorForCategory(d.name) })));
+    if (!entries.length) {
+      container.innerHTML = `<div class="text-xs text-slate-400 h-full flex items-center justify-center">No team data</div>`;
+      return;
+    }
+
+    const width = container.clientWidth || 1000;
+    const height = container.clientHeight || 520;
+    const tooltip = getOrCreateTooltip(container);
+    const root = d3.pack()
+      .size([width - 8, height - 8])
+      .padding(10)(
+        d3.hierarchy({ children: entries }).sum(d => d.value)
+      );
+
+    const svg = d3.select(container).append("svg")
+      .attr("viewBox", `0 0 ${width} ${height}`)
+      .attr("preserveAspectRatio", "xMidYMid meet");
+
+    const g = svg.append("g").attr("transform", "translate(4,4)");
+    const leaves = root.leaves();
+
+    g.selectAll("circle")
+      .data(leaves)
+      .enter()
+      .append("circle")
+      .attr("cx", d => d.x)
+      .attr("cy", d => d.y - 10)
+      .attr("r", d => d.r)
+      .attr("fill", d => colorForCategory(d.data.name))
+      .attr("fill-opacity", 0.78)
+      .attr("stroke", "#ffffff")
+      .attr("stroke-width", 2)
+      .on("mousemove", function(event, d) {
+        showTooltip(
+          container,
+          tooltip,
+          event,
+          `<strong>${escapeHtml(d.data.name)}</strong><ul class="cd-tooltip-list"><li><strong>Tickets:</strong> ${d.data.value}</li></ul>`
+        );
+      })
+      .on("mouseleave", () => hideTooltip(tooltip));
+
+    g.selectAll(".pack-name")
+      .data(leaves)
+      .enter()
+      .append("text")
+      .attr("class", "cd-pack-label")
+      .attr("x", d => d.x)
+      .attr("y", d => d.y + d.r + 8)
+      .text(d => d.data.name.length > 24 ? `${d.data.name.slice(0, 24)}…` : d.data.name);
+
+    g.selectAll(".pack-value")
+      .data(leaves)
+      .enter()
+      .append("text")
+      .attr("class", "cd-pack-value")
+      .attr("x", d => d.x)
+      .attr("y", d => d.y + d.r + 21)
+      .text(d => `${d.data.value} tickets`);
   }
 
   function buildCustomerRaceFrames(rows) {
@@ -813,7 +887,7 @@
     info.textContent = `${total} results`;
 
     if (!pageRows.length) {
-      body.innerHTML = `<tr><td colspan="8" class="py-6 px-2 text-center text-slate-400">No issues found for current filters.</td></tr>`;
+      body.innerHTML = `<tr><td colspan="9" class="py-6 px-2 text-center text-slate-400">No issues found for current filters.</td></tr>`;
     } else {
       body.innerHTML = pageRows.map(r => `
         <tr class="border-b border-slate-200">
@@ -822,6 +896,7 @@
           <td class="py-2 px-2">${escapeHtml(r.priority || "")}</td>
           <td class="py-2 px-2">${escapeHtml(r.status || "")}</td>
           <td class="py-2 px-2">${(r.customers || []).map(c => `<span class="cd-pill mr-1 mb-1">${escapeHtml(c)}</span>`).join("")}</td>
+          <td class="py-2 px-2"><span class="cd-team-cell"><span class="cd-team-dot" style="background:${colorForCategory(r.team_name || "Unspecified")}"></span>${escapeHtml(r.team_name || "Unspecified")}</span></td>
           <td class="py-2 px-2">${r.launch_blocker ? `<span class="cd-pill lb">Yes</span>` : `<span class="cd-pill">No</span>`}</td>
           <td class="py-2 px-2">${escapeHtml(r.created_date || "")}</td>
           <td class="py-2 px-2">${escapeHtml(r.assignee_name || "Unassigned")}</td>
@@ -861,22 +936,15 @@
     renderBarChart("cd-lb-split-chart", ["Launch Blocker", "Non-Blocker"], [stats.launchBlockers, Math.max(0, rows.length - stats.launchBlockers)], "#ef4444");
     const teamTrend = buildTeamTrend(rows);
     renderTeamTrendChart("cd-team-dist-chart", "cd-team-dist-legend", teamTrend);
+    renderTeamPackChart("cd-team-pack-chart", stats.teamCounts);
 
     const isAllCustomersView = !document.getElementById("cd-customer").value;
-    const customerDistCard = document.getElementById("cd-customer-dist-card");
     const customerRaceCard = document.getElementById("cd-customer-race-card");
     if (isAllCustomersView) {
-      const customerKeys = Object.keys(stats.customerCounts)
-        .sort((a, b) => stats.customerCounts[b] - stats.customerCounts[a])
-        .slice(0, 12);
-      renderBarChart("cd-customer-dist-chart", customerKeys, customerKeys.map(k => stats.customerCounts[k]), "#2563eb", true);
-      customerDistCard.classList.remove("cd-hidden");
       const raceFrames = buildCustomerRaceFrames(rows);
       renderCustomerRace("cd-customer-race-chart", "cd-customer-race-month", raceFrames);
       customerRaceCard.classList.remove("cd-hidden");
     } else {
-      customerDistCard.classList.add("cd-hidden");
-      document.getElementById("cd-customer-dist-chart").innerHTML = "";
       customerRaceCard.classList.add("cd-hidden");
       document.getElementById("cd-customer-race-chart").innerHTML = "";
       document.getElementById("cd-customer-race-month").textContent = "";
