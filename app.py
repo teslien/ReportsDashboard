@@ -1395,12 +1395,24 @@ def customer_dashboard_data():
     fields = "summary,status,priority,created,labels,customfield_10077,customfield_10001,assignee"
 
     all_issues = []
+    seen_issue_keys = set()
     headers_dict = dict(HEADERS)
-    for start_at in range(0, 5000, 100):
+    start_at = 0
+    next_page_token = None
+    page_safety = 0
+    while page_safety < 80:  # hard stop safety guard
+        page_safety += 1
+        params = {"jql": jql, "maxResults": 100, "fields": fields}
+        if next_page_token:
+            params["nextPageToken"] = next_page_token
+        else:
+            params["startAt"] = start_at
+
+        # Atlassian now recommends /search/jql.
         jira_res = requests.get(
             f"{JIRA_DOMAIN}/rest/api/3/search/jql",
             headers=headers_dict,
-            params={"jql": jql, "maxResults": 100, "startAt": start_at, "fields": fields}
+            params=params
         )
         if jira_res.status_code != 200:
             return jsonify({"error": f"Jira API error: {jira_res.text}"}), jira_res.status_code
@@ -1408,9 +1420,26 @@ def customer_dashboard_data():
         issues = data.get("issues", [])
         if not issues:
             break
-        all_issues.extend(issues)
+
+        # Deduplicate by issue key as an extra safety guard.
+        new_count = 0
+        for issue in issues:
+            key = issue.get("key")
+            if not key or key in seen_issue_keys:
+                continue
+            seen_issue_keys.add(key)
+            all_issues.append(issue)
+            new_count += 1
+
+        # If we didn't get any new issues, stop to avoid repeated-page loops.
+        if new_count == 0:
+            break
+        next_page_token = data.get("nextPageToken")
+        if next_page_token:
+            continue
         if len(issues) < 100:
             break
+        start_at += 100
 
     rows = []
     unique_customers = set()

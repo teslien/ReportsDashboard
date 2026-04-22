@@ -7,6 +7,7 @@
 <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
 <style>
   body { background: #f8fafc !important; color: #0f172a !important; }
+  body.cd-page #theme-toggle-btn { display: none !important; }
   body.cd-nav-hidden nav { display: none !important; }
   body.cd-nav-hidden main { padding-top: 16px !important; }
   .cd-card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04); }
@@ -469,22 +470,33 @@
   function buildTeamTrend(rows) {
     const monthSet = new Set();
     const teamByMonth = {};
+    const daySet = new Set();
+    const teamByDay = {};
     const teamTotals = {};
 
     for (const r of rows) {
       const team = (r.team_name || "Unspecified").trim() || "Unspecified";
-      const monthKey = /^\d{4}-\d{2}-\d{2}$/.test(r.created_date || "")
-        ? (r.created_date || "").slice(0, 7)
-        : "Unknown";
+      const isValidDay = /^\d{4}-\d{2}-\d{2}$/.test(r.created_date || "");
+      const monthKey = isValidDay ? (r.created_date || "").slice(0, 7) : "Unknown";
+      const dayKey = isValidDay ? (r.created_date || "") : "Unknown";
       monthSet.add(monthKey);
+      daySet.add(dayKey);
       if (!teamByMonth[team]) teamByMonth[team] = {};
       teamByMonth[team][monthKey] = (teamByMonth[team][monthKey] || 0) + 1;
+      if (!teamByDay[team]) teamByDay[team] = {};
+      teamByDay[team][dayKey] = (teamByDay[team][dayKey] || 0) + 1;
       teamTotals[team] = (teamTotals[team] || 0) + 1;
     }
 
-    const monthKeys = [...monthSet].sort((a, b) => a.localeCompare(b));
-    const monthLabels = monthKeys.map(k => {
-      if (/^\d{4}-\d{2}$/.test(k)) {
+    const validMonths = [...monthSet].filter(k => /^\d{4}-\d{2}$/.test(k));
+    const useDaily = validMonths.length === 1;
+    const keys = (useDaily ? [...daySet] : [...monthSet]).sort((a, b) => a.localeCompare(b));
+    const labels = keys.map(k => {
+      if (useDaily && /^\d{4}-\d{2}-\d{2}$/.test(k)) {
+        const dt = new Date(`${k}T00:00:00`);
+        return dt.toLocaleString([], { month: "short", day: "2-digit" });
+      }
+      if (!useDaily && /^\d{4}-\d{2}$/.test(k)) {
         const dt = new Date(`${k}-01T00:00:00`);
         return dt.toLocaleString([], { month: "short", year: "numeric" });
       }
@@ -494,9 +506,12 @@
     const series = topTeams.map(team => ({
       team,
       color: vividTeamColor(team),
-      values: monthKeys.map(m => (teamByMonth[team] && teamByMonth[team][m]) ? teamByMonth[team][m] : 0)
+      values: keys.map(k => {
+        if (useDaily) return (teamByDay[team] && teamByDay[team][k]) ? teamByDay[team][k] : 0;
+        return (teamByMonth[team] && teamByMonth[team][k]) ? teamByMonth[team][k] : 0;
+      })
     }));
-    return { monthLabels, series };
+    return { monthLabels: labels, series };
   }
 
   function renderTeamTrendChart(containerId, legendId, trend) {
@@ -734,6 +749,7 @@
 
   function buildStats(rows) {
     const timelineMap = {};
+    const timelineDayMap = {};
     const priorityCounts = {};
     const statusCounts = {};
     const customerCounts = {};
@@ -747,10 +763,16 @@
       const monthKey = /^\d{4}-\d{2}-\d{2}$/.test(r.created_date || "")
         ? (r.created_date || "").slice(0, 7)
         : "Unknown";
+      const dayKey = /^\d{4}-\d{2}-\d{2}$/.test(r.created_date || "")
+        ? (r.created_date || "")
+        : "Unknown";
       if (!timelineMap[monthKey]) timelineMap[monthKey] = { count: 0, customers: new Set() };
       timelineMap[monthKey].count += 1;
       const rowCustomers = (r.customers || []).length ? r.customers : ["Unspecified"];
       rowCustomers.forEach(c => timelineMap[monthKey].customers.add(c));
+      if (!timelineDayMap[dayKey]) timelineDayMap[dayKey] = { count: 0, customers: new Set() };
+      timelineDayMap[dayKey].count += 1;
+      rowCustomers.forEach(c => timelineDayMap[dayKey].customers.add(c));
       priorityCounts[r.priority || "Unspecified"] = (priorityCounts[r.priority || "Unspecified"] || 0) + 1;
       statusCounts[r.status || "Unknown"] = (statusCounts[r.status || "Unknown"] || 0) + 1;
       const customers = (r.customers || []).length ? r.customers : ["Unspecified"];
@@ -760,15 +782,21 @@
       const teamName = (r.team_name || "Unspecified").trim() || "Unspecified";
       teamCounts[teamName] = (teamCounts[teamName] || 0) + 1;
     }
-    const timeline = Object.keys(timelineMap)
+    const validMonths = Object.keys(timelineMap).filter(k => /^\d{4}-\d{2}$/.test(k));
+    const useDailyTimeline = validMonths.length === 1;
+    const timelineSource = useDailyTimeline ? timelineDayMap : timelineMap;
+    const timeline = Object.keys(timelineSource)
       .sort((a, b) => a.localeCompare(b))
       .map(k => {
         let label = k;
-        if (/^\d{4}-\d{2}$/.test(k)) {
+        if (useDailyTimeline && /^\d{4}-\d{2}-\d{2}$/.test(k)) {
+          const dt = new Date(`${k}T00:00:00`);
+          label = dt.toLocaleString([], { month: "short", day: "2-digit" });
+        } else if (!useDailyTimeline && /^\d{4}-\d{2}$/.test(k)) {
           const dt = new Date(`${k}-01T00:00:00`);
           label = dt.toLocaleString([], { month: "short", year: "numeric" });
         }
-        return { key: k, label, count: timelineMap[k].count, customers: [...timelineMap[k].customers].sort() };
+        return { key: k, label, count: timelineSource[k].count, customers: [...timelineSource[k].customers].sort() };
       });
 
     return { timeline, priorityCounts, statusCounts, customerCounts, teamCounts, high, launchBlockers };
