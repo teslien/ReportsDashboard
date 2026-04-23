@@ -79,7 +79,7 @@
                     {% endif %}
 
                     <!-- Analysis Dropdown -->
-                    {% set analysis_pages = ['custom_reports', 'customer_dashboard', 'explorer', 'query_builder', 'teams', 'work_report'] %}
+                    {% set analysis_pages = ['custom_reports', 'customer_dashboard', 'explorer', 'query_builder', 'teams', 'work_report', 'assignee_work'] %}
                     {% for p in analysis_pages %}
                         {% if current_user.can_view_page(p) %}{% set nav.has_analysis = true %}{% endif %}
                     {% endfor %}
@@ -127,6 +127,11 @@
                                 <a href="/work_report"
                                     class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white"
                                     role="menuitem">Work Report</a>
+                                {% endif %}
+                                {% if current_user.can_view_page('assignee_work') %}
+                                <a href="/assignee_work"
+                                    class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white"
+                                    role="menuitem">Assignee Work</a>
                                 {% endif %}
                             </div>
                         </div>
@@ -341,6 +346,10 @@
             {% if current_user.can_view_page('work_report') %}
             <a href="/work_report"
                 class="block px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:text-white hover:bg-gray-700">Work Report</a>
+            {% endif %}
+            {% if current_user.can_view_page('assignee_work') %}
+            <a href="/assignee_work"
+                class="block px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:text-white hover:bg-gray-700">Assignee Work</a>
             {% endif %}
             {% endif %}
 

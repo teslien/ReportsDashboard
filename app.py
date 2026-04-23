@@ -1030,6 +1030,7 @@ PAGE_PERMISSIONS = [
     {"key": "custom_reports", "label": "Custom Reports"},
     {"key": "scrum_notes", "label": "Scrum Notes"},
     {"key": "work_report", "label": "Work Report"},
+    {"key": "assignee_work", "label": "Assignee Work"},
     {"key": "planning", "label": "Sprint Planning"},
     {"key": "teams", "label": "Teams"},
     {"key": "settings", "label": "Settings"},
@@ -4455,6 +4456,129 @@ def scrum_notes_report():
 @page_permission_required("work_report")
 def work_report():
     return render_template("work_report.html", project=PROJECT_KEY)
+
+
+@app.route("/assignee_work")
+@page_permission_required("assignee_work")
+def assignee_work_page():
+    return render_template("assignee_work.html", project=PROJECT_KEY)
+
+
+@app.route("/api/assignee_work", methods=["POST"])
+def assignee_work_search():
+    """Fetch Jira tickets filtered by date range (updated), optional labels,
+    sprint id, and assignee(s). Returns a flat JSON list suitable for the
+    Assignee Work page table."""
+    headers_dict = dict(HEADERS)
+    project_key_str = str(PROJECT_KEY)
+
+    if not project_key_str:
+        return jsonify({"error": "Missing project key. Save it in Settings first."}), 400
+    if "Authorization" not in headers_dict:
+        return jsonify({"error": "Missing Jira credentials. Save them in Settings first."}), 401
+
+    data = request.get_json(silent=True) or {}
+    from_date = (data.get("from_date") or "").strip()
+    to_date = (data.get("to_date") or "").strip()
+    labels = data.get("labels") or []
+    sprint_id = data.get("sprint_id")
+    assignee_ids = data.get("assignee_ids") or []
+    if not isinstance(assignee_ids, list):
+        assignee_ids = []
+    assignee_ids = [str(a).strip() for a in assignee_ids if str(a).strip()]
+    # Backward compatibility for older client payload shape
+    if not assignee_ids:
+        single_assignee = (data.get("assignee_id") or "").strip() if data.get("assignee_id") else ""
+        if single_assignee:
+            assignee_ids = [single_assignee]
+
+    if not from_date or not to_date:
+        return jsonify({"error": "from_date and to_date are required."}), 400
+
+    # Build JQL
+    jql_parts = [f'project = "{project_key_str}"']
+    jql_parts.append(f'updated >= "{from_date} 00:00"')
+    jql_parts.append(f'updated <= "{to_date} 23:59"')
+
+    if assignee_ids:
+        quoted_assignees = ", ".join(f'"{a}"' for a in assignee_ids)
+        jql_parts.append(f'assignee in ({quoted_assignees})')
+
+    if sprint_id:
+        jql_parts.append(f'sprint = {int(sprint_id)}')
+
+    if isinstance(labels, list) and labels:
+        cleaned = [str(l).strip() for l in labels if str(l).strip()]
+        if cleaned:
+            quoted = ", ".join(f'"{l}"' for l in cleaned)
+            jql_parts.append(f'labels in ({quoted})')
+
+    jql = " AND ".join(jql_parts) + " ORDER BY updated DESC"
+
+    try:
+        params = {
+            "jql": jql,
+            "maxResults": 100,
+            "startAt": 0,
+            "fields": "summary,status,assignee,priority,created,updated,issuetype,labels,customfield_10020"
+        }
+        res = requests.get(
+            f"{JIRA_DOMAIN}/rest/api/3/search/jql",
+            headers=headers_dict,
+            params=params,
+            timeout=30
+        )
+
+        if res.status_code != 200:
+            try:
+                err_body = res.json()
+            except Exception:
+                err_body = {"error": res.text}
+            msg = err_body.get("errorMessages") or err_body.get("error") or f"Jira API error ({res.status_code})"
+            return jsonify({"error": msg, "jql": jql}), res.status_code
+
+        payload = res.json()
+        issues = payload.get("issues", [])
+        formatted = []
+        for i in issues:
+            f = i.get("fields", {}) or {}
+            raw_sprints = f.get("customfield_10020") or []
+            sprint_names = []
+            if isinstance(raw_sprints, list):
+                for s in raw_sprints:
+                    if isinstance(s, dict):
+                        nm = s.get("name")
+                        if nm:
+                            sprint_names.append(nm)
+                    elif isinstance(s, str):
+                        # Legacy Jira returns a string blob; try to extract name=
+                        import re as _re
+                        m = _re.search(r"name=([^,\]]+)", s)
+                        if m:
+                            sprint_names.append(m.group(1))
+
+            formatted.append({
+                "key": i.get("key"),
+                "summary": f.get("summary"),
+                "status": (f.get("status") or {}).get("name"),
+                "assignee": (f.get("assignee") or {}).get("displayName") if f.get("assignee") else "Unassigned",
+                "priority": (f.get("priority") or {}).get("name"),
+                "type": (f.get("issuetype") or {}).get("name"),
+                "labels": f.get("labels") or [],
+                "sprints": sprint_names,
+                "created": f.get("created"),
+                "updated": f.get("updated")
+            })
+
+        return jsonify({
+            "issues": formatted,
+            "total": payload.get("total", len(formatted)),
+            "jql": jql
+        })
+    except requests.Timeout:
+        return jsonify({"error": "Jira request timed out.", "jql": jql}), 504
+    except Exception as e:
+        return jsonify({"error": str(e), "jql": jql}), 500
 
 
 @app.route("/api/reports/generate", methods=["POST"])

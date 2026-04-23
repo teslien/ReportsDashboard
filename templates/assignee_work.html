@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8">
+    <title>Assignee Work - Jira Analytics</title>
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #0b0f1a;
+            color: white;
+            overflow-x: hidden;
+        }
+
+        /* Select2 Custom Dark */
+        .select2-container--default .select2-selection--single,
+        .select2-container--default .select2-selection--multiple {
+            background-color: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 1rem;
+            min-height: 48px;
+            color: white;
+            display: flex;
+            align-items: center;
+            transition: all 0.2s;
+        }
+
+        .select2-container--default .select2-selection--single:hover,
+        .select2-container--default .select2-selection--multiple:hover {
+            border-color: rgba(255, 255, 255, 0.2);
+            background-color: rgba(15, 23, 42, 0.8);
+        }
+
+        .select2-container--default .select2-selection--single .select2-selection__rendered {
+            color: #e2e8f0;
+            padding-left: 14px;
+            font-size: 0.9rem;
+            line-height: 46px;
+        }
+
+        .select2-container--default .select2-selection--multiple .select2-selection__rendered {
+            padding: 4px 10px;
+        }
+
+        .select2-container--default .select2-selection--multiple .select2-selection__choice {
+            background-color: rgba(59, 130, 246, 0.2);
+            border: 1px solid rgba(59, 130, 246, 0.35);
+            color: #dbeafe;
+            border-radius: 0.5rem;
+            padding: 2px 8px;
+            margin-top: 6px;
+        }
+
+        .select2-container--default .select2-selection--multiple .select2-selection__choice__remove {
+            color: #93c5fd;
+            margin-right: 6px;
+        }
+
+        .select2-dropdown {
+            background-color: #1e293b;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 0.75rem;
+            overflow: hidden;
+            color: #e2e8f0;
+        }
+
+        .select2-results__option--highlighted {
+            background-color: #3b82f6 !important;
+            color: white !important;
+        }
+
+        .select2-results__option[aria-selected=true] {
+            background-color: rgba(255, 255, 255, 0.1) !important;
+            color: white !important;
+        }
+
+        .select2-container--default .select2-selection--single .select2-selection__arrow {
+            height: 46px;
+            right: 8px;
+        }
+
+        .select2-container--default .select2-search--inline .select2-search__field,
+        .select2-container--default .select2-search--dropdown .select2-search__field {
+            background-color: transparent;
+            color: #e2e8f0;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 0.5rem;
+        }
+
+        /* Custom input glow */
+        .input-dark {
+            background-color: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #e2e8f0;
+            border-radius: 1rem;
+            padding: 12px 14px;
+            transition: all 0.2s;
+        }
+
+        .input-dark:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+            background-color: rgba(15, 23, 42, 0.9);
+        }
+
+        /* Table styles */
+        .tbl th {
+            text-transform: uppercase;
+            font-size: 0.7rem;
+            letter-spacing: 0.08em;
+            color: #64748b;
+            font-weight: 700;
+            padding: 14px 16px;
+            text-align: left;
+            background: rgba(15, 23, 42, 0.4);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
+
+        .tbl td {
+            padding: 14px 16px;
+            font-size: 0.85rem;
+            color: #e2e8f0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            vertical-align: top;
+        }
+
+        .tbl tr:hover td {
+            background-color: rgba(255, 255, 255, 0.03);
+        }
+
+        .status-pill {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 9999px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .priority-tag {
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        /* Loader */
+        .dot-pulse {
+            position: relative;
+            left: -9999px;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: #3b82f6;
+            color: #3b82f6;
+            box-shadow: 9999px 0 0 -5px;
+            animation: dot-pulse 1.5s infinite linear;
+            animation-delay: 0.25s;
+        }
+
+        .dot-pulse::before,
+        .dot-pulse::after {
+            content: '';
+            display: inline-block;
+            position: absolute;
+            top: 0;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: #3b82f6;
+            color: #3b82f6;
+        }
+
+        .dot-pulse::before {
+            box-shadow: 9984px 0 0 -5px;
+            animation: dot-pulse-before 1.5s infinite linear;
+            animation-delay: 0s;
+        }
+
+        .dot-pulse::after {
+            box-shadow: 10014px 0 0 -5px;
+            animation: dot-pulse-after 1.5s infinite linear;
+            animation-delay: 0.5s;
+        }
+
+        @keyframes dot-pulse-before {
+            0% { box-shadow: 9984px 0 0 -5px; }
+            30% { box-shadow: 9984px 0 0 2px; }
+            60%, 100% { box-shadow: 9984px 0 0 -5px; }
+        }
+
+        @keyframes dot-pulse {
+            0% { box-shadow: 9999px 0 0 -5px; }
+            30% { box-shadow: 9999px 0 0 2px; }
+            60%, 100% { box-shadow: 9999px 0 0 -5px; }
+        }
+
+        @keyframes dot-pulse-after {
+            0% { box-shadow: 10014px 0 0 -5px; }
+            30% { box-shadow: 10014px 0 0 2px; }
+            60%, 100% { box-shadow: 10014px 0 0 -5px; }
+        }
+    </style>
+    <link rel="stylesheet" href="/static/theme.css">
+    <script src="/static/theme.js"></script>
+</head>
+
+<body class="bg-gray-900 min-h-screen">
+    {% include 'navbar.html' %}
+
+    <main class="min-h-screen pt-24 pb-12 px-4 sm:px-6 lg:px-8">
+        <div class="max-w-6xl mx-auto">
+            <!-- Header -->
+            <div class="mb-8">
+                <h1 class="text-4xl font-extrabold tracking-tight text-blue-500 mb-2">Assignee Work</h1>
+                <p class="text-gray-400 text-base">Find tickets updated within a date range by sprint, assignee, and
+                    labels.</p>
+            </div>
+
+            <!-- Filter Card -->
+            <div
+                class="bg-gray-800/50 backdrop-blur-xl border border-gray-700/50 rounded-3xl p-6 sm:p-8 shadow-2xl relative overflow-hidden">
+                <div class="absolute -top-24 -right-24 w-48 h-48 bg-blue-500/10 rounded-full blur-3xl"></div>
+                <div class="absolute -bottom-24 -left-24 w-48 h-48 bg-purple-500/10 rounded-full blur-3xl"></div>
+
+                <form id="filterForm" class="space-y-6 relative z-10" onsubmit="event.preventDefault(); runSearch();">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- From Date -->
+                        <div class="space-y-2">
+                            <label class="block text-sm font-semibold text-gray-300 ml-1">From Date <span
+                                    class="text-red-400">*</span></label>
+                            <input type="date" id="fromDate" required class="input-dark w-full" />
+                        </div>
+                        <!-- To Date -->
+                        <div class="space-y-2">
+                            <label class="block text-sm font-semibold text-gray-300 ml-1">To Date <span
+                                    class="text-red-400">*</span></label>
+                            <input type="date" id="toDate" required class="input-dark w-full" />
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Sprint -->
+                        <div class="space-y-2">
+                            <label class="block text-sm font-semibold text-gray-300 ml-1">Sprint</label>
+                            <select id="sprintSelect" class="w-full"></select>
+                        </div>
+                        <!-- Assignee -->
+                        <div class="space-y-2">
+                            <label class="block text-sm font-semibold text-gray-300 ml-1">Assignees</label>
+                            <select id="assigneeSelect" class="w-full" multiple></select>
+                        </div>
+                    </div>
+
+                    <!-- Label (optional) -->
+                    <div class="space-y-2">
+                        <label class="block text-sm font-semibold text-gray-300 ml-1">
+                            Labels <span class="text-gray-500 font-normal">(Optional, comma-separated)</span>
+                        </label>
+                        <input type="text" id="labelInput" placeholder="e.g. backend, urgent"
+                            class="input-dark w-full" />
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="flex flex-wrap items-center gap-3 pt-2">
+                        <button type="submit"
+                            class="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white font-bold px-6 py-3 rounded-2xl transition shadow-lg shadow-blue-600/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                            id="searchBtn">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M21 21l-4.35-4.35m0 0A7.5 7.5 0 103.5 10.5a7.5 7.5 0 0013.15 6.15z" />
+                            </svg>
+                            <span>Search</span>
+                        </button>
+                        <button type="button" onclick="resetForm()"
+                            class="inline-flex items-center gap-2 bg-gray-700/50 hover:bg-gray-700 text-gray-300 font-semibold px-5 py-3 rounded-2xl transition border border-gray-600/40">
+                            Reset
+                        </button>
+                        <button type="button" onclick="exportCsv()" id="exportCsvBtn" disabled
+                            class="inline-flex items-center gap-2 bg-emerald-600/70 hover:bg-emerald-500 text-white font-semibold px-5 py-3 rounded-2xl transition disabled:opacity-40 disabled:cursor-not-allowed">
+                            Export CSV
+                        </button>
+                        <button type="button" onclick="showTreeView()" id="treeViewBtn" disabled
+                            class="inline-flex items-center gap-2 bg-indigo-600/80 hover:bg-indigo-500 text-white font-semibold px-5 py-3 rounded-2xl transition disabled:opacity-40 disabled:cursor-not-allowed">
+                            Sprint Tree View
+                        </button>
+                        <div class="ml-auto text-xs text-gray-500" id="jqlDebug"></div>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Results -->
+            <div id="resultsWrap" class="mt-8 hidden">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-xl font-bold text-white">Results</h2>
+                    <div class="text-sm text-gray-400" id="resultsCount"></div>
+                </div>
+                <div
+                    class="bg-gray-800/40 backdrop-blur-xl border border-gray-700/50 rounded-2xl overflow-hidden shadow-2xl">
+                    <div class="overflow-x-auto max-h-[70vh] overflow-y-auto">
+                        <table class="tbl w-full">
+                            <thead>
+                                <tr>
+                                    <th>Key</th>
+                                    <th>Summary</th>
+                                    <th>Status</th>
+                                    <th>Assignee</th>
+                                    <th>Priority</th>
+                                    <th>Sprint</th>
+                                    <th>Labels</th>
+                                    <th>Updated</th>
+                                </tr>
+                            </thead>
+                            <tbody id="resultsBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tree / Canvas-like View -->
+            <div id="treeWrap" class="mt-8 hidden">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-xl font-bold text-white">Sprint Tree View</h2>
+                    <button type="button" onclick="showTableView()"
+                        class="inline-flex items-center gap-2 bg-gray-700/50 hover:bg-gray-700 text-gray-300 font-semibold px-4 py-2 rounded-xl transition border border-gray-600/40">
+                        Back To Table
+                    </button>
+                </div>
+                <div class="bg-gray-800/40 backdrop-blur-xl border border-gray-700/50 rounded-2xl p-5 sm:p-6 shadow-2xl">
+                    <div id="treeContent" class="space-y-4 text-sm text-gray-200"></div>
+                </div>
+            </div>
+
+            <!-- Loading -->
+            <div id="loading" class="hidden mt-12 flex flex-col items-center justify-center gap-6">
+                <div class="dot-pulse"></div>
+                <div class="text-sm text-gray-400">Fetching tickets from Jira...</div>
+            </div>
+
+            <!-- Empty -->
+            <div id="emptyState" class="hidden mt-12 text-center text-gray-500">
+                <svg class="mx-auto w-16 h-16 mb-3 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                        d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0l-2 6a2 2 0 01-2 2H8a2 2 0 01-2-2l-2-6m16 0H4" />
+                </svg>
+                <p class="text-lg">No tickets match these filters.</p>
+                <p class="text-sm mt-1">Try widening the date range or removing filters.</p>
+            </div>
+
+            <!-- Error -->
+            <div id="errorState" class="hidden mt-8 bg-red-500/10 border border-red-500/40 text-red-300 rounded-2xl p-4">
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const projectKey = "{{ project }}";
+        const jiraDomain = "{{ JIRA_DOMAIN }}";
+        let latestResults = [];
+
+        function projectHeader(xhr) {
+            const pk = (localStorage.getItem("project_key") || projectKey || "").trim().toUpperCase();
+            if (pk) xhr.setRequestHeader("X-Project-Key", pk);
+        }
+
+        $(document).ready(function () {
+            // Default to last 14 days
+            const today = new Date();
+            const twoWeeksAgo = new Date();
+            twoWeeksAgo.setDate(today.getDate() - 14);
+            $('#toDate').val(today.toISOString().split('T')[0]);
+            $('#fromDate').val(twoWeeksAgo.toISOString().split('T')[0]);
+
+            initAssigneeSelect();
+            initSprintSelect();
+        });
+
+        function initAssigneeSelect() {
+            $('#assigneeSelect').select2({
+                placeholder: "Any assignees",
+                allowClear: true,
+                multiple: true,
+                closeOnSelect: false,
+                width: '100%',
+                ajax: {
+                    url: '/api/assignees',
+                    type: 'GET',
+                    dataType: 'json',
+                    delay: 250,
+                    data: function (params) { return { q: params.term || '' }; },
+                    beforeSend: projectHeader,
+                    processResults: function (data) {
+                        if (!Array.isArray(data)) return { results: [] };
+                        return { results: data.map(u => ({ id: u.id, text: u.name })) };
+                    },
+                    cache: true
+                },
+                minimumInputLength: 0
+            });
+        }
+
+        function initSprintSelect() {
+            $('#sprintSelect').select2({
+                placeholder: "Any sprint",
+                allowClear: true,
+                width: '100%',
+                ajax: {
+                    url: '/api/sprints',
+                    type: 'GET',
+                    dataType: 'json',
+                    delay: 250,
+                    data: function (params) { return { q: params.term || '' }; },
+                    beforeSend: projectHeader,
+                    processResults: function (data) {
+                        let list = [];
+                        if (Array.isArray(data)) {
+                            list = data;
+                        } else if (data && Array.isArray(data.sprints)) {
+                            list = data.sprints;
+                        } else if (data && Array.isArray(data.values)) {
+                            list = data.values;
+                        }
+                        return {
+                            results: list.map(s => ({
+                                id: s.id,
+                                text: s.name
+                                    ? `${s.name}${s.state ? ' · ' + s.state : ''} (#${s.id})`
+                                    : `Sprint #${s.id}`
+                            }))
+                        };
+                    },
+                    cache: true
+                },
+                minimumInputLength: 0
+            });
+        }
+
+        function resetForm() {
+            $('#fromDate').val('');
+            $('#toDate').val('');
+            $('#labelInput').val('');
+            $('#assigneeSelect').val(null).trigger('change');
+            $('#sprintSelect').val(null).trigger('change');
+            latestResults = [];
+            $('#exportCsvBtn').prop('disabled', true);
+            $('#treeViewBtn').prop('disabled', true);
+            $('#resultsWrap').addClass('hidden');
+            $('#treeWrap').addClass('hidden');
+            $('#emptyState').addClass('hidden');
+            $('#errorState').addClass('hidden');
+            $('#jqlDebug').text('');
+        }
+
+        function statusColor(status) {
+            const s = (status || '').toLowerCase();
+            if (s.includes('done') || s.includes('resolved') || s.includes('deployed') || s.includes('closed'))
+                return 'bg-green-500/15 text-green-300 border border-green-500/30';
+            if (s.includes('progress') || s.includes('review') || s.includes('qa') || s.includes('staging'))
+                return 'bg-blue-500/15 text-blue-300 border border-blue-500/30';
+            if (s.includes('blocked') || s.includes('hold'))
+                return 'bg-red-500/15 text-red-300 border border-red-500/30';
+            return 'bg-gray-500/15 text-gray-300 border border-gray-500/30';
+        }
+
+        function priorityColor(p) {
+            const v = (p || '').toLowerCase();
+            if (v === 'highest' || v === 'high') return 'text-red-400';
+            if (v === 'medium') return 'text-yellow-400';
+            if (v === 'low' || v === 'lowest') return 'text-green-400';
+            return 'text-gray-400';
+        }
+
+        function escapeHtml(s) {
+            if (s === null || s === undefined) return '';
+            return String(s)
+                .replaceAll('&', '&amp;')
+                .replaceAll('<', '&lt;')
+                .replaceAll('>', '&gt;')
+                .replaceAll('"', '&quot;')
+                .replaceAll("'", '&#039;');
+        }
+
+        function formatDate(d) {
+            if (!d) return '';
+            try {
+                return new Date(d).toLocaleDateString(undefined, {
+                    month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit'
+                });
+            } catch (e) { return d; }
+        }
+
+        async function runSearch() {
+            const fromDate = $('#fromDate').val();
+            const toDate = $('#toDate').val();
+            const labelRaw = $('#labelInput').val().trim();
+            const labels = labelRaw
+                ? labelRaw.split(',').map(x => x.trim()).filter(Boolean)
+                : [];
+            const sprintId = $('#sprintSelect').val();
+            const assigneeIds = $('#assigneeSelect').val() || [];
+
+            if (!fromDate || !toDate) {
+                showError('Please select both From and To dates.');
+                return;
+            }
+            if (new Date(fromDate) > new Date(toDate)) {
+                showError('"From" date must be before or equal to "To" date.');
+                return;
+            }
+
+            const payload = {
+                from_date: fromDate,
+                to_date: toDate,
+                labels: labels,
+                sprint_id: sprintId || null,
+                assignee_ids: assigneeIds
+            };
+
+            $('#errorState').addClass('hidden');
+            $('#resultsWrap').addClass('hidden');
+            $('#emptyState').addClass('hidden');
+            $('#loading').removeClass('hidden');
+            $('#searchBtn').prop('disabled', true);
+
+            try {
+                const res = await fetch('/api/assignee_work', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Project-Key': (localStorage.getItem('project_key') || projectKey || '').trim().toUpperCase()
+                    },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Failed to fetch results.');
+
+                $('#jqlDebug').text(data.jql ? 'JQL: ' + data.jql : '');
+                renderResults(data.issues || [], data.total || 0);
+            } catch (err) {
+                showError(err.message || String(err));
+            } finally {
+                $('#loading').addClass('hidden');
+                $('#searchBtn').prop('disabled', false);
+            }
+        }
+
+        function renderResults(issues, total) {
+            const body = document.getElementById('resultsBody');
+            body.innerHTML = '';
+            latestResults = issues || [];
+            $('#exportCsvBtn').prop('disabled', !latestResults.length);
+            $('#treeViewBtn').prop('disabled', !latestResults.length);
+            $('#treeWrap').addClass('hidden');
+
+            if (!issues.length) {
+                $('#emptyState').removeClass('hidden');
+                $('#resultsWrap').addClass('hidden');
+                return;
+            }
+
+            $('#resultsWrap').removeClass('hidden');
+            $('#resultsCount').text(
+                `${issues.length} shown${total && total !== issues.length ? ' · ' + total + ' total' : ''}`
+            );
+
+            for (const i of issues) {
+                const tr = document.createElement('tr');
+                const labelsHtml = (i.labels || []).length
+                    ? (i.labels || []).map(l =>
+                        `<span class="inline-block bg-purple-500/15 text-purple-300 border border-purple-500/30 text-[10px] font-semibold px-2 py-0.5 rounded mr-1 mb-1">${escapeHtml(l)}</span>`
+                    ).join('')
+                    : '<span class="text-gray-600 text-xs">—</span>';
+                const sprintName = Array.isArray(i.sprints) && i.sprints.length
+                    ? i.sprints.map(s => escapeHtml(s)).join(', ')
+                    : '<span class="text-gray-600 text-xs">—</span>';
+
+                tr.innerHTML = `
+                    <td>
+                        <a href="${jiraDomain}/browse/${encodeURIComponent(i.key)}" target="_blank"
+                           class="text-blue-400 hover:text-blue-300 font-mono font-semibold">
+                            ${escapeHtml(i.key)}
+                        </a>
+                    </td>
+                    <td class="max-w-md">
+                        <div class="text-white font-medium line-clamp-2">${escapeHtml(i.summary || '')}</div>
+                        <div class="text-[11px] text-gray-500 mt-0.5">${escapeHtml(i.type || '')}</div>
+                    </td>
+                    <td><span class="status-pill ${statusColor(i.status)}">${escapeHtml(i.status || '—')}</span></td>
+                    <td class="text-sm text-gray-200">${escapeHtml(i.assignee || 'Unassigned')}</td>
+                    <td><span class="priority-tag ${priorityColor(i.priority)}">${escapeHtml(i.priority || '—')}</span></td>
+                    <td class="text-xs text-gray-400">${sprintName}</td>
+                    <td>${labelsHtml}</td>
+                    <td class="text-xs font-mono text-gray-500">${formatDate(i.updated)}</td>
+                `;
+                body.appendChild(tr);
+            }
+        }
+
+        function showError(msg) {
+            const el = document.getElementById('errorState');
+            el.textContent = msg;
+            el.classList.remove('hidden');
+        }
+
+        function showTreeView() {
+            if (!latestResults.length) return;
+            renderTreeView(latestResults);
+            $('#resultsWrap').addClass('hidden');
+            $('#emptyState').addClass('hidden');
+            $('#treeWrap').removeClass('hidden');
+            document.getElementById('treeWrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        function showTableView() {
+            $('#treeWrap').addClass('hidden');
+            $('#resultsWrap').removeClass('hidden');
+            document.getElementById('resultsWrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        function issueNodeHtml(i) {
+            const sprintLabel = Array.isArray(i.sprints) && i.sprints.length ? i.sprints.join(', ') : 'Other';
+            return `
+                <li class="ml-4 pl-3 border-l border-gray-700/70 py-1.5">
+                    <a href="${jiraDomain}/browse/${encodeURIComponent(i.key)}" target="_blank" class="text-blue-400 hover:text-blue-300 font-mono font-semibold">${escapeHtml(i.key)}</a>
+                    <span class="text-gray-300 ml-2">${escapeHtml(i.summary || '')}</span>
+                    <div class="text-[11px] text-gray-500 mt-0.5">Status: ${escapeHtml(i.status || '—')} · Sprint: ${escapeHtml(sprintLabel)}</div>
+                </li>
+            `;
+        }
+
+        function renderTreeView(issues) {
+            const bySprint = {};
+            for (const issue of issues) {
+                const sprint = (Array.isArray(issue.sprints) && issue.sprints.length) ? issue.sprints[0] : 'Other';
+                if (!bySprint[sprint]) {
+                    bySprint[sprint] = { stories: [], bugs: [], others: [] };
+                }
+                const type = (issue.type || '').toLowerCase();
+                if (type.includes('story')) bySprint[sprint].stories.push(issue);
+                else if (type.includes('bug')) bySprint[sprint].bugs.push(issue);
+                else bySprint[sprint].others.push(issue);
+            }
+
+            const sprintNames = Object.keys(bySprint).sort((a, b) => {
+                if (a === 'Other') return 1;
+                if (b === 'Other') return -1;
+                return a.localeCompare(b);
+            });
+
+            if (!sprintNames.length) {
+                document.getElementById('treeContent').innerHTML = '<div class="text-gray-500">No data to display.</div>';
+                return;
+            }
+
+            const html = sprintNames.map((sprint) => {
+                const grp = bySprint[sprint];
+                const total = grp.stories.length + grp.bugs.length + grp.others.length;
+                return `
+                    <section class="border border-gray-700/50 rounded-xl p-4 bg-gray-900/30">
+                        <h3 class="text-base font-bold text-white mb-3">Sprint: ${escapeHtml(sprint)} <span class="text-xs text-gray-400 font-normal">(${total})</span></h3>
+                        <div class="space-y-3">
+                            <div>
+                                <div class="text-sm font-semibold text-cyan-300 mb-1">Stories (${grp.stories.length})</div>
+                                <ul>${grp.stories.length ? grp.stories.map(issueNodeHtml).join('') : '<li class="ml-4 text-xs text-gray-500">No stories</li>'}</ul>
+                            </div>
+                            <div>
+                                <div class="text-sm font-semibold text-rose-300 mb-1">Bugs (${grp.bugs.length})</div>
+                                <ul>${grp.bugs.length ? grp.bugs.map(issueNodeHtml).join('') : '<li class="ml-4 text-xs text-gray-500">No bugs</li>'}</ul>
+                            </div>
+                            ${grp.others.length ? `
+                            <div>
+                                <div class="text-sm font-semibold text-gray-300 mb-1">Others (${grp.others.length})</div>
+                                <ul>${grp.others.map(issueNodeHtml).join('')}</ul>
+                            </div>` : ''}
+                        </div>
+                    </section>
+                `;
+            }).join('');
+
+            document.getElementById('treeContent').innerHTML = html;
+        }
+
+        function csvEscape(value) {
+            if (value === null || value === undefined) return '';
+            const str = String(value);
+            return '"' + str.replaceAll('"', '""') + '"';
+        }
+
+        function exportCsv() {
+            if (!latestResults.length) return;
+
+            const headers = ['Key', 'Summary', 'Status', 'Assignee', 'Priority', 'Sprint', 'Labels', 'Updated'];
+            const rows = latestResults.map(i => ([
+                i.key || '',
+                i.summary || '',
+                i.status || '',
+                i.assignee || '',
+                i.priority || '',
+                Array.isArray(i.sprints) ? i.sprints.join(' | ') : '',
+                Array.isArray(i.labels) ? i.labels.join(' | ') : '',
+                i.updated || ''
+            ]));
+
+            const csv = [
+                headers.map(csvEscape).join(','),
+                ...rows.map(r => r.map(csvEscape).join(','))
+            ].join('\n');
+
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            const today = new Date().toISOString().slice(0, 10);
+            link.href = url;
+            link.download = `assignee_work_${today}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+
+</html>

@@ -353,6 +353,7 @@
 {% block extra_scripts %}
 <script>
 (() => {
+  const JIRA_BASE = ("{{ JIRA_DOMAIN }}" || (window.JIRA_DOMAIN || "https://lumberfi.atlassian.net")).replace(/\/+$/, "");
   const state = { page: 1, perPage: 20, totalPages: 0, rows: [], hasData: false, currentJql: "", raceTimer: null };
   const LS_KEYS = {
     email: "customer_dashboard_jira_email",
@@ -1114,7 +1115,7 @@
     } else {
       body.innerHTML = pageRows.map(r => `
         <tr class="border-b border-slate-200">
-          <td class="py-2 px-2"><a class="text-blue-400 hover:underline" target="_blank" href="${window.JIRA_DOMAIN}/browse/${r.issue_key}">${r.issue_key}</a></td>
+          <td class="py-2 px-2"><a class="text-blue-400 hover:underline" target="_blank" rel="noopener" href="${JIRA_BASE}/browse/${encodeURIComponent(r.issue_key)}">${escapeHtml(r.issue_key)}</a></td>
           <td class="py-2 px-2">${escapeHtml(r.summary || "")}</td>
           <td class="py-2 px-2">${escapeHtml(r.priority || "")}</td>
           <td class="py-2 px-2">${escapeHtml(r.status || "")}</td>
