@@ -71,6 +71,55 @@
   @keyframes cd-spin { to { transform: rotate(360deg); } }
   .cd-pack-label { font-size: 12px; fill: #334155; text-anchor: middle; pointer-events: none; font-weight: 600; }
   .cd-pack-value { font-size: 10px; fill: #64748b; text-anchor: middle; pointer-events: none; }
+  .cd-insights-table th, .cd-insights-table td { vertical-align: top; }
+  .cd-insight-p { font-size: 11px; }
+  .cd-insight-p.High { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+  .cd-insight-p.Medium { background: #fef3c7; color: #92400e; border-color: #fde68a; }
+  .cd-insight-p.Low { background: #e0e7ff; color: #3730a3; border-color: #c7d2fe; }
+  .cd-ai-toggle-btn {
+    min-width: 42px;
+    padding: 0 10px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .04em;
+    border-radius: 999px;
+  }
+  .cd-ai-toggle-btn.active {
+    border-color: #c7d2fe;
+    background: linear-gradient(135deg, #eef2ff, #e0e7ff);
+    color: #3730a3;
+    box-shadow: 0 4px 12px rgba(79, 70, 229, 0.15);
+  }
+  .cd-ai-panel-pop {
+    animation: cd-panel-pop .24s ease-out;
+  }
+  .cd-ai-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+  .cd-ai-sub {
+    font-size: 12px;
+    color: #64748b;
+    margin-top: 2px;
+  }
+
+  #cd-ai-panel{
+    background: #0071ff21;
+  }
+
+  .cd-ai-expect {
+    width: 100%;
+    min-height: 74px;
+    resize: vertical;
+    background: rgba(147, 51, 234, 0.2);
+  }
+  @keyframes cd-panel-pop {
+    from { opacity: 0; transform: translateY(-8px) scale(.995); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
 </style>
 {% endblock %}
 
@@ -87,6 +136,9 @@
       </select>
       <button id="cd-open-builder" class="cd-icon-btn" title="Create / Edit Dashboard">
         <span id="cd-open-builder-icon" style="font-size:18px;line-height:1;">+</span>
+      </button>
+      <button id="cd-toggle-ai" class="cd-settings-btn cd-ai-toggle-btn" title="Show AI Insights">
+        <span style="line-height:1;">AI</span>
       </button>
       <button id="cd-open-settings" class="cd-settings-btn" title="Jira Settings">
         <span style="font-size:14px;line-height:1;">⚙</span>
@@ -127,6 +179,51 @@
           <div id="kpi-lb-bar" class="cd-lb-fill" style="width:0%"></div>
         </div>
       </div>
+    </div>
+  </div>
+
+  <div id="cd-ai-panel" class="cd-card p-4 cd-hidden">
+    <div class="cd-ai-head">
+      <div>
+        <h3 class="text-sm font-semibold text-slate-700">AI insights (Claude)</h3>
+        <p class="cd-ai-sub">Generate focused recommendations from the current dashboard view.</p>
+        <p id="cd-ai-config-hint" class="text-xs mt-1 text-slate-400"></p>
+      </div>
+      <div class="flex items-center gap-2 shrink-0">
+        <span id="cd-insights-generating" class="text-xs text-slate-500 cd-hidden">Generating…</span>
+        <button type="button" id="cd-insights-generate" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold rounded-lg disabled:opacity-40 disabled:cursor-not-allowed" disabled>
+          Generate insights
+        </button>
+      </div>
+    </div>
+    <div class="mb-3">
+      <label class="cd-label mb-1" for="cd-insights-expectation">What insights do you expect?</label>
+      <textarea
+        id="cd-insights-expectation"
+        class="cd-input cd-ai-expect"
+        rows="2"
+        placeholder="Example: highlight top risky customers, stuck statuses, overloaded teams, and next actions"
+      ></textarea>
+    </div>
+    <p id="cd-insights-error" class="text-xs text-red-600 mb-2 cd-hidden"></p>
+    <div class="overflow-x-auto">
+      <table class="min-w-full cd-table cd-insights-table">
+        <thead>
+          <tr class="border-b border-slate-200">
+            <th class="py-2 px-2 text-left w-36">Area</th>
+            <th class="py-2 px-2 text-left">Finding</th>
+            <th class="py-2 px-2 text-left">Suggestion</th>
+            <th class="py-2 px-2 text-left w-28">Priority</th>
+          </tr>
+        </thead>
+        <tbody id="cd-insights-body">
+          <tr>
+            <td colspan="4" class="py-5 px-2 text-center text-slate-400 text-sm">
+              Load tickets with JQL, then click <strong>Generate insights</strong> to fill this table.
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   </div>
 
@@ -821,6 +918,132 @@
     return state.rows.filter(r => (r.customers || []).some(c => String(c).toLowerCase() === selectedCustomer));
   }
 
+  function buildSummaryForAi() {
+    const rows = filteredRows();
+    const stats = buildStats(rows);
+    const byTeam = Object.entries(stats.teamCounts).sort((a, b) => b[1] - a[1]).slice(0, 12);
+    const byCustomer = Object.entries(stats.customerCounts).sort((a, b) => b[1] - a[1]).slice(0, 12);
+    const byStatus = Object.entries(stats.statusCounts).sort((a, b) => b[1] - a[1]);
+    const byPriority = Object.entries(stats.priorityCounts).sort((a, b) => b[1] - a[1]);
+    const customerSel = (document.getElementById("cd-customer").value || "").trim();
+    const expectedInsights = (document.getElementById("cd-insights-expectation")?.value || "").trim();
+    return {
+      jql: state.currentJql || null,
+      customer_filter: customerSel || null,
+      expected_insights: expectedInsights || null,
+      total_issues: rows.length,
+      high_priority_count: stats.high,
+      launch_blocker_count: stats.launchBlockers,
+      launch_blocker_ratio: rows.length ? Math.round((stats.launchBlockers / rows.length) * 1000) / 1000 : 0,
+      by_team: Object.fromEntries(byTeam),
+      by_customer: Object.fromEntries(byCustomer),
+      by_status: Object.fromEntries(byStatus),
+      by_priority: Object.fromEntries(byPriority),
+      sample_issues: rows.slice(0, 45).map(r => ({
+        issue_key: r.issue_key,
+        summary: (r.summary || "").slice(0, 180),
+        status: r.status,
+        priority: r.priority,
+        customers: r.customers || [],
+        team: r.team_name || "Unspecified",
+        launch_blocker: !!r.launch_blocker,
+        created: r.created_date || ""
+      })),
+    };
+  }
+
+  function renderInsightsTable(rows) {
+    const body = document.getElementById("cd-insights-body");
+    if (!rows || !rows.length) {
+      body.innerHTML = `<tr><td colspan="4" class="py-5 px-2 text-center text-slate-400 text-sm">No rows returned.</td></tr>`;
+      return;
+    }
+    body.innerHTML = rows.map(r => {
+      const pr = (r.priority || "Medium");
+      const pClass = pr === "High" || pr === "Low" || pr === "Medium" ? pr : "Medium";
+      return `<tr class="border-b border-slate-100">
+        <td class="py-2.5 px-2 font-semibold text-slate-700 text-xs">${escapeHtml(r.area)}</td>
+        <td class="py-2.5 px-2 text-slate-700 text-xs leading-relaxed">${escapeHtml(r.finding)}</td>
+        <td class="py-2.5 px-2 text-slate-600 text-xs leading-relaxed">${escapeHtml(r.suggestion)}</td>
+        <td class="py-2.5 px-2"><span class="cd-pill cd-insight-p ${pClass}">${escapeHtml(pClass)}</span></td>
+      </tr>`;
+    }).join("");
+  }
+
+  function setInsightsButtonState() {
+    const btn = document.getElementById("cd-insights-generate");
+    if (!btn) return;
+    const n = filteredRows().length;
+    btn.disabled = n === 0;
+  }
+
+  function toggleAiPanel(forceOpen) {
+    const panel = document.getElementById("cd-ai-panel");
+    const btn = document.getElementById("cd-toggle-ai");
+    if (!panel || !btn) return;
+    const nextOpen = typeof forceOpen === "boolean" ? forceOpen : panel.classList.contains("cd-hidden");
+    panel.classList.toggle("cd-hidden", !nextOpen);
+    btn.title = nextOpen ? "Hide AI Insights" : "Show AI Insights";
+    btn.classList.toggle("active", nextOpen);
+    panel.classList.remove("cd-ai-panel-pop");
+    if (nextOpen) {
+      void panel.offsetWidth; // restart animation on repeated opens
+      panel.classList.add("cd-ai-panel-pop");
+      panel.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }
+
+  async function checkAiStatus() {
+    const el = document.getElementById("cd-ai-config-hint");
+    if (!el) return;
+    try {
+      const r = await fetch("/api/customer_dashboard/ai_status");
+      const d = await r.json();
+      if (d.claude_configured) {
+        el.textContent = "Claude API key is configured on the server.";
+        el.className = "text-xs mt-1 text-emerald-600";
+      } else {
+        el.textContent = "Claude is not configured yet — an admin must add the Anthropic API key in Settings.";
+        el.className = "text-xs mt-1 text-amber-600";
+      }
+    } catch (e) {
+      el.textContent = "";
+    }
+  }
+
+  async function generateInsights() {
+    const err = document.getElementById("cd-insights-error");
+    const gen = document.getElementById("cd-insights-generating");
+    const btn = document.getElementById("cd-insights-generate");
+    err.classList.add("cd-hidden");
+    err.textContent = "";
+    if (!filteredRows().length) return;
+    gen.classList.remove("cd-hidden");
+    if (btn) btn.disabled = true;
+    try {
+      const res = await fetch("/api/customer_dashboard/insights", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ summary: buildSummaryForAi() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Request failed");
+      renderInsightsTable(data.insights || []);
+    } catch (e) {
+      err.textContent = e.message || "Failed to generate insights.";
+      err.classList.remove("cd-hidden");
+      renderInsightsTable([{
+        area: "Insights request",
+        finding: "AI response failed. Showing fallback guidance so the table still has output.",
+        suggestion: e.message || "Retry in a few seconds, or review Settings and regenerate.",
+        priority: "Medium",
+      }]);
+    } finally {
+      gen.classList.add("cd-hidden");
+      if (btn) setInsightsButtonState();
+    }
+  }
+
   function buildStats(rows) {
     const timelineMap = {};
     const timelineDayMap = {};
@@ -955,6 +1178,7 @@
     }
 
     updateTable(rows);
+    setInsightsButtonState();
   }
 
   function fillCustomerDropdown(customers) {
@@ -1057,7 +1281,10 @@
     document.getElementById("cd-prev").addEventListener("click", () => { if (state.page > 1) { state.page -= 1; updateDashboard(); } });
     document.getElementById("cd-next").addEventListener("click", () => { if (state.page < state.totalPages) { state.page += 1; updateDashboard(); } });
     document.getElementById("cd-open-builder").addEventListener("click", openJqlDialog);
+    document.getElementById("cd-toggle-ai").addEventListener("click", () => toggleAiPanel());
     document.getElementById("cd-open-settings").addEventListener("click", openSettingsDialog);
+    const insBtn = document.getElementById("cd-insights-generate");
+    if (insBtn) insBtn.addEventListener("click", () => generateInsights());
     document.getElementById("cd-jql-cancel").addEventListener("click", closeJqlDialog);
     document.getElementById("cd-jql-close").addEventListener("click", closeJqlDialog);
     document.getElementById("cd-jql-apply").addEventListener("click", () => fetchByJql(document.getElementById("cd-jql-input").value));
@@ -1087,6 +1314,8 @@
 
   async function init() {
     wireEvents();
+    toggleAiPanel(false);
+    checkAiStatus();
     const stored = getStoredSettings();
     state.currentJql = stored.jql || `project = "{{ project }}" AND created >= -30d ORDER BY created DESC`;
     setDashboardReady(false);

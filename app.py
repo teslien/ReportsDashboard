@@ -1489,6 +1489,222 @@ def customer_dashboard_data():
         "count": len(rows)
     })
 
+
+def _claude_customer_dashboard_insights_json(summary, anthropic_api_key, model="claude-sonnet-4-20250514"):
+    """
+    Call Claude with a compact dashboard summary; return a list of insight dicts
+    {area, finding, suggestion, priority} or None on failure.
+    """
+    if not summary or not anthropic_api_key:
+        return None
+    try:
+        payload_str = json.dumps(summary, default=str, ensure_ascii=False)
+    except (TypeError, ValueError):
+        return None
+    if len(payload_str) > 100_000:
+        payload_str = payload_str[:100_000] + "\n…[truncated]"
+
+    expected = str((summary or {}).get("expected_insights") or "").strip()
+    expected_block = (
+        f"User expectation for this run:\n{expected}\n\n"
+        if expected
+        else "User expectation for this run:\nNot provided. Choose the most useful defaults.\n\n"
+    )
+
+    prompt = (
+        "You are an engineering program analyst. The following JSON is a snapshot of a Jira customer "
+        "dashboard: KPIs, distributions by team, customer, status, priority, and a sample of issues.\n"
+        "Produce actionable insights a PM or eng lead can use the same day.\n\n"
+        "Return ONLY valid JSON (no markdown fences, no surrounding prose) in this exact shape:\n"
+        '{"insights":[{"area":"short category label",'
+        '"finding":"1-2 sentences; cite numbers from the data when possible",'
+        '"suggestion":"concrete next step; reference issue keys only if they appear in the sample",'
+        '"priority":"High"}]}\n\n'
+        "Rules:\n"
+        "- 6 to 10 insight rows.\n"
+        "- priority must be one of: High, Medium, Low.\n"
+        "- Vary 'area' across rows: e.g. Launch risk, High priority, Team load, Customer concentration, "
+        "Status bottlenecks, Unassigned/ownership, Time window / inflow, Data hygiene — only where the data supports it.\n"
+        "- If the sample is too small to infer something, say that in the finding and suggest what data to collect.\n"
+        "- Do not invent customers, teams, or ticket keys that are not in the JSON.\n\n"
+        f"{expected_block}"
+        f"JSON snapshot:\n{payload_str}"
+    )
+    try:
+        res = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "Content-Type": "application/json",
+                "x-api-key": anthropic_api_key,
+                "anthropic-version": "2023-06-01",
+            },
+            json={
+                "model": model,
+                "max_tokens": 4096,
+                "messages": [{"role": "user", "content": prompt}],
+            },
+            timeout=120,
+        )
+        if not res.ok:
+            print(f"Claude insights HTTP {res.status_code}: {res.text[:500]}")
+            return None
+        data = res.json()
+        text = "".join(b.get("text", "") for b in (data.get("content") or []) if b.get("type") == "text")
+        match = re.search(r"\{[\s\S]*\}", text)
+        if not match:
+            return None
+        parsed = json.loads(match.group(0))
+        raw = parsed.get("insights")
+        if not isinstance(raw, list):
+            return None
+        out = []
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            area = str(item.get("area") or "General").strip() or "General"
+            finding = str(item.get("finding") or "").strip()
+            suggestion = str(item.get("suggestion") or "").strip()
+            pr = str(item.get("priority") or "Medium").strip()
+            if pr not in ("High", "Medium", "Low"):
+                pr = "Medium"
+            if not finding and not suggestion:
+                continue
+            out.append(
+                {
+                    "area": area[:200],
+                    "finding": finding[:1200],
+                    "suggestion": suggestion[:1200],
+                    "priority": pr,
+                }
+            )
+        return out or None
+    except Exception as e:
+        print(f"Claude customer dashboard insights error: {e}")
+        return None
+
+
+def _fallback_customer_dashboard_insights(summary, reason=None):
+    summary = summary or {}
+    total = int(summary.get("total_issues") or 0)
+    high = int(summary.get("high_priority_count") or 0)
+    lb = int(summary.get("launch_blocker_count") or 0)
+    ratio = float(summary.get("launch_blocker_ratio") or 0)
+    by_status = summary.get("by_status") or {}
+    by_team = summary.get("by_team") or {}
+    by_customer = summary.get("by_customer") or {}
+    expected = str(summary.get("expected_insights") or "").strip()
+
+    top_status = "Unknown"
+    top_status_count = 0
+    if isinstance(by_status, dict) and by_status:
+        top_status, top_status_count = max(by_status.items(), key=lambda kv: kv[1] or 0)
+    top_team = "Unspecified"
+    top_team_count = 0
+    if isinstance(by_team, dict) and by_team:
+        top_team, top_team_count = max(by_team.items(), key=lambda kv: kv[1] or 0)
+    top_customer = "Unspecified"
+    top_customer_count = 0
+    if isinstance(by_customer, dict) and by_customer:
+        top_customer, top_customer_count = max(by_customer.items(), key=lambda kv: kv[1] or 0)
+
+    lb_pct = round(ratio * 100, 1) if ratio <= 1 else round(ratio, 1)
+    high_pct = round((high / total) * 100, 1) if total else 0
+
+    rows = [
+        {
+            "area": "Dataset health",
+            "finding": f"Current filtered dataset has {total} issues.",
+            "suggestion": "Use this run to identify immediate risks and one weekly trend to track.",
+            "priority": "Low",
+        },
+        {
+            "area": "High priority load",
+            "finding": f"{high} issues are high-priority ({high_pct}% of total).",
+            "suggestion": "Create a short burn-down list for P0/P1 issues and assign explicit owners.",
+            "priority": "High" if high_pct >= 20 else "Medium",
+        },
+        {
+            "area": "Launch blocker risk",
+            "finding": f"{lb} issues are marked as launch blockers ({lb_pct}%).",
+            "suggestion": "Review blocker criteria and run a daily unblock checkpoint until ratio trends down.",
+            "priority": "High" if lb > 0 else "Medium",
+        },
+        {
+            "area": "Status concentration",
+            "finding": f"Top status bucket is '{top_status}' with {top_status_count} issues.",
+            "suggestion": "Inspect this status bucket for aging tickets and define exit criteria.",
+            "priority": "Medium",
+        },
+        {
+            "area": "Team distribution",
+            "finding": f"Top team by ticket share is '{top_team}' with {top_team_count} issues.",
+            "suggestion": "Check whether this team has balanced ownership and if parallelization is needed.",
+            "priority": "Medium",
+        },
+        {
+            "area": "Customer concentration",
+            "finding": f"Top customer in this view is '{top_customer}' with {top_customer_count} issues.",
+            "suggestion": "Confirm roadmap alignment with this customer and capture recurrent root causes.",
+            "priority": "Medium",
+        },
+    ]
+
+    if expected:
+        rows.insert(
+            1,
+            {
+                "area": "Requested focus",
+                "finding": f"Expected insight focus: {expected[:300]}",
+                "suggestion": "Use this focus to prioritize which sections of the dashboard you review first.",
+                "priority": "Medium",
+            },
+        )
+
+    if reason:
+        rows.insert(
+            0,
+            {
+                "area": "AI availability",
+                "finding": f"Claude output unavailable for this request ({reason}). Fallback analytics were generated.",
+                "suggestion": "Verify API key/network and regenerate for richer narrative while keeping this table as baseline.",
+                "priority": "Low",
+            },
+        )
+
+    return rows[:10]
+
+
+@app.route("/api/customer_dashboard/ai_status", methods=["GET"])
+def customer_dashboard_ai_status():
+    """Whether Anthropic (Claude) key is set in app_config — no secret exposed."""
+    key = (_get_app_config_value("anthropic_api_key") or "").strip()
+    return jsonify({"claude_configured": bool(key)})
+
+
+@app.route("/api/customer_dashboard/insights", methods=["POST"])
+def customer_dashboard_insights():
+    """
+    Generate table-style AI insights from a client-built summary. Uses server-side anthropic_api_key.
+    """
+    payload = request.get_json(silent=True) or {}
+    summary = payload.get("summary")
+    if not summary or not isinstance(summary, dict):
+        fallback = _fallback_customer_dashboard_insights({}, reason="invalid request payload")
+        return jsonify({"insights": fallback, "fallback": True})
+
+    anthropic_key = (_get_app_config_value("anthropic_api_key") or "").strip()
+    if not anthropic_key:
+        fallback = _fallback_customer_dashboard_insights(summary, reason="missing Anthropic API key")
+        return jsonify({"insights": fallback, "fallback": True})
+
+    insights = _claude_customer_dashboard_insights_json(summary, anthropic_key)
+    if not insights:
+        fallback = _fallback_customer_dashboard_insights(summary, reason="Claude response parse/transport error")
+        return jsonify({"insights": fallback, "fallback": True})
+
+    return jsonify({"insights": insights})
+
+
 # =========================
 # FETCH SCOREBOARD DATA
 # =========================

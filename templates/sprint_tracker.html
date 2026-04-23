@@ -77,6 +77,10 @@
   .st-shell .row-actions button:hover { color: #dc2626; }
   .st-shell .btn-ghost { font-size: 12px; color: #4f46e5; background: #eef2ff; border: 1px solid #c7d2fe; padding: 4px 10px; border-radius: 6px; cursor: pointer; }
   .st-shell .btn-ghost:hover { background: #e0e7ff; }
+  .st-shell .st-add-bullet-btn,
+  .st-shell .st-add-ticket-btn { opacity: 0; pointer-events: none; transition: opacity 0.15s ease; }
+  .st-shell .st-cell-bullets:hover .st-add-bullet-btn,
+  .st-shell .st-cell-tickets:hover .st-add-ticket-btn { opacity: 1; pointer-events: auto; }
   .st-shell .ticket-bullets { margin-top: 4px; padding-left: 2px; font-size: 11px; color: #475569; }
   .st-shell .ticket-bullets li { list-style: disc; margin-left: 14px; margin-bottom: 2px; }
   .st-shell .wrapper { background: #fff; border-radius: 0; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 1px 2px rgba(15,23,42,0.04); }
@@ -533,16 +537,16 @@
             <span contenteditable="true" data-themeid="${theme.id}" data-field="epic_name">${esc(theme.epic_name)}</span>
           </div>
         </td>
-        <td>
+        <td class="st-cell-bullets">
           <ul class="bullet-list" data-themeid="${theme.id}" data-field="bullets">
             ${(theme.bullets || []).map(b => `<li contenteditable="true" class="st-bullet">${esc(b)}</li>`).join("")}
-            <li><span class="btn-ghost" onclick="window.stAddBullet(${theme.id})" style="font-size:10px;padding:2px 6px;">+ bullet</span></li>
+            <li><span class="btn-ghost st-add-bullet-btn" onclick="window.stAddBullet(${theme.id})" style="font-size:10px;padding:2px 6px;">+ bullet</span></li>
           </ul>
         </td>
-        <td>
+        <td class="st-cell-tickets">
           <div class="flex flex-wrap">
             ${(theme.tickets || []).map(t => ticketChip(t)).join("")}
-            <span class="btn-ghost" style="font-size:10px;padding:2px 6px;margin:2px;" onclick="window.stAddTicket(${theme.id})">+ ticket</span>
+            <span class="btn-ghost st-add-ticket-btn" style="font-size:10px;padding:2px 6px;margin:2px;" onclick="window.stAddTicket(${theme.id})">+ ticket</span>
           </div>
           ${renderTicketBullets(theme)}
         </td>
