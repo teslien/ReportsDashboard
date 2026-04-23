@@ -7,11 +7,24 @@
 <style>
   body.st-page nav > div { max-width: 100% !important; padding-left: 16px !important; padding-right: 16px !important; }
   body.st-page main { max-width: 100% !important; }
+  body.st-page.st-maximized nav { display: none !important; }
+  body.st-page.st-maximized main { padding-top: 8px !important; max-width: 100% !important; }
   .st-shell { background: #f8fafc; color: #1e293b; border-radius: 0; border: 1px solid #e2e8f0; overflow: hidden; }
   .st-shell * { box-sizing: border-box; }
   .st-shell .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; position: relative; top: -1px; }
   .st-shell .chip { display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px; border-radius: 10px; font-size: 11px; font-weight: 500; text-decoration: none; white-space: nowrap; margin: 2px 1px; border: 1px solid rgba(0,0,0,0.08); background: #f1f5f9; color: #334155; }
   .st-shell .chip:hover { opacity: 0.85; }
+  .st-shell .chip-wrap { display:inline-flex; align-items:center; gap:2px; margin:2px 1px; }
+  .st-shell .chip-del {
+    border: none;
+    background: transparent;
+    color: #94a3b8;
+    font-size: 11px;
+    cursor: pointer;
+    line-height: 1;
+    padding: 0 2px;
+  }
+  .st-shell .chip-del:hover { color: #dc2626; }
   .st-shell .drag-handle { cursor: grab; user-select: none; color: #cbd5e1; font-size: 14px; padding: 0 4px; }
   .st-shell .drag-handle:hover { color: #94a3b8; }
   .st-shell tr.dragging-row { opacity: 0.3; }
@@ -56,6 +69,8 @@
   .st-shell .sync-btn { background: #4f46e5; color: white; border: none; padding: 6px 14px; border-radius: 7px; font-size: 12px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
   .st-shell .sync-btn:hover { background: #4338ca; }
   .st-shell .sync-btn:disabled { background: #a5b4fc; cursor: not-allowed; }
+  .st-shell .sync-icon-btn { width: 30px; height: 30px; padding: 0; border-radius: 8px; justify-content: center; font-size: 14px; background: #0f766e; }
+  .st-shell .sync-icon-btn:hover { background: #0d685f; }
   .st-shell .sync-status { font-size: 11px; color: #64748b; margin-left: 8px; }
   .st-shell .sync-ok { color: #16a34a; }
   .st-shell .sync-err { color: #dc2626; }
@@ -333,6 +348,7 @@
         </div>
         <div class="flex items-center gap-3">
           <span id="st-saved" class="saved-badge"></span>
+          <button class="btn-ghost" id="st-maximize-btn" title="Toggle maximize view">⛶ Maximize</button>
           <a href="/settings" class="btn-ghost" title="Manage Anthropic API key in Settings" style="text-decoration:none;">
             <span style="font-size:11px;color:#64748b;">Anthropic key</span>
             <span id="st-api-key-status" style="font-size:11px;font-weight:600;color:#94a3b8;">Not set</span>
@@ -372,6 +388,8 @@
     document.getElementById("st-new-tab").onclick = promptNewSprint;
     document.getElementById("st-new-jql-tab").onclick = promptNewSprintFromJql;
     document.getElementById("st-delete-sprint").onclick = onDeleteSprint;
+    const maxBtn = document.getElementById("st-maximize-btn");
+    if (maxBtn) maxBtn.onclick = toggleMaximize;
     document.getElementById("st-legend-toggle").onclick = () => {
       const el = document.getElementById("st-legend");
       const tog = document.getElementById("st-legend-toggle");
@@ -423,10 +441,8 @@
           ${lbCount ? `<span>·</span><span class="badge-lb">🚨 ${lbCount} launch blocker${lbCount>1?'s':''}</span>` : ""}
         </div>
         <div class="flex items-center gap-2">
-          <label style="font-size:11px;color:#475569;display:inline-flex;align-items:center;gap:4px;">
-            <input type="checkbox" id="st-rewrite" ${rewriteOnSync ? "checked":""}/>
-            rewrite descriptions (Claude)
-          </label>
+          <button class="sync-btn sync-icon-btn" id="st-sync-jql-btn" title="Sync from JQL" style="display:none;">⇄</button>
+          <span class="sync-status" id="st-sync-status"></span>
         </div>
       </div>
       <div class="overflow-x-auto">
@@ -493,7 +509,7 @@
     });
 
     // Tab actions
-    document.getElementById("st-rewrite").onchange = (e) => { rewriteOnSync = e.target.checked; };
+    document.getElementById("st-sync-jql-btn").onclick = onSyncFromJql;
 
     // Drag-and-drop attach
     attachDragAndDrop();
@@ -585,25 +601,18 @@
   function ticketChip(t) {
     const status = t.status || "Open";
     const dot = statusDot(status);
-    return `<span style="display:inline-flex;align-items:center;gap:2px;margin:2px 1px;">
+    return `<span class="chip-wrap">
       <a href="${JIRA_BASE}${encodeURIComponent(t.ticket_key)}" target="_blank" class="chip">
         ${dot}
         <span title="${esc(t.summary)}">${esc(t.ticket_key)}</span>
       </a>
+      <button class="chip-del" title="Remove ticket" onclick="window.stDeleteTicket(${t.id})">×</button>
     </span>`;
   }
 
   function renderTicketBullets(theme) {
-    const hasAny = (theme.tickets || []).some(t => (t.description_bullets || []).length);
-    if (!hasAny) return "";
-    return `<div class="ticket-bullets">${
-      (theme.tickets || []).filter(t => (t.description_bullets || []).length).map(t => `
-        <div style="margin-top:4px;">
-          <span style="font-weight:600;color:#475569;">${esc(t.ticket_key)}</span>
-          <ul>${t.description_bullets.map(b => `<li>${esc(b)}</li>`).join("")}</ul>
-        </div>
-      `).join("")
-    }</div>`;
+    // Hidden by request: do not show rewritten description bullets under ticket chips.
+    return "";
   }
 
   // ─── Event handlers ────────────────────────────────────────
@@ -885,6 +894,23 @@
     } catch(e) { flashError(e.message); }
   };
 
+  window.stDeleteTicket = async function(ticketId) {
+    const d = await showDialog({
+      title: "Remove Ticket",
+      message: "Remove this ticket from the row?",
+      confirmText: "Remove",
+      danger: true
+    });
+    if (!d.confirmed) return;
+    try {
+      await api(`/api/sprint_tracker/tickets/${ticketId}`, { method: "DELETE" });
+      await load();
+      flashOk("Ticket removed");
+    } catch (e) {
+      flashError(e.message);
+    }
+  };
+
   function parseTicketKeys(input) {
     return [...new Set(
       String(input || "")
@@ -1040,38 +1066,68 @@
     } catch(e) { flashError(e.message); }
   }
 
-  async function onSync() {
+  async function onSyncFromJql() {
     const sprint = activeSprint(); if (!sprint) return;
-    const btn = document.getElementById("st-sync-btn");
+    const cacheKey = `st_sync_jql_${sprint.id}`;
+    const prevJql = localStorage.getItem(cacheKey) || `project = "{{ project }}" AND sprint = ${sprint.id}`;
+    const d = await showDialog({
+      title: "Sync from JQL",
+      message: "This sync updates ticket status/details and adds new tickets from JQL. Claude rewrite is NOT used.",
+      confirmText: "Run Sync",
+      fields: [{ name: "jql", label: "JQL Query", value: prevJql, multiline: true, rows: 4 }]
+    });
+    if (!d.confirmed) return;
+    const jql = (d.values.jql || "").trim();
+    if (!jql) {
+      flashError("JQL is required");
+      return;
+    }
+    localStorage.setItem(cacheKey, jql);
+    const btn = document.getElementById("st-sync-jql-btn");
     const statusEl = document.getElementById("st-sync-status");
     btn.disabled = true;
-    btn.innerHTML = '<span class="spinner"></span> Syncing…';
+    btn.innerHTML = '<span class="spinner"></span>';
     statusEl.textContent = "";
     try {
-      if (rewriteOnSync && !anthropicKey) {
-        const k = await ensureAnthropicKeyWithDialog("Description rewrite is enabled. Enter key to continue sync.");
-        if (!k) {
-          throw new Error("Anthropic key is required for rewrite-enabled sync");
-        }
-      }
-      const res = await api(`/api/sprint_tracker/sprints/${sprint.id}/sync`, {
+      const res = await api(`/api/sprint_tracker/sprints/${sprint.id}/sync_jql`, {
         method: "POST",
-        body: JSON.stringify({
-          anthropic_api_key: anthropicKey,
-          rewrite_descriptions: rewriteOnSync,
-        })
+        body: JSON.stringify({ jql })
       });
       await load();
       const now = new Date();
       statusEl.className = "sync-status sync-ok";
-      statusEl.textContent = `Synced ${res.synced}/${res.total} at ${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}`;
+      statusEl.textContent = `JQL sync: ${res.updated || 0} updated, ${res.inserted || 0} inserted, ${res.removed || 0} removed (${res.total_fetched || 0} fetched) at ${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}`;
     } catch(e) {
       statusEl.className = "sync-status sync-err";
-      statusEl.textContent = `Sync failed: ${e.message}`;
+      statusEl.textContent = `JQL sync failed: ${e.message}`;
     } finally {
       btn.disabled = false;
-      btn.innerHTML = '<span>⟳</span> Sync from Jira';
+      btn.innerHTML = '⇄';
     }
+  }
+
+  async function toggleMaximize() {
+    const btn = document.getElementById("st-maximize-btn");
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      } else {
+        const shell = document.querySelector(".st-shell") || document.documentElement;
+        if (shell.requestFullscreen) await shell.requestFullscreen();
+        else document.body.classList.toggle("st-maximized");
+      }
+    } catch(_) {
+      document.body.classList.toggle("st-maximized");
+    }
+    updateMaximizeBtn();
+    if (btn) btn.blur();
+  }
+
+  function updateMaximizeBtn() {
+    const btn = document.getElementById("st-maximize-btn");
+    if (!btn) return;
+    const isFull = !!document.fullscreenElement || document.body.classList.contains("st-maximized");
+    btn.textContent = isFull ? "🗗 Exit Maximize" : "⛶ Maximize";
   }
 
   async function loadAnthropicKey() {
@@ -1173,8 +1229,10 @@
   // ─── Init ─────────────────────────────────────────────────
   (async function init(){
     await loadAnthropicKey();
+    document.addEventListener("fullscreenchange", updateMaximizeBtn);
     try {
       await load();
+      updateMaximizeBtn();
     } catch(e) {
       document.getElementById("st-app").innerHTML =
         `<div class="px-5 py-8 text-center text-red-600">Failed to load sprint tracker: ${esc(e.message)}</div>`;

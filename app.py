@@ -407,7 +407,7 @@ def init_db():
         if row:
             perms = json.loads(row[0]) if row[0] else {}
             allowed = perms.get('allowed_pages')
-            default_editor_pages = ['sprint_tracker', 'customer_dashboard']
+            default_editor_pages = ['sprint_tracker', 'customer_dashboard', 'sprint_dashboard']
             if isinstance(allowed, list):
                 for page in default_editor_pages:
                     if page not in allowed:
@@ -1026,6 +1026,7 @@ PAGE_PERMISSIONS = [
     {"key": "dashboard", "label": "Dashboard"},
     {"key": "scoreboard", "label": "Scoreboard"},
     {"key": "customer_dashboard", "label": "Customer Dashboard"},
+    {"key": "sprint_dashboard", "label": "Sprint Dashboard"},
     {"key": "explorer", "label": "Explorer"},
     {"key": "custom_reports", "label": "Custom Reports"},
     {"key": "scrum_notes", "label": "Scrum Notes"},
@@ -1335,6 +1336,11 @@ def scoreboard():
 def customer_dashboard_page():
     return render_template("customer_dashboard.html", project=PROJECT_KEY, show_navbar=False)
 
+@app.route("/sprint_dashboard")
+@page_permission_required("sprint_dashboard")
+def sprint_dashboard_page():
+    return render_template("sprint_dashboard.html", project=PROJECT_KEY, show_navbar=False)
+
 def _extract_customer_values(raw_value):
     customers = []
     if isinstance(raw_value, list):
@@ -1378,6 +1384,61 @@ def _is_high_priority(priority_name):
 
 def _escape_jql_value(value):
     return str(value or "").replace("\\", "\\\\").replace('"', '\\"')
+
+def _extract_sprint_values(raw_value):
+    """Return stable sprint list from Jira sprint custom field."""
+    out = []
+    seen = set()
+    if not isinstance(raw_value, list):
+        return out
+    for item in raw_value:
+        sprint_id = None
+        sprint_name = "Unknown Sprint"
+        if isinstance(item, dict):
+            try:
+                sprint_id = int(item.get("id"))
+            except Exception:
+                sprint_id = None
+            sprint_name = (item.get("name") or "").strip() or "Unknown Sprint"
+        elif isinstance(item, str):
+            id_match = re.search(r"id=(\d+)", item)
+            name_match = re.search(r"name=([^,\]]+)", item)
+            if id_match:
+                try:
+                    sprint_id = int(id_match.group(1))
+                except Exception:
+                    sprint_id = None
+            if name_match:
+                sprint_name = name_match.group(1).strip() or "Unknown Sprint"
+        key = (sprint_id, sprint_name.lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({"id": sprint_id, "name": sprint_name})
+    return out
+
+def _is_done_like_status(status_name, status_category):
+    done_statuses = {
+        "DONE", "RESOLVED", "DEPLOYED", "STAGED", "READY FOR QA",
+        "READY FOR STAGING", "READY FOR INTERNAL DEMO", "CLOSED",
+        "NOT A BUG", "UNABLE TO REPRODUCE"
+    }
+    name = (status_name or "").strip().upper()
+    category = (status_category or "").strip().lower()
+    return category == "done" or name in done_statuses
+
+def _is_bug_type(issue_type_name):
+    return (issue_type_name or "").strip().lower() == "bug"
+
+def _issue_type_bucket(issue_type_name):
+    k = (issue_type_name or "").strip().lower()
+    if k == "bug":
+        return "Bug"
+    if k in ("story", "user story"):
+        return "Story"
+    if k == "task":
+        return "Task"
+    return "Other"
 
 @app.route("/api/customer_dashboard/data", methods=["POST"])
 def customer_dashboard_data():
@@ -1489,6 +1550,613 @@ def customer_dashboard_data():
         "customers": sorted(unique_customers),
         "count": len(rows)
     })
+
+@app.route("/api/sprint_dashboard/data", methods=["POST"])
+def sprint_dashboard_data():
+    payload = request.get_json(silent=True) or {}
+    jql = (payload.get("jql") or "").strip()
+    if not jql:
+        return jsonify({"error": "JQL is required"}), 400
+
+    project_key_str = str(PROJECT_KEY).strip()
+    if not project_key_str:
+        return jsonify({"error": "Missing project key. Save it in Settings first."}), 400
+    if "Authorization" not in dict(HEADERS):
+        return jsonify({"error": "Missing Jira credentials. Save them in Settings first."}), 401
+
+    fields = (
+        "summary,status,priority,assignee,created,resolutiondate,issuetype,labels,"
+        "customfield_10020,customfield_10014,customfield_10077"
+    )
+    headers_dict = dict(HEADERS)
+    all_issues = []
+    seen_issue_keys = set()
+    start_at = 0
+    next_page_token = None
+    page_safety = 0
+    while page_safety < 80:
+        page_safety += 1
+        params = {"jql": jql, "maxResults": 100, "fields": fields}
+        if next_page_token:
+            params["nextPageToken"] = next_page_token
+        else:
+            params["startAt"] = start_at
+        jira_res = requests.get(
+            f"{JIRA_DOMAIN}/rest/api/3/search/jql",
+            headers=headers_dict,
+            params=params
+        )
+        if jira_res.status_code != 200:
+            return jsonify({"error": f"Jira API error: {jira_res.text}"}), jira_res.status_code
+        data = jira_res.json()
+        issues = data.get("issues", [])
+        if not issues:
+            break
+        new_count = 0
+        for issue in issues:
+            key = issue.get("key")
+            if not key or key in seen_issue_keys:
+                continue
+            seen_issue_keys.add(key)
+            all_issues.append(issue)
+            new_count += 1
+        if new_count == 0:
+            break
+        next_page_token = data.get("nextPageToken")
+        if next_page_token:
+            continue
+        if len(issues) < 100:
+            break
+        start_at += 100
+
+    rows = []
+    assignee_metrics = {}
+    sprint_metrics = {}
+    customer_metrics = {}
+    priority_distribution = {}
+    status_distribution = {}
+    type_distribution = {"Bug": 0, "Story": 0, "Task": 0, "Other": 0}
+    kpis = {
+        "total": 0,
+        "done": 0,
+        "open": 0,
+        "high_priority": 0,
+        "customer_tagged": 0,
+        "resolved_customer_tagged": 0,
+    }
+    unique_assignees = set()
+    unique_sprint_names = set()
+    unique_customers = set()
+    unique_labels = set()
+
+    for issue in all_issues:
+        fields_obj = issue.get("fields") or {}
+        issue_key = issue.get("key") or ""
+        summary = fields_obj.get("summary") or ""
+        status_obj = fields_obj.get("status") or {}
+        status_name = (status_obj.get("name") or "Unknown").strip()
+        status_category = ((status_obj.get("statusCategory") or {}).get("key") or "").strip().lower()
+        priority_name = ((fields_obj.get("priority") or {}).get("name") or "Unspecified").strip()
+        issue_type_name = ((fields_obj.get("issuetype") or {}).get("name") or "Other").strip()
+        labels = [str(v).strip() for v in (fields_obj.get("labels") or []) if str(v).strip()]
+        assignee = fields_obj.get("assignee") or {}
+        assignee_name = (assignee.get("displayName") or "Unassigned").strip() or "Unassigned"
+        created_date = (fields_obj.get("created") or "")[:10]
+        resolution_date = (fields_obj.get("resolutiondate") or "")[:10]
+        customers = _extract_customer_values(fields_obj.get("customfield_10077"))
+        sprint_values = _extract_sprint_values(fields_obj.get("customfield_10020"))
+        epic_key = (fields_obj.get("customfield_10014") or "").strip()
+
+        is_done = _is_done_like_status(status_name, status_category)
+        is_high_priority = _is_high_priority(priority_name)
+        has_customer = len(customers) > 0
+        type_bucket = _issue_type_bucket(issue_type_name)
+        is_bug = _is_bug_type(issue_type_name)
+
+        if not sprint_values:
+            sprint_values = [{"id": None, "name": "No Sprint"}]
+
+        rows.append({
+            "issue_key": issue_key,
+            "summary": summary,
+            "status": status_name,
+            "status_category": status_category,
+            "priority": priority_name,
+            "issue_type": issue_type_name,
+            "assignee_name": assignee_name,
+            "created_date": created_date if re.match(r"^\d{4}-\d{2}-\d{2}$", created_date or "") else "",
+            "resolution_date": resolution_date if re.match(r"^\d{4}-\d{2}-\d{2}$", resolution_date or "") else "",
+            "epic_key": epic_key,
+            "customers": customers,
+            "labels": labels,
+            "sprints": sprint_values,
+            "is_done": is_done,
+            "is_high_priority": is_high_priority,
+            "type_bucket": type_bucket,
+        })
+        for lb in labels:
+            unique_labels.add(lb)
+
+        kpis["total"] += 1
+        if is_done:
+            kpis["done"] += 1
+        else:
+            kpis["open"] += 1
+        if is_high_priority:
+            kpis["high_priority"] += 1
+        if has_customer:
+            kpis["customer_tagged"] += 1
+            if is_done:
+                kpis["resolved_customer_tagged"] += 1
+
+        priority_distribution[priority_name] = priority_distribution.get(priority_name, 0) + 1
+        status_distribution[status_name] = status_distribution.get(status_name, 0) + 1
+        type_distribution[type_bucket] = type_distribution.get(type_bucket, 0) + 1
+
+        if assignee_name not in assignee_metrics:
+            assignee_metrics[assignee_name] = {
+                "assignee_name": assignee_name,
+                "worked": 0,
+                "done": 0,
+                "bug_worked": 0,
+                "bug_done": 0,
+                "high_priority_worked": 0,
+                "ticket_keys": []
+            }
+        assignee_metrics[assignee_name]["worked"] += 1
+        assignee_metrics[assignee_name]["ticket_keys"].append(issue_key)
+        if is_done:
+            assignee_metrics[assignee_name]["done"] += 1
+        if is_bug:
+            assignee_metrics[assignee_name]["bug_worked"] += 1
+            if is_done:
+                assignee_metrics[assignee_name]["bug_done"] += 1
+        if is_high_priority:
+            assignee_metrics[assignee_name]["high_priority_worked"] += 1
+        unique_assignees.add(assignee_name)
+
+        for sprint_item in sprint_values:
+            sprint_id = sprint_item.get("id")
+            sprint_name = sprint_item.get("name") or "Unknown Sprint"
+            sprint_key = f"{sprint_id}" if sprint_id is not None else f"name:{sprint_name}"
+            if sprint_key not in sprint_metrics:
+                sprint_metrics[sprint_key] = {
+                    "sprint_id": sprint_id,
+                    "sprint_name": sprint_name,
+                    "total": 0,
+                    "done": 0,
+                    "open": 0,
+                    "bug_total": 0,
+                    "bug_done": 0,
+                    "story_total": 0,
+                    "story_done": 0,
+                    "task_total": 0,
+                    "task_done": 0,
+                    "other_total": 0,
+                    "other_done": 0,
+                }
+            sprint_metrics[sprint_key]["total"] += 1
+            if is_done:
+                sprint_metrics[sprint_key]["done"] += 1
+            else:
+                sprint_metrics[sprint_key]["open"] += 1
+            if type_bucket == "Bug":
+                sprint_metrics[sprint_key]["bug_total"] += 1
+                if is_done:
+                    sprint_metrics[sprint_key]["bug_done"] += 1
+            elif type_bucket == "Story":
+                sprint_metrics[sprint_key]["story_total"] += 1
+                if is_done:
+                    sprint_metrics[sprint_key]["story_done"] += 1
+            elif type_bucket == "Task":
+                sprint_metrics[sprint_key]["task_total"] += 1
+                if is_done:
+                    sprint_metrics[sprint_key]["task_done"] += 1
+            else:
+                sprint_metrics[sprint_key]["other_total"] += 1
+                if is_done:
+                    sprint_metrics[sprint_key]["other_done"] += 1
+            unique_sprint_names.add(sprint_name)
+
+        if has_customer:
+            for customer in customers:
+                if customer not in customer_metrics:
+                    customer_metrics[customer] = {"customer": customer, "created": 0, "resolved": 0}
+                customer_metrics[customer]["created"] += 1
+                if is_done:
+                    customer_metrics[customer]["resolved"] += 1
+                unique_customers.add(customer)
+
+    assignee_list = list(assignee_metrics.values())
+    assignee_list.sort(key=lambda x: (x["done"], x["worked"]), reverse=True)
+    for a in assignee_list:
+        a["ticket_keys"] = sorted(a["ticket_keys"])
+
+    sprint_list = list(sprint_metrics.values())
+    sprint_list.sort(key=lambda x: ((x["sprint_id"] is None), x["sprint_name"].lower()))
+    for s in sprint_list:
+        s["done_ratio"] = round((s["done"] / s["total"]) * 100, 2) if s["total"] else 0.0
+
+    customer_list = list(customer_metrics.values())
+    customer_list.sort(key=lambda x: (x["resolved"], x["created"]), reverse=True)
+
+    return jsonify({
+        "kpis": kpis,
+        "rows": rows,
+        "assignee_metrics": assignee_list,
+        "sprint_metrics": sprint_list,
+        "customer_metrics": customer_list,
+        "priority_distribution": priority_distribution,
+        "status_distribution": status_distribution,
+        "type_distribution": type_distribution,
+        "assignees": sorted(unique_assignees),
+        "sprints": sorted(unique_sprint_names),
+        "customers": sorted(unique_customers),
+        "labels": sorted(unique_labels),
+        "count": len(rows)
+    })
+
+@app.route("/api/sprint_dashboard/plan_actual", methods=["POST"])
+def sprint_dashboard_plan_actual():
+    payload = request.get_json(silent=True) or {}
+    sprint_id = payload.get("sprint_id")
+    selected_labels = payload.get("labels") or []
+    if not isinstance(selected_labels, list):
+        selected_labels = []
+    selected_labels = [str(v).strip() for v in selected_labels if str(v).strip()]
+    if sprint_id in (None, ""):
+        return jsonify({"error": "sprint_id is required"}), 400
+    try:
+        sprint_id = int(str(sprint_id).strip())
+    except Exception:
+        return jsonify({"error": "sprint_id must be a number"}), 400
+
+    project_key_str = str(PROJECT_KEY).strip()
+    if not project_key_str:
+        return jsonify({"error": "Missing project key. Save it in Settings first."}), 400
+    if "Authorization" not in dict(HEADERS):
+        return jsonify({"error": "Missing Jira credentials. Save them in Settings first."}), 401
+
+    dataset, err, code = _collect_sprint_plan_actual_dataset(sprint_id, selected_labels)
+    if err:
+        return jsonify({"error": err}), code
+    return jsonify(dataset)
+
+
+def _collect_sprint_plan_actual_dataset(sprint_id, selected_labels):
+    """Fetch sprint-only issues and compute plan-vs-actual plus report metrics."""
+    project_key_str = str(PROJECT_KEY).strip()
+    if not project_key_str:
+        return None, "Missing project key. Save it in Settings first.", 400
+    if "Authorization" not in dict(HEADERS):
+        return None, "Missing Jira credentials. Save them in Settings first.", 401
+
+    jql = f'project = "{project_key_str}" AND sprint = {int(sprint_id)}'
+    if selected_labels:
+        escaped = [f'"{_escape_jql_value(v)}"' for v in selected_labels]
+        jql += f" AND labels IN ({', '.join(escaped)})"
+
+    headers_dict = dict(HEADERS)
+    all_issues = []
+    seen_issue_keys = set()
+    start_at = 0
+    next_page_token = None
+    page_safety = 0
+    while page_safety < 80:
+        page_safety += 1
+        params = {
+            "jql": jql,
+            "maxResults": 100,
+            "fields": "summary,status,assignee,issuetype,customfield_10014,customfield_10077"
+        }
+        if next_page_token:
+            params["nextPageToken"] = next_page_token
+        else:
+            params["startAt"] = start_at
+        jira_res = requests.get(f"{JIRA_DOMAIN}/rest/api/3/search/jql", headers=headers_dict, params=params)
+        if jira_res.status_code != 200:
+            return None, f"Jira API error: {jira_res.text}", jira_res.status_code
+        data = jira_res.json()
+        issues = data.get("issues", [])
+        if not issues:
+            break
+        new_count = 0
+        for issue in issues:
+            key = issue.get("key")
+            if not key or key in seen_issue_keys:
+                continue
+            seen_issue_keys.add(key)
+            all_issues.append(issue)
+            new_count += 1
+        if new_count == 0:
+            break
+        next_page_token = data.get("nextPageToken")
+        if next_page_token:
+            continue
+        if len(issues) < 100:
+            break
+        start_at += 100
+
+    total = len(all_issues)
+    done = 0
+    done_by_assignee = {}
+    planned_tickets, done_tickets, open_tickets = [], [], []
+    total_bugs = total_bugs_fixed = 0
+    total_story = total_story_done = 0
+    total_task = total_task_done = 0
+    epic_ticket_total = epic_ticket_done = 0
+    epic_map = {}
+    customer_metrics = {}
+    customer_fixed_total = 0
+    for issue in all_issues:
+        f = issue.get("fields") or {}
+        status = f.get("status") or {}
+        status_name = (status.get("name") or "").strip()
+        status_category = ((status.get("statusCategory") or {}).get("key") or "").strip().lower()
+        is_done = _is_done_like_status(status_name, status_category)
+        assignee_name = ((f.get("assignee") or {}).get("displayName") or "Unassigned").strip() or "Unassigned"
+        issue_type_name = ((f.get("issuetype") or {}).get("name") or "Other").strip()
+        is_bug = _is_bug_type(issue_type_name)
+        is_story = _issue_type_bucket(issue_type_name) == "Story"
+        epic_key = str(f.get("customfield_10014") or "").strip()
+        customers = _extract_customer_values(f.get("customfield_10077"))
+        ticket_row = {
+            "issue_key": issue.get("key") or "",
+            "summary": f.get("summary") or "",
+            "status": status_name or "Unknown",
+            "assignee_name": assignee_name,
+            "issue_type": issue_type_name,
+            "is_bug": is_bug,
+            "is_story": is_story,
+            "epic_key": epic_key,
+            "customers": customers,
+        }
+        planned_tickets.append(ticket_row)
+        if is_done:
+            done += 1
+            done_by_assignee[assignee_name] = done_by_assignee.get(assignee_name, 0) + 1
+            done_tickets.append(ticket_row)
+        else:
+            open_tickets.append(ticket_row)
+
+        if is_bug:
+            total_bugs += 1
+            if is_done:
+                total_bugs_fixed += 1
+        if is_story:
+            total_story += 1
+            if is_done:
+                total_story_done += 1
+        if _issue_type_bucket(issue_type_name) == "Task":
+            total_task += 1
+            if is_done:
+                total_task_done += 1
+
+        if epic_key:
+            epic_ticket_total += 1
+            if is_done:
+                epic_ticket_done += 1
+            if epic_key not in epic_map:
+                epic_map[epic_key] = {"total": 0, "done": 0}
+            epic_map[epic_key]["total"] += 1
+            if is_done:
+                epic_map[epic_key]["done"] += 1
+
+        for c in customers:
+            if c not in customer_metrics:
+                customer_metrics[c] = {"customer": c, "created": 0, "resolved": 0}
+            customer_metrics[c]["created"] += 1
+            if is_done:
+                customer_metrics[c]["resolved"] += 1
+                customer_fixed_total += 1
+
+    open_count = max(0, total - done)
+    done_ratio = round((done / total) * 100, 2) if total else 0.0
+    top_done = [{"assignee_name": k, "done": v} for k, v in sorted(done_by_assignee.items(), key=lambda kv: kv[1], reverse=True)]
+    customer_summary = sorted(customer_metrics.values(), key=lambda x: (x["resolved"], x["created"]), reverse=True)
+    total_epics = len(epic_map)
+    done_epics = len([e for e in epic_map.values() if e["total"] > 0 and e["total"] == e["done"]])
+
+    return {
+        "sprint_id": int(sprint_id),
+        "selected_labels": selected_labels,
+        "total": total,
+        "done": done,
+        "open": open_count,
+        "done_ratio": done_ratio,
+        "done_by_assignee": top_done,
+        "tickets": {"planned": planned_tickets, "done": done_tickets, "open": open_tickets},
+        "report_metrics": {
+            "total_bugs": total_bugs,
+            "total_bugs_fixed": total_bugs_fixed,
+            "total_story": total_story,
+            "total_story_done": total_story_done,
+            "total_task": total_task,
+            "total_task_done": total_task_done,
+            "total_epics": total_epics,
+            "done_epics": done_epics,
+            "epic_ticket_total": epic_ticket_total,
+            "epic_ticket_done": epic_ticket_done,
+            "customer_issues_fixed": customer_fixed_total,
+        },
+        "customer_summary": customer_summary,
+    }, None, 200
+
+
+def _sprint_report_bar_chart_b64(labels, values, colors, title):
+    fig, ax = plt.subplots(figsize=(7.2, 2.8), dpi=120)
+    bars = ax.bar(labels, values, color=colors)
+    ax.set_title(title, fontsize=10)
+    ax.set_axisbelow(True)
+    ax.grid(axis='y', alpha=0.2)
+    # Rotate x labels slightly for readability when names are long/crowded.
+    if len(labels) > 4:
+        ax.tick_params(axis='x', labelrotation=25)
+        for tick in ax.get_xticklabels():
+            tick.set_horizontalalignment('right')
+    for idx, b in enumerate(bars):
+        ax.text(b.get_x() + b.get_width() / 2.0, b.get_height() + 0.1, str(values[idx]), ha='center', va='bottom', fontsize=8)
+    plt.tight_layout()
+    stream = io.BytesIO()
+    fig.savefig(stream, format="png")
+    plt.close(fig)
+    return base64.b64encode(stream.getvalue()).decode()
+
+
+@app.route("/api/sprint_dashboard/report_pdf", methods=["POST"])
+def sprint_dashboard_report_pdf():
+    payload = request.get_json(silent=True) or {}
+    sprint_id = payload.get("sprint_id")
+    selected_labels = payload.get("labels") or []
+    if not isinstance(selected_labels, list):
+        selected_labels = []
+    selected_labels = [str(v).strip() for v in selected_labels if str(v).strip()]
+    if sprint_id in (None, ""):
+        return jsonify({"error": "sprint_id is required"}), 400
+    try:
+        sprint_id = int(str(sprint_id).strip())
+    except Exception:
+        return jsonify({"error": "sprint_id must be a number"}), 400
+
+    dataset, err, code = _collect_sprint_plan_actual_dataset(sprint_id, selected_labels)
+    if err:
+        return jsonify({"error": err}), code
+
+    labels_text = ", ".join(selected_labels) if selected_labels else "All labels"
+    metrics = dataset.get("report_metrics", {})
+    customer_summary = dataset.get("customer_summary", [])[:15]
+    planned_tickets = (dataset.get("tickets") or {}).get("planned") or []
+    done_tickets = (dataset.get("tickets") or {}).get("done") or []
+    planned_story = [t for t in planned_tickets if t.get("is_story")]
+    done_story = [t for t in done_tickets if t.get("is_story")]
+    planned_bugs = [t for t in planned_tickets if t.get("is_bug")]
+    done_bugs = [t for t in done_tickets if t.get("is_bug")]
+    plan_chart = _sprint_report_bar_chart_b64(
+        ["Planned", "Done", "Pending"],
+        [dataset.get("total", 0), dataset.get("done", 0), dataset.get("open", 0)],
+        ["#5b7ee5", "#43a567", "#e76f51"],
+        "Plan vs Actual"
+    )
+    customer_chart_rows = customer_summary[:8]
+    customer_chart = _sprint_report_bar_chart_b64(
+        [r["customer"][:14] + ("..." if len(r["customer"]) > 14 else "") for r in customer_chart_rows] or ["No data"],
+        [r["resolved"] for r in customer_chart_rows] or [0],
+        ["#0ea5e9"] * max(1, len(customer_chart_rows)),
+        "Customer Issues Fixed"
+    )
+
+    customer_rows_html = "".join(
+        f"<tr><td>{(r.get('customer') or '').replace('<','&lt;').replace('>','&gt;')}</td><td>{r.get('created',0)}</td><td>{r.get('resolved',0)}</td></tr>"
+        for r in customer_summary
+    ) or "<tr><td colspan='3'>No customer-tagged issues in this sprint scope.</td></tr>"
+
+    def _ticket_rows_html(rows):
+        if not rows:
+            return "<tr><td colspan='2'>No tickets in this category.</td></tr>"
+        out = []
+        for t in rows:
+            key = (t.get("issue_key") or "").replace("<", "&lt;").replace(">", "&gt;")
+            summary = (t.get("summary") or "").replace("<", "&lt;").replace(">", "&gt;")
+            out.append(f"<tr><td>{key}</td><td>{summary}</td></tr>")
+        return "".join(out)
+
+    html_content = f"""
+    <html>
+    <head>
+      <meta charset="utf-8" />
+      <style>
+        body {{ font-family: Helvetica, Arial, sans-serif; font-size: 11px; color: #1f2937; }}
+        h1 {{ font-size: 18px; margin: 0 0 8px; }}
+        h2 {{ font-size: 13px; margin: 14px 0 6px; }}
+        .meta {{ color: #475569; margin-bottom: 8px; }}
+        .grid {{ width: 100%; }}
+        .kpi {{ border: 1px solid #dbe3ef; border-radius: 8px; padding: 6px; margin: 4px; }}
+        .kpi-title {{ font-size: 10px; color: #64748b; }}
+        .kpi-value {{ font-size: 15px; font-weight: bold; margin-top: 2px; }}
+        table {{ width: 100%; border-collapse: collapse; margin-top: 6px; }}
+        th, td {{ border: 1px solid #e2e8f0; padding: 5px; text-align: left; }}
+        th {{ background: #f8fafc; color: #334155; }}
+        .tbl-lite {{ border: 1px solid #e2e8f0; background: #ffffff; }}
+        .tbl-lite th {{ background: #f8fafc; }}
+        .tbl-plan {{ border: 1px solid #cbd5e1; background: #f8fbff; }}
+        .tbl-plan th {{ background: #eff6ff; }}
+        .tbl-actual {{ border: 1px solid #bbf7d0; background: #f0fdf4; }}
+        .tbl-actual th {{ background: #dcfce7; }}
+        .tbl-bug {{ border: 1px solid #fecaca; background: #fef2f2; }}
+        .tbl-bug th {{ background: #fee2e2; }}
+        .tbl-bugdone {{ border: 1px solid #fed7aa; background: #fff7ed; }}
+        .tbl-bugdone th {{ background: #ffedd5; }}
+        .chart {{ margin: 8px 0; text-align: center; }}
+      </style>
+    </head>
+    <body>
+      <h1>Sprint Plan vs Actual Report</h1>
+      <div class="meta">Sprint ID: {sprint_id} | Labels: {labels_text} | Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}</div>
+      <table class="grid">
+        <tr>
+          <td class="kpi"><div class="kpi-title">Planned Tickets</div><div class="kpi-value">{dataset.get('total',0)}</div></td>
+          <td class="kpi"><div class="kpi-title">Total Done</div><div class="kpi-value">{dataset.get('done',0)}</div></td>
+          <td class="kpi"><div class="kpi-title">Pending</div><div class="kpi-value">{dataset.get('open',0)}</div></td>
+          <td class="kpi"><div class="kpi-title">Completion</div><div class="kpi-value">{dataset.get('done_ratio',0)}%</div></td>
+        </tr>
+        <tr>
+          <td class="kpi"><div class="kpi-title">Total Bugs</div><div class="kpi-value">{metrics.get('total_bugs',0)}</div></td>
+          <td class="kpi"><div class="kpi-title">Bugs Fixed</div><div class="kpi-value">{metrics.get('total_bugs_fixed',0)}</div></td>
+          <td class="kpi"><div class="kpi-title">Total Stories</div><div class="kpi-value">{metrics.get('total_story',0)}</div></td>
+          <td class="kpi"><div class="kpi-title">Stories Done</div><div class="kpi-value">{metrics.get('total_story_done',0)}</div></td>
+        </tr>
+        <tr>
+          <td class="kpi"><div class="kpi-title">Total Tasks</div><div class="kpi-value">{metrics.get('total_task',0)}</div></td>
+          <td class="kpi"><div class="kpi-title">Tasks Done</div><div class="kpi-value">{metrics.get('total_task_done',0)}</div></td>
+          <td class="kpi"><div class="kpi-title">Customer Issues Fixed</div><div class="kpi-value">{metrics.get('customer_issues_fixed',0)}</div></td>
+        </tr>
+      </table>
+
+      <h2>Plan vs Actual Graph</h2>
+      <div class="chart"><img src="data:image/png;base64,{plan_chart}" width="520" /></div>
+
+      <h2>Customer-Related Graph: Issues Fixed</h2>
+      <div class="chart"><img src="data:image/png;base64,{customer_chart}" width="520" /></div>
+
+      <h2>Customer Issue Summary</h2>
+      <table class="tbl-lite">
+        <thead><tr><th>Customer</th><th>Total Issues</th><th>Fixed Issues</th></tr></thead>
+        <tbody>{customer_rows_html}</tbody>
+      </table>
+      <p>Total customer issues fixed in this sprint scope: <strong>{metrics.get('customer_issues_fixed',0)}</strong></p>
+
+      <h2>Story Plan vs Actual</h2>
+      <p>Planned Stories: <strong>{len(planned_story)}</strong> | Done Stories: <strong>{len(done_story)}</strong></p>
+      <table class="tbl-plan">
+        <thead><tr><th colspan="2">Story Planned Tickets</th></tr><tr><th>Ticket Number</th><th>Ticket Title</th></tr></thead>
+        <tbody>{_ticket_rows_html(planned_story[:120])}</tbody>
+      </table>
+      <table class="tbl-actual">
+        <thead><tr><th colspan="2">Story Done Tickets</th></tr><tr><th>Ticket Number</th><th>Ticket Title</th></tr></thead>
+        <tbody>{_ticket_rows_html(done_story[:120])}</tbody>
+      </table>
+
+      <h2>Bug Plan vs Actual</h2>
+      <p>Planned Bugs: <strong>{len(planned_bugs)}</strong> | Fixed Bugs: <strong>{len(done_bugs)}</strong></p>
+      <table class="tbl-bug">
+        <thead><tr><th colspan="2">Bug Planned Tickets</th></tr><tr><th>Ticket Number</th><th>Ticket Title</th></tr></thead>
+        <tbody>{_ticket_rows_html(planned_bugs[:120])}</tbody>
+      </table>
+      <table class="tbl-bugdone">
+        <thead><tr><th colspan="2">Bug Fixed Tickets</th></tr><tr><th>Ticket Number</th><th>Ticket Title</th></tr></thead>
+        <tbody>{_ticket_rows_html(done_bugs[:120])}</tbody>
+      </table>
+    </body>
+    </html>
+    """
+
+    output = io.BytesIO()
+    pdf_status = pisa.CreatePDF(io.BytesIO(html_content.encode("utf-8")), dest=output)
+    if pdf_status.err:
+        return jsonify({"error": "Failed to generate PDF"}), 500
+    output.seek(0)
+    filename = f"sprint_{sprint_id}_plan_actual_report.pdf"
+    return send_file(output, as_attachment=True, download_name=filename, mimetype="application/pdf")
 
 
 def _claude_customer_dashboard_insights_json(summary, anthropic_api_key, model="claude-sonnet-4-20250514"):
@@ -5532,10 +6200,7 @@ def _claude_rewrite_description(description_text, anthropic_api_key, model="clau
 @app.route("/api/sprint_tracker/sprints/<int:sprint_id>/sync", methods=["POST"])
 @login_required
 def sprint_tracker_sync(sprint_id):
-    payload = request.json or {}
-    anthropic_key = (payload.get("anthropic_api_key") or "").strip() or _get_app_config_value("anthropic_api_key")
-    rewrite_descriptions = bool(payload.get("rewrite_descriptions", True))
-
+    # Fast sync path: bulk status/summary/customer update only (no Claude rewrite).
     conn, cursor = get_db_connection(dictionary=True)
     if not conn:
         return jsonify({"error": "Database error"}), 500
@@ -5562,6 +6227,24 @@ def sprint_tracker_sync(sprint_id):
     results = []
     status_map = {}
     now_ts = datetime.utcnow()
+    keys = [str(r["ticket_key"]).strip().upper() for r in rows if r.get("ticket_key")]
+    jira_by_key = {}
+    for i in range(0, len(keys), 80):
+        chunk = keys[i:i+80]
+        quoted = ", ".join([f'"{_escape_jql_value(k)}"' for k in chunk])
+        jql = f"key IN ({quoted})"
+        r = requests.get(
+            f"{jira_domain}/rest/api/3/search/jql",
+            headers=jira_headers,
+            params={"jql": jql, "maxResults": 100, "fields": "status,summary,customfield_10077,labels"},
+            timeout=35,
+        )
+        if not r.ok:
+            continue
+        for issue in (r.json().get("issues") or []):
+            key = (issue.get("key") or "").strip().upper()
+            if key:
+                jira_by_key[key] = issue
 
     conn, cursor = get_db_connection()
     if not conn:
@@ -5569,33 +6252,20 @@ def sprint_tracker_sync(sprint_id):
     try:
         for row in rows:
             tid = row["id"]
-            key = row["ticket_key"]
+            key = str(row["ticket_key"]).strip().upper()
             try:
-                r = requests.get(
-                    f"{jira_domain}/rest/api/3/issue/{key}",
-                    headers=jira_headers,
-                    params={"fields": "status,description,summary,customfield_10077"},
-                    timeout=30,
-                )
-                if not r.ok:
-                    results.append({"key": key, "ok": False, "error": f"Jira {r.status_code}"})
+                issue = jira_by_key.get(key)
+                if not issue:
+                    results.append({"key": key, "ok": False, "error": "Missing in Jira search response"})
                     continue
-                issue = r.json()
                 fields = issue.get("fields") or {}
                 status_name = ((fields.get("status") or {}).get("name")) or ""
                 summary = fields.get("summary") or ""
-                desc_text = _adf_to_text(fields.get("description"))
                 customers = _extract_jira_customers(fields.get("customfield_10077"))
-
-                bullets = []
-                if rewrite_descriptions and anthropic_key and desc_text.strip():
-                    bullets = _claude_rewrite_description(desc_text, anthropic_key)
-
-                updates = ["status = %s", "summary = %s", "customers = %s", "last_synced_at = %s"]
-                vals = [status_name or "Open", summary, json.dumps(customers), now_ts]
-                if bullets:
-                    updates.append("description_bullets = %s")
-                    vals.append(json.dumps(bullets))
+                labels = fields.get("labels") or []
+                lb = 1 if _is_launch_blocker(labels) else 0
+                updates = ["status = %s", "summary = %s", "customers = %s", "lb = %s", "last_synced_at = %s"]
+                vals = [status_name or "Open", summary, json.dumps(customers), lb, now_ts]
                 vals.append(tid)
                 cursor.execute(
                     f"UPDATE sprint_tracker_tickets SET {', '.join(updates)} WHERE id = %s",
@@ -5607,7 +6277,6 @@ def sprint_tracker_sync(sprint_id):
                     "ok": True,
                     "status": status_name,
                     "customers": customers,
-                    "description_bullets": bullets,
                 })
             except Exception as e:
                 results.append({"key": key, "ok": False, "error": str(e)})
@@ -5621,6 +6290,169 @@ def sprint_tracker_sync(sprint_id):
         "results": results,
         "status_map": status_map,
     })
+
+
+@app.route("/api/sprint_tracker/sprints/<int:sprint_id>/sync_jql", methods=["POST"])
+@login_required
+def sprint_tracker_sync_jql(sprint_id):
+    payload = request.json or {}
+    jql = (payload.get("jql") or "").strip()
+    if not jql:
+        return jsonify({"error": "JQL is required"}), 400
+
+    jira_headers = dict(HEADERS)
+    if "Authorization" not in jira_headers:
+        return jsonify({"error": "Jira credentials are not configured. Please set them in Settings."}), 400
+    jira_domain = str(JIRA_DOMAIN)
+
+    conn, cursor = get_db_connection(dictionary=True)
+    if not conn:
+        return jsonify({"error": "Database error"}), 500
+    try:
+        cursor.execute(
+            "SELECT id, theme_key FROM sprint_tracker_themes WHERE sprint_id = %s ORDER BY sort_order ASC, id ASC",
+            (sprint_id,),
+        )
+        themes = cursor.fetchall() or []
+        theme_ids = [t["id"] for t in themes]
+        if not theme_ids:
+            return jsonify({"error": "No themes found in this sprint. Create at least one row first."}), 400
+
+        sync_theme = next((t for t in themes if (t.get("theme_key") or "").strip().lower() == "jql_sync"), None)
+        if not sync_theme:
+            cursor.execute("SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_order FROM sprint_tracker_themes WHERE sprint_id = %s", (sprint_id,))
+            next_order = (cursor.fetchone() or {}).get("next_order", 0) or 0
+            cursor.execute(
+                """INSERT INTO sprint_tracker_themes
+                   (sprint_id, theme_key, epic_name, sentence, bullets, notes, sort_order)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                (sprint_id, "jql_sync", "JQL Sync", "Tickets synced from JQL", json.dumps([]), "", int(next_order)),
+            )
+            sync_theme_id = cursor.lastrowid
+            conn.commit()
+        else:
+            sync_theme_id = sync_theme["id"]
+
+        placeholders = ", ".join(["%s"] * len(theme_ids))
+        cursor.execute(
+            f"""SELECT t.id, t.theme_id, t.ticket_key
+                FROM sprint_tracker_tickets t
+                WHERE t.theme_id IN ({placeholders})""",
+            tuple(theme_ids),
+        )
+        existing_rows = cursor.fetchall() or []
+        existing_by_key = {str(r["ticket_key"]).strip().upper(): r for r in existing_rows if r.get("ticket_key")}
+
+        all_issues = []
+        seen_keys = set()
+        start_at = 0
+        next_page_token = None
+        page_safety = 0
+        while page_safety < 80:
+            page_safety += 1
+            params = {
+                "jql": jql,
+                "maxResults": 100,
+                "fields": "summary,status,customfield_10077,labels"
+            }
+            if next_page_token:
+                params["nextPageToken"] = next_page_token
+            else:
+                params["startAt"] = start_at
+            r = requests.get(
+                f"{jira_domain}/rest/api/3/search/jql",
+                headers=jira_headers,
+                params=params,
+                timeout=45,
+            )
+            if not r.ok:
+                return jsonify({"error": f"Jira API error: {r.text}"}), r.status_code
+            data = r.json()
+            issues = data.get("issues", [])
+            if not issues:
+                break
+            new_count = 0
+            for issue in issues:
+                key = (issue.get("key") or "").strip().upper()
+                if not key or key in seen_keys:
+                    continue
+                seen_keys.add(key)
+                all_issues.append(issue)
+                new_count += 1
+            if new_count == 0:
+                break
+            next_page_token = data.get("nextPageToken")
+            if next_page_token:
+                continue
+            if len(issues) < 100:
+                break
+            start_at += 100
+
+        now_ts = datetime.utcnow()
+        updated = 0
+        inserted = 0
+        errors = []
+
+        cursor.execute("SELECT COALESCE(MAX(sort_order), -1) AS max_order FROM sprint_tracker_tickets WHERE theme_id = %s", (sync_theme_id,))
+        max_order = (cursor.fetchone() or {}).get("max_order", -1)
+        next_ticket_order = int(max_order) + 1
+
+        active_keys = set()
+        for issue in all_issues:
+            try:
+                key = (issue.get("key") or "").strip().upper()
+                if not key:
+                    continue
+                active_keys.add(key)
+                f = issue.get("fields") or {}
+                status_name = ((f.get("status") or {}).get("name")) or "Open"
+                existing = existing_by_key.get(key)
+                if existing:
+                    cursor.execute(
+                        """UPDATE sprint_tracker_tickets
+                           SET status = %s, last_synced_at = %s
+                           WHERE id = %s""",
+                        (status_name, now_ts, existing["id"]),
+                    )
+                    updated += 1
+                else:
+                    summary = f.get("summary") or ""
+                    customers = _extract_jira_customers(f.get("customfield_10077"))
+                    labels = f.get("labels") or []
+                    lb = 1 if _is_launch_blocker(labels) else 0
+                    cursor.execute(
+                        """INSERT INTO sprint_tracker_tickets
+                           (theme_id, ticket_key, summary, status, customers, lb, description_bullets, last_synced_at, sort_order)
+                           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                        (sync_theme_id, key, summary, status_name, json.dumps(customers), lb, json.dumps([]), now_ts, next_ticket_order),
+                    )
+                    next_ticket_order += 1
+                    inserted += 1
+            except Exception as e:
+                errors.append(str(e))
+
+        # Remove only tickets from JQL sync bucket that are no longer in JQL scope.
+        # Keep manually curated row tickets intact.
+        removed = 0
+        for r in existing_rows:
+            key = str(r.get("ticket_key") or "").strip().upper()
+            theme_id = r.get("theme_id")
+            if theme_id == sync_theme_id and key and key not in active_keys:
+                cursor.execute("DELETE FROM sprint_tracker_tickets WHERE id = %s", (r["id"],))
+                removed += 1
+
+        conn.commit()
+        return jsonify({
+            "success": True,
+            "total_fetched": len(all_issues),
+            "updated": updated,
+            "inserted": inserted,
+            "removed": removed,
+            "errors": errors[:10],
+            "sync_theme_id": sync_theme_id,
+        })
+    finally:
+        conn.close()
 
 
 @app.route("/api/sprint_tracker/tickets/<int:ticket_id>/rewrite", methods=["POST"])

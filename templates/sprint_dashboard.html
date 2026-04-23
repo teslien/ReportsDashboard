@@ -1,0 +1,1113 @@
+{% extends 'base.html' %}
+{% block title %}Sprint Dashboard{% endblock %}
+{% block body_class %}sd-page{% endblock %}
+{% block main_class %}pt-24 pb-10 px-4 w-full max-w-none{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<style>
+  body { background: #f8fafc !important; color: #0f172a !important; }
+  body.sd-page #theme-toggle-btn { display: none !important; }
+  body.sd-nav-hidden nav { display: none !important; }
+  body.sd-nav-hidden main { padding-top: 16px !important; }
+  .sd-card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04); }
+  .sd-label { font-size: 12px; color: #475569; margin-bottom: 6px; display: block; font-weight: 600; }
+  .sd-input { width: 100%; background: #ffffff; border: 1px solid #cbd5e1; color: #0f172a; border-radius: 8px; padding: 9px 10px; font-size: 13px; }
+  .sd-kpi-title { font-size: 12px; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+  .sd-kpi-value { font-size: 24px; font-weight: 700; color: #0f172a; margin-top: 4px; }
+  .sd-kpi-sub { font-size: 12px; color: #64748b; margin-top: 2px; }
+  .sd-chart { width: 100%; height: 320px; position: relative; }
+  .sd-chart svg { width: 100%; height: 100%; }
+  .sd-legend { display: flex; flex-wrap: wrap; gap: 8px 12px; margin-bottom: 8px; }
+  .sd-legend-item { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: #475569; }
+  .sd-legend-swatch { width: 10px; height: 10px; border-radius: 3px; border: 1px solid rgba(15, 23, 42, 0.15); }
+  .sd-table th { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: .03em; font-weight: 700; }
+  .sd-table td { font-size: 12px; color: #1f2937; }
+  .sd-pill { display: inline-flex; align-items: center; padding: 2px 7px; border-radius: 999px; font-size: 11px; border: 1px solid #cbd5e1; background: #f8fafc; color: #334155; }
+  .sd-pill.ok { border-color: #86efac; background: #dcfce7; color: #166534; }
+  .sd-pill.warn { border-color: #fde68a; background: #fef3c7; color: #92400e; }
+  .sd-pill.danger { border-color: #fecaca; background: #fee2e2; color: #b91c1c; }
+  .sd-icon-btn { width: 34px; height: 34px; border-radius: 999px; border: 1px solid #cbd5e1; background: #fff; color: #475569; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: all .15s; }
+  .sd-icon-btn:hover { background: #f1f5f9; color: #0f172a; }
+  .sd-empty { border: 1px dashed #cbd5e1; border-radius: 12px; padding: 22px; background: #ffffff; text-align: center; color: #64748b; }
+  .sd-tooltip { position: absolute; pointer-events: none; background: #0f172a; color: #f8fafc; font-size: 11px; line-height: 1.3; padding: 6px 8px; border-radius: 6px; box-shadow: 0 6px 16px rgba(15,23,42,0.25); opacity: 0; transform: translate(-50%, -110%); white-space: nowrap; z-index: 20; }
+  .sd-modal-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,0.45); display: none; align-items: center; justify-content: center; z-index: 1100; }
+  .sd-modal-backdrop.open { display: flex; }
+  .sd-modal { width: min(860px, calc(100vw - 24px)); background: #fff; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 16px 44px rgba(15,23,42,.28); }
+  .sd-modal-head { padding: 12px 14px; border-bottom: 1px solid #e2e8f0; font-size: 14px; font-weight: 700; color: #0f172a; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .sd-modal-body { padding: 14px; }
+  .sd-modal-actions { padding: 10px 14px 14px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 8px; }
+  .sd-btn-secondary { border: 1px solid #cbd5e1; background: #fff; color: #334155; border-radius: 8px; padding: 8px 12px; font-size: 12px; font-weight: 600; }
+  .sd-modal-close { border: none; background: transparent; color: #64748b; font-size: 18px; line-height: 1; cursor: pointer; padding: 0 2px; }
+  .sd-modal-close:hover { color: #0f172a; }
+  .sd-loader-backdrop { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(15,23,42,0.24); z-index: 1200; }
+  .sd-loader-backdrop.open { display: flex; }
+  .sd-loader-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 10px 14px; box-shadow: 0 8px 24px rgba(15,23,42,.22); display: inline-flex; align-items: center; gap: 8px; color: #334155; font-size: 12px; }
+  .sd-loader-spin { width: 14px; height: 14px; border: 2px solid #c7d2fe; border-top-color: #4f46e5; border-radius: 50%; animation: sd-spin .75s linear infinite; }
+  .sd-offcanvas-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,0.45); display: none; z-index: 1300; }
+  .sd-offcanvas-backdrop.open { display: block; }
+  .sd-offcanvas {
+    position: fixed; top: 0; right: 0; height: 100vh; width: min(560px, 92vw);
+    background: #fff; border-left: 1px solid #e2e8f0; box-shadow: -12px 0 26px rgba(15,23,42,0.22);
+    transform: translateX(100%); transition: transform .2s ease; z-index: 1301;
+    display: flex; flex-direction: column;
+  }
+  .sd-offcanvas.open { transform: translateX(0); }
+  .sd-offcanvas-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; border-bottom: 1px solid #e2e8f0; }
+  .sd-offcanvas-title { font-size: 14px; font-weight: 700; color: #0f172a; }
+  .sd-offcanvas-body { flex: 1; overflow: auto; padding: 12px; }
+  .sd-pa-panel { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 10px; }
+  .sd-pa-title { font-size: 11px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; color: #475569; margin-bottom: 8px; }
+  .sd-pa-title-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+  .sd-pa-count { font-size: 11px; font-weight: 700; color: #334155; background: #e2e8f0; border: 1px solid #cbd5e1; border-radius: 999px; padding: 2px 8px; }
+  .sd-pa-table-wrap { max-height: 300px; overflow: auto; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 10px; }
+  .sd-pa-table { width: 100%; border-collapse: separate; border-spacing: 0; }
+  .sd-pa-table thead th {
+    position: sticky; top: 0; z-index: 1;
+    background: #f1f5f9; color: #475569; font-size: 10px; text-transform: uppercase; letter-spacing: .03em;
+    border-bottom: 1px solid #e2e8f0; padding: 8px;
+  }
+  .sd-pa-table tbody td { padding: 8px; font-size: 12px; color: #1f2937; border-bottom: 1px solid #eef2f7; }
+  .sd-pa-table tbody tr:nth-child(even) td { background: #fcfdff; }
+  .sd-pa-table tbody tr:hover td { background: #eef2ff; }
+  .sd-pa-empty { color: #94a3b8; text-align: center; padding: 18px 8px; font-size: 12px; }
+  .sd-issue-link-bug { color: #dc2626 !important; }
+  .sd-issue-link-story { color: #16a34a !important; }
+  .sd-select2-wrap .select2-container { width: 100% !important; }
+  .sd-select2-wrap .select2-selection--single,
+  .sd-select2-wrap .select2-selection--multiple {
+    min-height: 36px;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 8px !important;
+    background: #fff !important;
+  }
+  .sd-select2-wrap .select2-selection__rendered { color: #0f172a !important; font-size: 12px !important; }
+  .sd-select2-wrap .select2-selection__choice {
+    background: #eef2ff !important;
+    border: 1px solid #c7d2fe !important;
+    color: #3730a3 !important;
+    border-radius: 999px !important;
+    font-size: 11px !important;
+  }
+  @keyframes sd-spin { to { transform: rotate(360deg); } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <div class="flex items-start justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-bold text-slate-900">Sprint Dashboard</h1>
+      <p class="text-sm text-slate-500 mt-1">Track sprint execution, assignee output, bug fixing, and customer issue resolution from JQL.</p>
+    </div>
+    <div class="flex items-center gap-2">
+      <button id="sd-open-builder" class="sd-icon-btn" title="Create / Edit Dashboard">
+        <span id="sd-open-builder-icon" style="font-size:18px;line-height:1;">+</span>
+      </button>
+      <button id="sd-open-settings" class="sd-icon-btn" title="Jira Settings">
+        <span style="font-size:14px;line-height:1;">⚙</span>
+      </button>
+    </div>
+  </div>
+
+  <div id="sd-empty-state" class="sd-empty">
+    <div class="text-sm font-semibold text-slate-700">No dashboard configured yet</div>
+    <div class="text-xs mt-1">Click <strong>+</strong> to add JQL and fetch sprint analytics.</div>
+  </div>
+  <div class="flex items-center gap-3 -mt-2">
+    <span id="sd-status" class="text-xs text-slate-500"></span>
+    <span id="sd-fetched-count" class="text-xs text-slate-500"></span>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-4">
+    <div class="sd-card p-4"><div class="sd-kpi-title">Total Tickets</div><div id="kpi-total" class="sd-kpi-value">0</div><div class="sd-kpi-sub">JQL scope</div></div>
+    <div class="sd-card p-4"><div class="sd-kpi-title">Done Tickets</div><div id="kpi-done" class="sd-kpi-value">0</div><div class="sd-kpi-sub">Done-like statuses</div></div>
+    <div class="sd-card p-4"><div class="sd-kpi-title">Open Tickets</div><div id="kpi-open" class="sd-kpi-value">0</div><div class="sd-kpi-sub">Remaining work</div></div>
+    <div class="sd-card p-4"><div class="sd-kpi-title">Done Ratio</div><div id="kpi-ratio" class="sd-kpi-value">0%</div><div class="sd-kpi-sub">Done / Total</div></div>
+    <div class="sd-card p-4"><div class="sd-kpi-title">High Priority</div><div id="kpi-high" class="sd-kpi-value">0</div><div class="sd-kpi-sub">Highest / High / Critical</div></div>
+    <div class="sd-card p-4"><div class="sd-kpi-title">Customer Resolved</div><div id="kpi-customer-resolved" class="sd-kpi-value">0</div><div class="sd-kpi-sub">Tagged + Done</div></div>
+  </div>
+
+  <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+    <div class="sd-card p-4">
+      <h3 class="text-sm font-semibold text-slate-700 mb-3">Sprint Done vs Open</h3>
+      <div id="sd-sprint-legend" class="sd-legend"></div>
+      <div id="sd-sprint-chart" class="sd-chart"></div>
+    </div>
+    <div class="sd-card p-4">
+      <h3 class="text-sm font-semibold text-slate-700 mb-3">Assignee Worked vs Done</h3>
+      <div id="sd-assignee-legend" class="sd-legend"></div>
+      <div id="sd-assignee-chart" class="sd-chart"></div>
+    </div>
+    <div class="sd-card p-4">
+      <h3 class="text-sm font-semibold text-slate-700 mb-3">Assignee Bugs Worked vs Fixed</h3>
+      <div id="sd-bug-legend" class="sd-legend"></div>
+      <div id="sd-bug-chart" class="sd-chart"></div>
+    </div>
+    <div class="sd-card p-4">
+      <h3 class="text-sm font-semibold text-slate-700 mb-3">Customer Issues Created vs Resolved</h3>
+      <div id="sd-customer-legend" class="sd-legend"></div>
+      <div id="sd-customer-chart" class="sd-chart"></div>
+    </div>
+    <div class="sd-card p-4">
+      <h3 class="text-sm font-semibold text-slate-700 mb-3">Priority Distribution</h3>
+      <div id="sd-priority-legend" class="sd-legend"></div>
+      <div id="sd-priority-chart" class="sd-chart" style="height:280px;"></div>
+    </div>
+    <div class="sd-card p-4">
+      <h3 class="text-sm font-semibold text-slate-700 mb-3">Issue Type Distribution</h3>
+      <div id="sd-type-legend" class="sd-legend"></div>
+      <div id="sd-type-chart" class="sd-chart" style="height:280px;"></div>
+    </div>
+  </div>
+
+  <div class="sd-card p-4">
+    <h3 class="text-sm font-semibold text-slate-700 mb-3">Sprint Completion Summary (Total Available vs Resolved)</h3>
+    <div class="overflow-x-auto">
+      <table class="min-w-full sd-table">
+        <thead>
+          <tr class="border-b border-slate-200">
+            <th class="py-2 px-2 text-left">Sprint</th>
+            <th class="py-2 px-2 text-left">Total Tickets</th>
+            <th class="py-2 px-2 text-left">Resolved / Done</th>
+            <th class="py-2 px-2 text-left">Pending</th>
+            <th class="py-2 px-2 text-left">Done Ratio</th>
+          </tr>
+        </thead>
+        <tbody id="sd-sprint-summary-body">
+          <tr><td colspan="5" class="py-5 px-2 text-center text-slate-400">Fetch data to view summary.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="sd-card p-4">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+      <h3 class="text-sm font-semibold text-slate-700">Plan vs Actual (Sprint-only)</h3>
+      <div class="flex items-center gap-2 sd-select2-wrap">
+        <select id="sd-plan-sprint" class="sd-input" style="min-width:280px;">
+          <option value="">Select Sprint</option>
+        </select>
+        <select id="sd-plan-labels" class="sd-input" multiple style="min-width:280px;"></select>
+        <button id="sd-plan-report" class="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white text-xs font-semibold rounded-lg">
+          Generate PDF Report
+        </button>
+        <button id="sd-plan-load" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-lg">
+          Load Plan vs Actual
+        </button>
+      </div>
+    </div>
+    <p id="sd-plan-status" class="text-xs text-slate-500 mb-3">Select a sprint and optional labels to compare planned tickets vs done tickets.</p>
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
+      <div class="border border-slate-200 rounded-lg p-3">
+        <div class="sd-kpi-title">Planned (Total)</div>
+        <div id="sd-plan-total" class="sd-kpi-value" style="font-size:22px;">0</div>
+      </div>
+      <div class="border border-slate-200 rounded-lg p-3">
+        <div class="sd-kpi-title">Actual Done</div>
+        <div id="sd-plan-done" class="sd-kpi-value" style="font-size:22px;">0</div>
+      </div>
+      <div class="border border-slate-200 rounded-lg p-3">
+        <div class="sd-kpi-title">Pending</div>
+        <div id="sd-plan-open" class="sd-kpi-value" style="font-size:22px;">0</div>
+      </div>
+      <div class="border border-slate-200 rounded-lg p-3">
+        <div class="sd-kpi-title">Completion</div>
+        <div id="sd-plan-ratio" class="sd-kpi-value" style="font-size:22px;">0%</div>
+      </div>
+    </div>
+    <div>
+      <h4 class="text-xs font-semibold text-slate-600 mb-2">Plan vs Actual Chart</h4>
+      <div id="sd-plan-chart" class="sd-chart" style="height:230px;"></div>
+    </div>
+    <div class="grid grid-cols-1 xl:grid-cols-3 gap-4 mt-4">
+      <div class="sd-pa-panel">
+        <div class="sd-pa-title-row">
+          <div class="sd-pa-title">Planned Tickets</div>
+          <span id="sd-plan-planned-count" class="sd-pa-count">0</span>
+        </div>
+        <div class="sd-pa-table-wrap">
+          <table class="sd-pa-table">
+            <thead>
+              <tr>
+                <th class="text-left">Issue</th>
+                <th class="text-left">Status</th>
+                <th class="text-left">Ticket Title</th>
+              </tr>
+            </thead>
+            <tbody id="sd-plan-planned-body">
+              <tr><td colspan="3" class="sd-pa-empty">No sprint selected.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="sd-pa-panel">
+        <div class="sd-pa-title-row">
+          <div class="sd-pa-title">Actual Done Tickets</div>
+          <span id="sd-plan-actual-count" class="sd-pa-count">0</span>
+        </div>
+        <div class="sd-pa-table-wrap">
+          <table class="sd-pa-table">
+            <thead>
+              <tr>
+                <th class="text-left">Issue</th>
+                <th class="text-left">Status</th>
+                <th class="text-left">Ticket Title</th>
+              </tr>
+            </thead>
+            <tbody id="sd-plan-actual-body">
+              <tr><td colspan="3" class="sd-pa-empty">No sprint selected.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="sd-pa-panel">
+        <div class="sd-pa-title-row">
+          <div class="sd-pa-title">Open / Pending Tickets</div>
+          <span id="sd-plan-pending-count" class="sd-pa-count">0</span>
+        </div>
+        <div class="sd-pa-table-wrap">
+          <table class="sd-pa-table">
+            <thead>
+              <tr>
+                <th class="text-left">Issue</th>
+                <th class="text-left">Status</th>
+                <th class="text-left">Ticket Title</th>
+              </tr>
+            </thead>
+            <tbody id="sd-plan-pending-body">
+              <tr><td colspan="3" class="sd-pa-empty">No sprint selected.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sd-card p-4">
+    <div class="flex items-center justify-between gap-3 mb-3">
+      <h3 class="text-sm font-semibold text-slate-700">Detailed Tickets</h3>
+      <div class="text-xs text-slate-500" id="sd-pagination-info">0 results</div>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-5 gap-2 mb-3">
+      <select id="sd-filter-sprint" class="sd-input"><option value="">All Sprints</option></select>
+      <select id="sd-filter-assignee" class="sd-input"><option value="">All Assignees</option></select>
+      <select id="sd-filter-type" class="sd-input">
+        <option value="">All Types</option>
+        <option value="Bug">Bug</option>
+        <option value="Story">Story</option>
+        <option value="Task">Task</option>
+        <option value="Other">Other</option>
+      </select>
+      <select id="sd-filter-customer" class="sd-input"><option value="">All Customers</option></select>
+      <label class="inline-flex items-center gap-2 text-xs text-slate-600 border border-slate-300 rounded px-3 py-2">
+        <input id="sd-filter-done" type="checkbox" />
+        Done only
+      </label>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full sd-table">
+        <thead>
+          <tr class="border-b border-slate-200">
+            <th class="py-2 px-2 text-left">Issue</th>
+            <th class="py-2 px-2 text-left">Summary</th>
+            <th class="py-2 px-2 text-left">Sprint</th>
+            <th class="py-2 px-2 text-left">Epic</th>
+            <th class="py-2 px-2 text-left">Type</th>
+            <th class="py-2 px-2 text-left">Priority</th>
+            <th class="py-2 px-2 text-left">Status</th>
+            <th class="py-2 px-2 text-left">Assignee</th>
+            <th class="py-2 px-2 text-left">Customers</th>
+            <th class="py-2 px-2 text-left">Done</th>
+          </tr>
+        </thead>
+        <tbody id="sd-table-body">
+          <tr><td colspan="10" class="py-6 px-2 text-center text-slate-400">Click + to enter JQL and fetch tickets.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="mt-4 flex items-center justify-between">
+      <button id="sd-prev" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded text-xs text-slate-700 disabled:opacity-50" disabled>Previous</button>
+      <button id="sd-next" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded text-xs text-slate-700 disabled:opacity-50" disabled>Next</button>
+    </div>
+  </div>
+</div>
+
+<div id="sd-jql-modal" class="sd-modal-backdrop">
+  <div class="sd-modal" role="dialog" aria-modal="true" aria-labelledby="sd-jql-title">
+    <div class="sd-modal-head">
+      <span id="sd-jql-title">Build Sprint Dashboard from JQL</span>
+      <button id="sd-jql-close" class="sd-modal-close" aria-label="Close">&times;</button>
+    </div>
+    <div class="sd-modal-body">
+      <label class="sd-label">JQL</label>
+      <textarea id="sd-jql-input" class="sd-input" rows="6" placeholder='Example: project = "TIM" AND sprint in openSprints() ORDER BY created DESC'></textarea>
+    </div>
+    <div class="sd-modal-actions">
+      <button id="sd-jql-cancel" class="sd-btn-secondary">Cancel</button>
+      <button id="sd-jql-apply" class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold px-4 py-2 rounded-md">Fetch Dashboard</button>
+    </div>
+  </div>
+</div>
+<div id="sd-settings-modal" class="sd-modal-backdrop">
+  <div class="sd-modal" role="dialog" aria-modal="true" aria-labelledby="sd-settings-title">
+    <div class="sd-modal-head">
+      <span id="sd-settings-title">Jira Credentials (Local)</span>
+      <button id="sd-settings-close" class="sd-modal-close" aria-label="Close">&times;</button>
+    </div>
+    <div class="sd-modal-body">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="sd-label">Jira Email</label>
+          <input id="sd-setting-email" class="sd-input" type="email" placeholder="you@company.com" />
+        </div>
+        <div>
+          <label class="sd-label">Jira API Token</label>
+          <input id="sd-setting-token" class="sd-input" type="password" placeholder="ATATT..." />
+        </div>
+      </div>
+      <p class="text-xs text-slate-500 mt-3">Stored in your browser local storage and reused after reload.</p>
+    </div>
+    <div class="sd-modal-actions">
+      <button id="sd-settings-cancel" class="sd-btn-secondary">Cancel</button>
+      <button id="sd-settings-save" class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold px-4 py-2 rounded-md">Save Settings</button>
+    </div>
+  </div>
+</div>
+<div id="sd-loader" class="sd-loader-backdrop" aria-live="polite" aria-busy="true">
+  <div class="sd-loader-card">
+    <span class="sd-loader-spin"></span>
+    <span>Fetching dashboard...</span>
+  </div>
+</div>
+<div id="sd-offcanvas-backdrop" class="sd-offcanvas-backdrop"></div>
+<aside id="sd-offcanvas" class="sd-offcanvas" aria-hidden="true">
+  <div class="sd-offcanvas-head">
+    <div>
+      <div id="sd-offcanvas-title" class="sd-offcanvas-title">Tickets</div>
+      <div id="sd-offcanvas-subtitle" class="text-xs text-slate-500 mt-1"></div>
+    </div>
+    <button id="sd-offcanvas-close" class="sd-modal-close" aria-label="Close">&times;</button>
+  </div>
+  <div class="sd-offcanvas-body">
+    <table class="min-w-full sd-table">
+      <thead>
+        <tr class="border-b border-slate-200">
+          <th class="py-2 px-2 text-left">Issue</th>
+          <th class="py-2 px-2 text-left">Summary</th>
+          <th class="py-2 px-2 text-left">Status</th>
+          <th class="py-2 px-2 text-left">Assignee</th>
+        </tr>
+      </thead>
+      <tbody id="sd-offcanvas-body">
+        <tr><td colspan="4" class="py-4 px-2 text-center text-slate-400">No tickets.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</aside>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(() => {
+  const JIRA_BASE = ("{{ JIRA_DOMAIN }}" || (window.JIRA_DOMAIN || "https://lumberfi.atlassian.net")).replace(/\/+$/, "");
+  const state = {
+    rows: [],
+    assigneeMetrics: [],
+    sprintMetrics: [],
+    customerMetrics: [],
+    priorityDistribution: {},
+    typeDistribution: {},
+    page: 1,
+    perPage: 20,
+    totalPages: 0,
+    currentJql: "",
+    hasData: false,
+    planActual: null,
+    allLabels: [],
+  };
+  const LS_KEYS = {
+    email: "sprint_dashboard_jira_email",
+    token: "sprint_dashboard_jira_token",
+    jql: "sprint_dashboard_jql",
+  };
+  const SHARED_KEYS = {
+    email: ["customer_dashboard_jira_email", "jira_email"],
+    token: ["customer_dashboard_jira_token", "jira_token"],
+  };
+  const COLORS = {
+    done: "hsla(142, 70%, 40%, 0.7)",
+    open: "hsla(9, 86%, 58%, 0.7)",
+    worked: "hsla(217, 91%, 60%, 0.7)",
+    bugFixed: "hsla(266, 83%, 58%, 0.7)",
+    bugWorked: "hsla(24, 95%, 53%, 0.72)",
+    created: "hsla(199, 89%, 48%, 0.66)",
+    resolved: "hsla(142, 70%, 45%, 0.66)",
+  };
+
+  function getStoredSettings() {
+    const localEmail = localStorage.getItem(LS_KEYS.email) || "";
+    const localToken = localStorage.getItem(LS_KEYS.token) || "";
+    const inheritedEmail = SHARED_KEYS.email.map(k => localStorage.getItem(k) || "").find(Boolean) || "";
+    const inheritedToken = SHARED_KEYS.token.map(k => localStorage.getItem(k) || "").find(Boolean) || "";
+    return {
+      email: localEmail || inheritedEmail,
+      token: localToken || inheritedToken,
+      jql: localStorage.getItem(LS_KEYS.jql) || "",
+    };
+  }
+  function saveStoredSettings({ email, token, jql }) {
+    if (email !== undefined) {
+      localStorage.setItem(LS_KEYS.email, email || "");
+      // Keep in sync with customer dashboard/shared keys to avoid re-entry prompts.
+      if (email) {
+        localStorage.setItem("customer_dashboard_jira_email", email);
+        localStorage.setItem("jira_email", email);
+      }
+    }
+    if (token !== undefined) {
+      localStorage.setItem(LS_KEYS.token, token || "");
+      if (token) {
+        localStorage.setItem("customer_dashboard_jira_token", token);
+        localStorage.setItem("jira_token", token);
+      }
+    }
+    if (jql !== undefined) localStorage.setItem(LS_KEYS.jql, jql || "");
+  }
+  function escapeHtml(v) {
+    return String(v == null ? "" : v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+  function setDashboardReady(hasData) {
+    state.hasData = !!hasData;
+    document.getElementById("sd-empty-state").style.display = state.hasData ? "none" : "block";
+  }
+  function setLoading(open) {
+    document.getElementById("sd-loader").classList.toggle("open", !!open);
+  }
+
+  function getOrCreateTooltip(container) {
+    let tip = container.querySelector(".sd-tooltip");
+    if (!tip) {
+      tip = document.createElement("div");
+      tip.className = "sd-tooltip";
+      container.appendChild(tip);
+    }
+    return tip;
+  }
+  function showTooltip(container, tooltip, event, html) {
+    const rect = container.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    tooltip.innerHTML = html;
+    tooltip.style.left = `${x}px`;
+    tooltip.style.top = `${y}px`;
+    tooltip.style.opacity = "1";
+  }
+  function hideTooltip(tooltip) { tooltip.style.opacity = "0"; }
+  function renderLegend(legendId, items) {
+    const legend = document.getElementById(legendId);
+    if (!legend) return;
+    legend.innerHTML = (items || []).map(i => `
+      <span class="sd-legend-item">
+        <span class="sd-legend-swatch" style="background:${i.color};"></span>
+        <span>${escapeHtml(i.label)}</span>
+      </span>
+    `).join("");
+  }
+
+  function renderGroupedBarChart(containerId, legendId, labels, leftValues, rightValues, leftMeta, rightMeta, maxBars = 12) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container.innerHTML = "";
+    const rows = labels.map((label, i) => ({ label, left: leftValues[i] || 0, right: rightValues[i] || 0 }))
+      .sort((a, b) => (b.left + b.right) - (a.left + a.right))
+      .slice(0, maxBars);
+    if (!rows.length) {
+      container.innerHTML = `<div class="text-xs text-slate-400 h-full flex items-center justify-center">No data</div>`;
+      return;
+    }
+    renderLegend(legendId, [{ label: leftMeta.label, color: leftMeta.color }, { label: rightMeta.label, color: rightMeta.color }]);
+    const tooltip = getOrCreateTooltip(container);
+    const width = container.clientWidth || 640;
+    const height = container.clientHeight || 320;
+    const margin = { top: 14, right: 16, bottom: 68, left: 40 };
+    const w = width - margin.left - margin.right;
+    const h = height - margin.top - margin.bottom;
+    const svg = d3.select(container).append("svg").attr("viewBox", `0 0 ${width} ${height}`).attr("preserveAspectRatio", "xMidYMid meet");
+    const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+    const x0 = d3.scaleBand().domain(rows.map(r => r.label)).range([0, w]).padding(0.22);
+    const x1 = d3.scaleBand().domain(["left", "right"]).range([0, x0.bandwidth()]).padding(0.08);
+    const y = d3.scaleLinear().domain([0, d3.max(rows, r => Math.max(r.left, r.right)) || 1]).nice().range([h, 0]);
+
+    g.selectAll(".grid-h").data(y.ticks(5)).enter().append("line")
+      .attr("x1", 0).attr("x2", w).attr("y1", d => y(d)).attr("y2", d => y(d)).attr("stroke", "#e2e8f0");
+
+    const groups = g.selectAll(".grp").data(rows).enter().append("g").attr("transform", d => `translate(${x0(d.label)},0)`);
+    groups.selectAll("rect").data(d => [
+      { type: "left", value: d.left, label: d.label, color: leftMeta.color, text: leftMeta.label },
+      { type: "right", value: d.right, label: d.label, color: rightMeta.color, text: rightMeta.label }
+    ]).enter().append("rect")
+      .attr("x", d => x1(d.type))
+      .attr("y", d => y(d.value))
+      .attr("width", x1.bandwidth())
+      .attr("height", d => h - y(d.value))
+      .attr("fill", d => d.color)
+      .attr("rx", 3)
+      .on("mousemove", function(event, d) {
+        showTooltip(container, tooltip, event, `<strong>${escapeHtml(d.label)}</strong><br/>${escapeHtml(d.text)}: ${d.value}`);
+      })
+      .on("mouseleave", () => hideTooltip(tooltip));
+
+    g.append("g").attr("transform", `translate(0,${h})`).call(d3.axisBottom(x0).tickSizeOuter(0))
+      .call(s => s.selectAll("text").style("font-size", "10px").style("fill", "#64748b").attr("transform", "rotate(-20)").style("text-anchor", "end"));
+    g.append("g").call(d3.axisLeft(y).ticks(5))
+      .call(s => s.selectAll("text").style("font-size", "10px").style("fill", "#64748b"));
+  }
+
+  function renderSingleBarChart(containerId, legendId, labels, values, color, maxBars = 12) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container.innerHTML = "";
+    const rows = labels.map((label, i) => ({ label, value: values[i] || 0 }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, maxBars);
+    if (!rows.length) {
+      container.innerHTML = `<div class="text-xs text-slate-400 h-full flex items-center justify-center">No data</div>`;
+      return;
+    }
+    renderLegend(legendId, [{ label: "Count", color }]);
+    const tooltip = getOrCreateTooltip(container);
+    const width = container.clientWidth || 640;
+    const height = container.clientHeight || 280;
+    const margin = { top: 14, right: 16, bottom: 68, left: 40 };
+    const w = width - margin.left - margin.right;
+    const h = height - margin.top - margin.bottom;
+    const svg = d3.select(container).append("svg").attr("viewBox", `0 0 ${width} ${height}`).attr("preserveAspectRatio", "xMidYMid meet");
+    const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+    const x = d3.scaleBand().domain(rows.map(r => r.label)).range([0, w]).padding(0.2);
+    const y = d3.scaleLinear().domain([0, d3.max(rows, r => r.value) || 1]).nice().range([h, 0]);
+
+    g.selectAll(".grid-h").data(y.ticks(4)).enter().append("line")
+      .attr("x1", 0).attr("x2", w).attr("y1", d => y(d)).attr("y2", d => y(d)).attr("stroke", "#e2e8f0");
+    g.selectAll("rect").data(rows).enter().append("rect")
+      .attr("x", d => x(d.label)).attr("y", d => y(d.value)).attr("width", x.bandwidth()).attr("height", d => h - y(d.value))
+      .attr("fill", color).attr("rx", 3)
+      .on("mousemove", function(event, d) {
+        showTooltip(container, tooltip, event, `<strong>${escapeHtml(d.label)}</strong><br/>Count: ${d.value}`);
+      })
+      .on("mouseleave", () => hideTooltip(tooltip));
+    g.append("g").attr("transform", `translate(0,${h})`).call(d3.axisBottom(x).tickSizeOuter(0))
+      .call(s => s.selectAll("text").style("font-size", "10px").style("fill", "#64748b").attr("transform", "rotate(-20)").style("text-anchor", "end"));
+    g.append("g").call(d3.axisLeft(y).ticks(4))
+      .call(s => s.selectAll("text").style("font-size", "10px").style("fill", "#64748b"));
+  }
+
+  function fillFilterDropdowns() {
+    const sprintSel = document.getElementById("sd-filter-sprint");
+    const assigneeSel = document.getElementById("sd-filter-assignee");
+    const customerSel = document.getElementById("sd-filter-customer");
+    const sprintSet = new Set();
+    const assigneeSet = new Set();
+    const customerSet = new Set();
+    state.rows.forEach(r => {
+      (r.sprints || []).forEach(s => sprintSet.add(s.name || "No Sprint"));
+      assigneeSet.add(r.assignee_name || "Unassigned");
+      (r.customers || []).forEach(c => customerSet.add(c));
+    });
+    sprintSel.innerHTML = `<option value="">All Sprints</option>` + [...sprintSet].sort().map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join("");
+    assigneeSel.innerHTML = `<option value="">All Assignees</option>` + [...assigneeSet].sort().map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join("");
+    customerSel.innerHTML = `<option value="">All Customers</option>` + [...customerSet].sort().map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join("");
+    const planSel = document.getElementById("sd-plan-sprint");
+    const prevSprint = planSel.value;
+    const withId = (state.sprintMetrics || []).filter(s => s.sprint_id !== null && s.sprint_id !== undefined);
+    planSel.innerHTML = `<option value="">Select Sprint</option>` + withId
+      .map(s => `<option value="${s.sprint_id}">${escapeHtml(s.sprint_name || `Sprint ${s.sprint_id}`)} (#${s.sprint_id})</option>`)
+      .join("");
+    if (prevSprint) planSel.value = prevSprint;
+    const labels = [...new Set((state.rows || []).flatMap(r => r.labels || []))].sort((a, b) => a.localeCompare(b));
+    state.allLabels = labels;
+    renderPlanLabels(labels);
+    refreshPlanSelect2();
+  }
+
+  function renderPlanLabels(labels) {
+    const labelsSel = document.getElementById("sd-plan-labels");
+    const selected = [...labelsSel.selectedOptions].map(o => o.value);
+    if (!labels.length) {
+      labelsSel.innerHTML = `<option value="" disabled>No labels found</option>`;
+      return;
+    }
+    labelsSel.innerHTML = labels.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join("");
+    selected.forEach(v => {
+      const match = [...labelsSel.options].find(o => o.value === v);
+      if (match) match.selected = true;
+    });
+  }
+
+  function refreshPlanSelect2() {
+    if (!window.jQuery || !jQuery.fn || !jQuery.fn.select2) return;
+    const sprint = jQuery("#sd-plan-sprint");
+    const labels = jQuery("#sd-plan-labels");
+    if (sprint.hasClass("select2-hidden-accessible")) sprint.select2("destroy");
+    if (labels.hasClass("select2-hidden-accessible")) labels.select2("destroy");
+    sprint.select2({
+      placeholder: "Select sprint",
+      allowClear: true,
+      width: "100%"
+    });
+    labels.select2({
+      placeholder: "Labels (type at least 3 letters)",
+      allowClear: true,
+      width: "100%",
+      minimumInputLength: 3,
+      language: {
+        inputTooShort: () => "Type at least 3 letters to search labels"
+      }
+    });
+    sprint.trigger("change.select2");
+    labels.trigger("change.select2");
+  }
+
+  function filteredRows() {
+    const sprint = document.getElementById("sd-filter-sprint").value;
+    const assignee = document.getElementById("sd-filter-assignee").value;
+    const type = document.getElementById("sd-filter-type").value;
+    const customer = document.getElementById("sd-filter-customer").value;
+    const doneOnly = document.getElementById("sd-filter-done").checked;
+    return state.rows.filter(r => {
+      if (sprint && !(r.sprints || []).some(s => (s.name || "No Sprint") === sprint)) return false;
+      if (assignee && (r.assignee_name || "Unassigned") !== assignee) return false;
+      if (type && (r.type_bucket || "Other") !== type) return false;
+      if (customer && !(r.customers || []).includes(customer)) return false;
+      if (doneOnly && !r.is_done) return false;
+      return true;
+    });
+  }
+
+  function renderSprintSummary() {
+    const body = document.getElementById("sd-sprint-summary-body");
+    if (!state.sprintMetrics.length) {
+      body.innerHTML = `<tr><td colspan="5" class="py-5 px-2 text-center text-slate-400">No sprint rows.</td></tr>`;
+      return;
+    }
+    body.innerHTML = state.sprintMetrics.map(s => {
+      const ratio = Number(s.done_ratio || 0);
+      const cls = ratio >= 80 ? "ok" : (ratio >= 50 ? "warn" : "danger");
+      return `<tr class="border-b border-slate-100">
+        <td class="py-2 px-2 font-medium">${escapeHtml(s.sprint_name || "No Sprint")}</td>
+        <td class="py-2 px-2">${s.total || 0}</td>
+        <td class="py-2 px-2">${s.done || 0}</td>
+        <td class="py-2 px-2">${s.open || 0}</td>
+        <td class="py-2 px-2"><span class="sd-pill ${cls}">${ratio}%</span></td>
+      </tr>`;
+    }).join("");
+  }
+
+  function updateTable(rows) {
+    const body = document.getElementById("sd-table-body");
+    const info = document.getElementById("sd-pagination-info");
+    const total = rows.length;
+    state.totalPages = total ? Math.ceil(total / state.perPage) : 0;
+    if (state.page > state.totalPages && state.totalPages > 0) state.page = state.totalPages;
+    const start = (state.page - 1) * state.perPage;
+    const pageRows = rows.slice(start, start + state.perPage);
+    info.textContent = `${total} results`;
+    if (!pageRows.length) {
+      body.innerHTML = `<tr><td colspan="10" class="py-6 px-2 text-center text-slate-400">No issues found for current filters.</td></tr>`;
+    } else {
+      body.innerHTML = pageRows.map(r => {
+        const sprintNames = (r.sprints || []).map(s => s.name || "No Sprint");
+        const issueCls = r.type_bucket === "Bug" ? "sd-issue-link-bug" : (r.type_bucket === "Story" ? "sd-issue-link-story" : "text-blue-500");
+        return `<tr class="border-b border-slate-100">
+          <td class="py-2 px-2"><a class="${issueCls} hover:underline" target="_blank" rel="noopener" href="${JIRA_BASE}/browse/${encodeURIComponent(r.issue_key)}">${escapeHtml(r.issue_key)}</a></td>
+          <td class="py-2 px-2">${escapeHtml(r.summary || "")}</td>
+          <td class="py-2 px-2">${sprintNames.map(s => `<span class="sd-pill mr-1 mb-1">${escapeHtml(s)}</span>`).join("")}</td>
+          <td class="py-2 px-2">${r.epic_key ? `<span class="sd-pill">${escapeHtml(r.epic_key)}</span>` : `<span class="text-slate-400">-</span>`}</td>
+          <td class="py-2 px-2">${escapeHtml(r.issue_type || "")}</td>
+          <td class="py-2 px-2">${escapeHtml(r.priority || "")}</td>
+          <td class="py-2 px-2">${escapeHtml(r.status || "")}</td>
+          <td class="py-2 px-2">${escapeHtml(r.assignee_name || "Unassigned")}</td>
+          <td class="py-2 px-2">${(r.customers || []).map(c => `<span class="sd-pill mr-1 mb-1">${escapeHtml(c)}</span>`).join("") || `<span class="text-slate-400">-</span>`}</td>
+          <td class="py-2 px-2">${r.is_done ? `<span class="sd-pill ok">Done</span>` : `<span class="sd-pill danger">Open</span>`}</td>
+        </tr>`;
+      }).join("");
+    }
+    document.getElementById("sd-prev").disabled = state.page <= 1;
+    document.getElementById("sd-next").disabled = state.page >= state.totalPages || total === 0;
+  }
+
+  function updateKpis() {
+    const k = state.kpis || {};
+    document.getElementById("kpi-total").textContent = k.total || 0;
+    document.getElementById("kpi-done").textContent = k.done || 0;
+    document.getElementById("kpi-open").textContent = k.open || 0;
+    const ratio = (k.total || 0) ? Math.round(((k.done || 0) / k.total) * 100) : 0;
+    document.getElementById("kpi-ratio").textContent = `${ratio}%`;
+    document.getElementById("kpi-high").textContent = k.high_priority || 0;
+    document.getElementById("kpi-customer-resolved").textContent = k.resolved_customer_tagged || 0;
+  }
+
+  function updateCharts() {
+    renderGroupedBarChart(
+      "sd-sprint-chart",
+      "sd-sprint-legend",
+      state.sprintMetrics.map(s => s.sprint_name),
+      state.sprintMetrics.map(s => s.total),
+      state.sprintMetrics.map(s => s.done),
+      { label: "Total Tickets", color: COLORS.open },
+      { label: "Resolved / Done", color: COLORS.done }
+    );
+    renderGroupedBarChart(
+      "sd-assignee-chart",
+      "sd-assignee-legend",
+      state.assigneeMetrics.map(a => a.assignee_name),
+      state.assigneeMetrics.map(a => a.worked),
+      state.assigneeMetrics.map(a => a.done),
+      { label: "Worked", color: COLORS.worked },
+      { label: "Done", color: COLORS.done }
+    );
+    renderGroupedBarChart(
+      "sd-bug-chart",
+      "sd-bug-legend",
+      state.assigneeMetrics.map(a => a.assignee_name),
+      state.assigneeMetrics.map(a => a.bug_worked),
+      state.assigneeMetrics.map(a => a.bug_done),
+      { label: "Bugs Worked", color: COLORS.bugWorked },
+      { label: "Bugs Fixed", color: COLORS.bugFixed }
+    );
+    renderGroupedBarChart(
+      "sd-customer-chart",
+      "sd-customer-legend",
+      state.customerMetrics.map(c => c.customer),
+      state.customerMetrics.map(c => c.created),
+      state.customerMetrics.map(c => c.resolved),
+      { label: "Created", color: COLORS.created },
+      { label: "Resolved", color: COLORS.resolved }
+    );
+    const pri = Object.keys(state.priorityDistribution || {}).sort((a, b) => (state.priorityDistribution[b] || 0) - (state.priorityDistribution[a] || 0));
+    renderSingleBarChart("sd-priority-chart", "sd-priority-legend", pri, pri.map(k => state.priorityDistribution[k]), "hsla(264, 70%, 58%, 0.72)");
+    const types = Object.keys(state.typeDistribution || {});
+    renderSingleBarChart("sd-type-chart", "sd-type-legend", types, types.map(k => state.typeDistribution[k]), "hsla(187, 85%, 42%, 0.7)");
+  }
+
+  function updateDashboard() {
+    updateKpis();
+    updateCharts();
+    renderSprintSummary();
+    updateTable(filteredRows());
+  }
+
+  function renderPlanActualChart(total, done) {
+    const open = Math.max(0, (total || 0) - (done || 0));
+    const container = document.getElementById("sd-plan-chart");
+    if (!container) return;
+    container.innerHTML = "";
+    const rows = [
+      { label: "Planned", value: total || 0, key: "planned", color: "hsla(224, 76%, 56%, 0.72)" },
+      { label: "Done", value: done || 0, key: "done", color: "hsla(142, 70%, 40%, 0.72)" },
+      { label: "Pending", value: open || 0, key: "open", color: "hsla(9, 86%, 58%, 0.72)" },
+    ];
+    const tooltip = getOrCreateTooltip(container);
+    const width = container.clientWidth || 640;
+    const height = container.clientHeight || 230;
+    const margin = { top: 14, right: 16, bottom: 50, left: 40 };
+    const w = width - margin.left - margin.right;
+    const h = height - margin.top - margin.bottom;
+    const svg = d3.select(container).append("svg").attr("viewBox", `0 0 ${width} ${height}`).attr("preserveAspectRatio", "xMidYMid meet");
+    const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+    const x = d3.scaleBand().domain(rows.map(r => r.label)).range([0, w]).padding(0.25);
+    const y = d3.scaleLinear().domain([0, d3.max(rows, d => d.value) || 1]).nice().range([h, 0]);
+
+    g.selectAll(".grid-h").data(y.ticks(4)).enter().append("line")
+      .attr("x1", 0).attr("x2", w).attr("y1", d => y(d)).attr("y2", d => y(d)).attr("stroke", "#e2e8f0");
+    g.selectAll("rect").data(rows).enter().append("rect")
+      .attr("x", d => x(d.label)).attr("y", d => y(d.value)).attr("width", x.bandwidth()).attr("height", d => h - y(d.value))
+      .attr("fill", d => d.color).attr("rx", 3).style("cursor", "pointer")
+      .on("mousemove", function(event, d) {
+        showTooltip(container, tooltip, event, `<strong>${escapeHtml(d.label)}</strong><br/>Tickets: ${d.value}<br/><span style="opacity:.8">Click to view list</span>`);
+      })
+      .on("mouseleave", () => hideTooltip(tooltip))
+      .on("click", (_, d) => openPlanOffcanvas(d.key, d.label));
+    g.append("g").attr("transform", `translate(0,${h})`).call(d3.axisBottom(x).tickSizeOuter(0))
+      .call(s => s.selectAll("text").style("font-size", "10px").style("fill", "#64748b"));
+    g.append("g").call(d3.axisLeft(y).ticks(4))
+      .call(s => s.selectAll("text").style("font-size", "10px").style("fill", "#64748b"));
+  }
+
+  function closePlanOffcanvas() {
+    document.getElementById("sd-offcanvas").classList.remove("open");
+    document.getElementById("sd-offcanvas-backdrop").classList.remove("open");
+  }
+
+  function openPlanOffcanvas(type, label) {
+    const panel = document.getElementById("sd-offcanvas");
+    const backdrop = document.getElementById("sd-offcanvas-backdrop");
+    const title = document.getElementById("sd-offcanvas-title");
+    const subtitle = document.getElementById("sd-offcanvas-subtitle");
+    const body = document.getElementById("sd-offcanvas-body");
+    const ticketMap = (state.planActual && state.planActual.tickets) || {};
+    const rows = ticketMap[type] || [];
+    title.textContent = `${label} Tickets`;
+    subtitle.textContent = `${rows.length} tickets in selected sprint`;
+    if (!rows.length) {
+      body.innerHTML = `<tr><td colspan="4" class="py-4 px-2 text-center text-slate-400">No tickets found.</td></tr>`;
+    } else {
+      body.innerHTML = rows.map(r => `<tr class="border-b border-slate-100">
+        <td class="py-2 px-2"><a class="${r.is_bug ? "sd-issue-link-bug" : (r.is_story ? "sd-issue-link-story" : "text-blue-500")} hover:underline" target="_blank" rel="noopener" href="${JIRA_BASE}/browse/${encodeURIComponent(r.issue_key)}">${escapeHtml(r.issue_key || "")}</a></td>
+        <td class="py-2 px-2">${escapeHtml(r.summary || "")}</td>
+        <td class="py-2 px-2">${escapeHtml(r.status || "")}</td>
+        <td class="py-2 px-2">${escapeHtml(r.assignee_name || "Unassigned")}</td>
+      </tr>`).join("");
+    }
+    backdrop.classList.add("open");
+    panel.classList.add("open");
+  }
+
+  function renderPlanActual(data) {
+    const plannedBody = document.getElementById("sd-plan-planned-body");
+    const actualBody = document.getElementById("sd-plan-actual-body");
+    const pendingBody = document.getElementById("sd-plan-pending-body");
+    document.getElementById("sd-plan-total").textContent = data.total || 0;
+    document.getElementById("sd-plan-done").textContent = data.done || 0;
+    document.getElementById("sd-plan-open").textContent = data.open || 0;
+    document.getElementById("sd-plan-ratio").textContent = `${data.done_ratio || 0}%`;
+    renderPlanActualChart(data.total || 0, data.done || 0);
+    const plannedRows = ((data.tickets || {}).planned || []);
+    const actualRows = ((data.tickets || {}).done || []);
+    const pendingRows = ((data.tickets || {}).open || []);
+    document.getElementById("sd-plan-planned-count").textContent = plannedRows.length;
+    document.getElementById("sd-plan-actual-count").textContent = actualRows.length;
+    document.getElementById("sd-plan-pending-count").textContent = pendingRows.length;
+
+    if (!plannedRows.length) {
+      plannedBody.innerHTML = `<tr><td colspan="3" class="sd-pa-empty">No planned tickets found.</td></tr>`;
+    } else {
+      plannedBody.innerHTML = plannedRows.map(r => `<tr class="border-b border-slate-100">
+      <td class="py-2 px-2"><a class="${r.is_bug ? "sd-issue-link-bug" : (r.is_story ? "sd-issue-link-story" : "text-blue-500")} hover:underline" target="_blank" rel="noopener" href="${JIRA_BASE}/browse/${encodeURIComponent(r.issue_key || "")}">${escapeHtml(r.issue_key || "")}</a></td>
+      <td class="py-2 px-2">${escapeHtml(r.status || "")}</td>
+      <td class="py-2 px-2">${escapeHtml(r.summary || "")}</td>
+    </tr>`).join("");
+    }
+
+    if (!actualRows.length) {
+      actualBody.innerHTML = `<tr><td colspan="3" class="sd-pa-empty">No actual done tickets found.</td></tr>`;
+    } else {
+      actualBody.innerHTML = actualRows.map(r => `<tr class="border-b border-slate-100">
+      <td class="py-2 px-2"><a class="${r.is_bug ? "sd-issue-link-bug" : (r.is_story ? "sd-issue-link-story" : "text-blue-500")} hover:underline" target="_blank" rel="noopener" href="${JIRA_BASE}/browse/${encodeURIComponent(r.issue_key || "")}">${escapeHtml(r.issue_key || "")}</a></td>
+      <td class="py-2 px-2">${escapeHtml(r.status || "")}</td>
+      <td class="py-2 px-2">${escapeHtml(r.summary || "")}</td>
+    </tr>`).join("");
+    }
+
+    if (!pendingRows.length) {
+      pendingBody.innerHTML = `<tr><td colspan="3" class="sd-pa-empty">No open/pending tickets found.</td></tr>`;
+    } else {
+      pendingBody.innerHTML = pendingRows.map(r => `<tr class="border-b border-slate-100">
+      <td class="py-2 px-2"><a class="${r.is_bug ? "sd-issue-link-bug" : (r.is_story ? "sd-issue-link-story" : "text-blue-500")} hover:underline" target="_blank" rel="noopener" href="${JIRA_BASE}/browse/${encodeURIComponent(r.issue_key || "")}">${escapeHtml(r.issue_key || "")}</a></td>
+      <td class="py-2 px-2">${escapeHtml(r.status || "")}</td>
+      <td class="py-2 px-2">${escapeHtml(r.summary || "")}</td>
+    </tr>`).join("");
+    }
+  }
+
+  async function loadPlanActual() {
+    const sel = document.getElementById("sd-plan-sprint");
+    const sprintId = (sel.value || "").trim();
+    const selectedLabels = window.jQuery ? (jQuery("#sd-plan-labels").val() || []) : [...document.getElementById("sd-plan-labels").selectedOptions].map(o => (o.value || "").trim()).filter(Boolean);
+    const status = document.getElementById("sd-plan-status");
+    if (!sprintId) {
+      status.textContent = "Select a sprint first.";
+      status.className = "text-xs text-red-500 mb-3";
+      return;
+    }
+    status.textContent = "Loading sprint comparison...";
+    status.className = "text-xs text-slate-500 mb-3";
+    try {
+      const res = await fetch("/api/sprint_dashboard/plan_actual", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sprint_id: sprintId, labels: selectedLabels })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to load plan vs actual");
+      state.planActual = data;
+      const selectedText = sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].textContent : `Sprint #${sprintId}`;
+      const labelText = selectedLabels.length ? ` | Labels: ${selectedLabels.join(", ")}` : "";
+      status.textContent = `${selectedText}: Planned ${data.total || 0}, Done ${data.done || 0}${labelText}`;
+      status.className = "text-xs text-emerald-600 mb-3";
+      renderPlanActual(data);
+    } catch (e) {
+      status.textContent = e.message || "Failed to load plan vs actual";
+      status.className = "text-xs text-red-500 mb-3";
+    }
+  }
+
+  async function downloadPlanActualReport() {
+    const sel = document.getElementById("sd-plan-sprint");
+    const sprintId = (sel.value || "").trim();
+    const status = document.getElementById("sd-plan-status");
+    if (!sprintId) {
+      status.textContent = "Select a sprint first.";
+      status.className = "text-xs text-red-500 mb-3";
+      return;
+    }
+    const selectedLabels = window.jQuery ? (jQuery("#sd-plan-labels").val() || []) : [];
+    status.textContent = "Generating PDF report...";
+    status.className = "text-xs text-slate-500 mb-3";
+    try {
+      const res = await fetch("/api/sprint_dashboard/report_pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sprint_id: sprintId, labels: selectedLabels })
+      });
+      if (!res.ok) {
+        let msg = "Failed to generate report";
+        try {
+          const err = await res.json();
+          msg = err.error || msg;
+        } catch (_) {}
+        throw new Error(msg);
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `sprint_${sprintId}_plan_actual_report.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      status.textContent = "PDF report downloaded successfully.";
+      status.className = "text-xs text-emerald-600 mb-3";
+    } catch (e) {
+      status.textContent = e.message || "Failed to generate report";
+      status.className = "text-xs text-red-500 mb-3";
+    }
+  }
+
+  function openJqlDialog() {
+    const modal = document.getElementById("sd-jql-modal");
+    const input = document.getElementById("sd-jql-input");
+    input.value = state.currentJql || `project = "{{ project }}" AND sprint is not EMPTY ORDER BY created DESC`;
+    modal.classList.add("open");
+    setTimeout(() => input.focus(), 0);
+  }
+  function closeJqlDialog() { document.getElementById("sd-jql-modal").classList.remove("open"); }
+  function openSettingsDialog() {
+    const stored = getStoredSettings();
+    document.getElementById("sd-setting-email").value = stored.email;
+    document.getElementById("sd-setting-token").value = stored.token;
+    document.getElementById("sd-settings-modal").classList.add("open");
+  }
+  function closeSettingsDialog() { document.getElementById("sd-settings-modal").classList.remove("open"); }
+
+  async function fetchByJql(jql) {
+    const status = document.getElementById("sd-status");
+    const finalJql = (jql || "").trim();
+    const stored = getStoredSettings();
+    if (!finalJql) {
+      status.textContent = "Please enter JQL first.";
+      status.classList.add("text-red-400");
+      return;
+    }
+    if (!stored.email || !stored.token) {
+      status.textContent = "Add Jira email and API token in settings.";
+      status.classList.add("text-red-400");
+      openSettingsDialog();
+      return;
+    }
+    state.currentJql = finalJql;
+    saveStoredSettings({ jql: finalJql });
+    status.textContent = "Loading...";
+    status.classList.remove("text-red-400");
+    setLoading(true);
+    try {
+      const res = await fetch("/api/sprint_dashboard/data", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Jira-Email": stored.email,
+          "X-Jira-Token": stored.token,
+        },
+        body: JSON.stringify({ jql: finalJql }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to load dashboard");
+      state.rows = data.rows || [];
+      state.kpis = data.kpis || {};
+      state.assigneeMetrics = data.assignee_metrics || [];
+      state.sprintMetrics = data.sprint_metrics || [];
+      state.customerMetrics = data.customer_metrics || [];
+      state.priorityDistribution = data.priority_distribution || {};
+      state.typeDistribution = data.type_distribution || {};
+      state.page = 1;
+      fillFilterDropdowns();
+      document.getElementById("sd-fetched-count").textContent = `Fetched: ${state.rows.length} tickets`;
+      updateDashboard();
+      setDashboardReady(state.rows.length > 0);
+      document.getElementById("sd-open-builder-icon").textContent = "✎";
+      status.textContent = "";
+      closeJqlDialog();
+    } catch (e) {
+      status.textContent = e.message || "Failed to fetch";
+      status.classList.add("text-red-400");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function wireEvents() {
+    document.getElementById("sd-open-builder").addEventListener("click", openJqlDialog);
+    document.getElementById("sd-open-settings").addEventListener("click", openSettingsDialog);
+    document.getElementById("sd-jql-cancel").addEventListener("click", closeJqlDialog);
+    document.getElementById("sd-jql-close").addEventListener("click", closeJqlDialog);
+    document.getElementById("sd-jql-apply").addEventListener("click", () => fetchByJql(document.getElementById("sd-jql-input").value));
+    document.getElementById("sd-settings-cancel").addEventListener("click", closeSettingsDialog);
+    document.getElementById("sd-settings-close").addEventListener("click", closeSettingsDialog);
+    document.getElementById("sd-settings-save").addEventListener("click", () => {
+      const email = (document.getElementById("sd-setting-email").value || "").trim();
+      const token = (document.getElementById("sd-setting-token").value || "").trim();
+      saveStoredSettings({ email, token });
+      closeSettingsDialog();
+      const status = document.getElementById("sd-status");
+      status.textContent = "Settings saved locally.";
+      status.classList.remove("text-red-400");
+    });
+    document.getElementById("sd-prev").addEventListener("click", () => {
+      if (state.page > 1) { state.page -= 1; updateTable(filteredRows()); }
+    });
+    document.getElementById("sd-next").addEventListener("click", () => {
+      if (state.page < state.totalPages) { state.page += 1; updateTable(filteredRows()); }
+    });
+    document.getElementById("sd-plan-report").addEventListener("click", downloadPlanActualReport);
+    document.getElementById("sd-plan-load").addEventListener("click", loadPlanActual);
+    document.getElementById("sd-offcanvas-close").addEventListener("click", closePlanOffcanvas);
+    document.getElementById("sd-offcanvas-backdrop").addEventListener("click", closePlanOffcanvas);
+    ["sd-filter-sprint", "sd-filter-assignee", "sd-filter-type", "sd-filter-customer", "sd-filter-done"].forEach(id => {
+      document.getElementById(id).addEventListener("change", () => {
+        state.page = 1;
+        updateTable(filteredRows());
+      });
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        closeJqlDialog();
+        closeSettingsDialog();
+        closePlanOffcanvas();
+      }
+    });
+  }
+
+  function init() {
+    wireEvents();
+    refreshPlanSelect2();
+    setDashboardReady(false);
+    document.getElementById("sd-open-builder-icon").textContent = "+";
+    const stored = getStoredSettings();
+    state.currentJql = stored.jql || `project = "{{ project }}" AND sprint is not EMPTY ORDER BY created DESC`;
+    if (stored.jql && stored.email && stored.token) fetchByJql(stored.jql);
+  }
+  init();
+})();
+</script>
+{% endblock %}
