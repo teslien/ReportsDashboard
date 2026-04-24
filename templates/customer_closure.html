@@ -190,7 +190,7 @@
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
       <div>
         <label class="cc-label" for="cc-done-statuses">Done status setting</label>
-        <textarea id="cc-done-statuses" class="cc-textarea" placeholder="Done, Resolved, Closed"></textarea>
+        <textarea id="cc-done-statuses" class="cc-textarea" placeholder="Done, Resolved, Closed, Ready for QA, Deployed, Ready for Staging, Ready for Internal Demo, Not a Bug, Unable to Reproduce"></textarea>
         <div class="flex items-center justify-between gap-3 mt-2">
           <p class="cc-muted">Comma or newline separated. Tickets in these statuses count as closed.</p>
           <button id="cc-reset-statuses" type="button" class="cc-btn">Reset Defaults</button>
@@ -266,6 +266,8 @@
     "Deployed",
     "Ready for Staging",
     "Ready for Internal Demo",
+    "Not a Bug",
+    "Unable to Reproduce",
   ];
   const LS_DONE = "customer_closure_done_statuses";
   const LS_TEAM = "customer_closure_team";
