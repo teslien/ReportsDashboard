@@ -1395,13 +1395,11 @@ def sprint_dashboard_page():
 
 
 @app.route("/team_productivity")
-@page_permission_required("team_productivity")
 def team_productivity_page():
     return render_template("team_productivity.html", project=PROJECT_KEY, show_navbar=False)
 
 
 @app.route("/customer_closure")
-@page_permission_required("customer_closure")
 def customer_closure_page():
     return render_template("customer_closure.html", project=PROJECT_KEY, show_navbar=False)
 
@@ -1617,11 +1615,7 @@ def _first_customer_resolution_milestone_at(issue, fields_obj):
 
 
 @app.route("/api/customer_closure/teams", methods=["POST"])
-@login_required
 def customer_closure_teams():
-    if not current_user.can_view_page("customer_closure"):
-        return jsonify({"error": "Forbidden"}), 403
-
     payload = request.get_json(silent=True) or {}
     date_start = (payload.get("date_start") or "").strip()
     date_end = (payload.get("date_end") or "").strip()
@@ -1665,11 +1659,7 @@ def customer_closure_teams():
 
 
 @app.route("/api/customer_closure/data", methods=["POST"])
-@login_required
 def customer_closure_data():
-    if not current_user.can_view_page("customer_closure"):
-        return jsonify({"error": "Forbidden"}), 403
-
     payload = request.get_json(silent=True) or {}
     date_start = (payload.get("date_start") or "").strip()
     date_end = (payload.get("date_end") or "").strip()
@@ -1788,11 +1778,7 @@ def customer_closure_data():
 
 
 @app.route("/api/team_productivity/data", methods=["POST"])
-@login_required
 def team_productivity_data():
-    if not current_user.can_view_page("team_productivity"):
-        return jsonify({"error": "Forbidden"}), 403
-
     payload = request.get_json(silent=True) or {}
     date_start = (payload.get("date_start") or "").strip()
     date_end = (payload.get("date_end") or "").strip()
