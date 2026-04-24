@@ -11,6 +11,9 @@
   body.cd-nav-hidden nav { display: none !important; }
   body.cd-nav-hidden main { padding-top: 16px !important; }
   .cd-card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04); }
+  .cd-card-clickable { cursor: pointer; transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease; }
+  .cd-card-clickable:hover { border-color: #cbd5e1; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08); transform: translateY(-1px); }
+  .cd-card-clickable:focus-visible { outline: 2px solid #93c5fd; outline-offset: 2px; }
   .cd-label { font-size: 12px; color: #475569; margin-bottom: 6px; display: block; font-weight: 600; }
   .cd-input { width: 100%; background: #ffffff; border: 1px solid #cbd5e1; color: #0f172a; border-radius: 8px; padding: 9px 10px; font-size: 13px; }
   .cd-kpi-title { font-size: 12px; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
@@ -312,7 +315,7 @@
       <div id="kpi-high" class="cd-kpi-value">0</div>
       <div class="cd-kpi-sub">High / Critical / Blocker</div>
     </div>
-    <div class="cd-card p-4">
+    <div id="cd-launch-blocker-card" class="cd-card cd-card-clickable p-4" role="button" tabindex="0" aria-label="Show launch blocker tickets">
       <div class="cd-kpi-title">Launch Blockers</div>
       <div id="kpi-lb" class="cd-kpi-value">0</div>
       <div class="cd-kpi-sub">Labels: launch_blocker / similar</div>
@@ -1535,6 +1538,22 @@
     await loadRaceSelectionInsights(rows, `${customerName} up to ${frameLabel}`);
   }
 
+  async function openLaunchBlockerOffcanvas() {
+    const allRows = filteredRows();
+    const launchBlockerRows = allRows.filter(r => !!r.launch_blocker);
+    const selectedCustomer = (document.getElementById("cd-customer").value || "").trim() || "All Customers";
+    const offcanvas = document.getElementById("cd-race-offcanvas");
+    const title = document.getElementById("cd-race-offcanvas-title");
+    const subtitle = document.getElementById("cd-race-offcanvas-subtitle");
+    if (!offcanvas || !title || !subtitle) return;
+    title.textContent = "Launch blocker tickets";
+    subtitle.textContent = `${launchBlockerRows.length} tickets in ${selectedCustomer}`;
+    renderRaceOffcanvasTickets(launchBlockerRows);
+    offcanvas.classList.add("open");
+    offcanvas.setAttribute("aria-hidden", "false");
+    await loadRaceSelectionInsights(launchBlockerRows, `Launch blockers in ${selectedCustomer}`);
+  }
+
   function closeRaceOffcanvas() {
     const offcanvas = document.getElementById("cd-race-offcanvas");
     if (!offcanvas) return;
@@ -2116,6 +2135,16 @@
     });
     document.getElementById("cd-toggle-ai").addEventListener("click", () => toggleAiPanel());
     document.getElementById("cd-open-settings").addEventListener("click", openSettingsDialog);
+    const lbCard = document.getElementById("cd-launch-blocker-card");
+    if (lbCard) {
+      lbCard.addEventListener("click", openLaunchBlockerOffcanvas);
+      lbCard.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          openLaunchBlockerOffcanvas();
+        }
+      });
+    }
     const insBtn = document.getElementById("cd-insights-generate");
     if (insBtn) insBtn.addEventListener("click", () => generateInsights());
     document.getElementById("cd-jql-cancel").addEventListener("click", closeJqlDialog);
