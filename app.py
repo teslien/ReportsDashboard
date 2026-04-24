@@ -1524,6 +1524,8 @@ _DEFAULT_CUSTOMER_DONE_STATUSES = (
     "Deployed",
     "Ready for Staging",
     "Ready for Internal Demo",
+    "Not a Bug",
+    "Unable to Reproduce",
 )
 
 
