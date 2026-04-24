@@ -60,6 +60,77 @@
   .cd-modal-body { padding: 14px; }
   .cd-modal-actions { padding: 10px 14px 14px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 8px; }
   .cd-btn-secondary { border: 1px solid #cbd5e1; background: #fff; color: #334155; border-radius: 8px; padding: 8px 12px; font-size: 12px; font-weight: 600; }
+  .cd-jql-layout { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(240px, 1fr); gap: 14px; }
+  .cd-jql-side { border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px; background: #f8fafc; }
+  .cd-jql-side-head { font-size: 12px; font-weight: 700; color: #334155; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .cd-jql-list { max-height: 260px; overflow: auto; display: flex; flex-direction: column; gap: 6px; }
+  .cd-jql-item { border: 1px solid #dbe3ef; background: #fff; border-radius: 8px; padding: 8px; }
+  .cd-jql-item-title { font-size: 12px; font-weight: 700; color: #0f172a; }
+  .cd-jql-item-meta { font-size: 10px; color: #64748b; margin-top: 3px; }
+  .cd-jql-item-actions { margin-top: 7px; display: flex; gap: 6px; }
+  .cd-jql-mini-btn { font-size: 11px; border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 8px; background: #fff; color: #334155; }
+  .cd-jql-mini-btn.danger { border-color: #fecaca; color: #b91c1c; background: #fff5f5; }
+  .cd-jql-mode { font-size: 11px; display: inline-flex; align-items: center; gap: 5px; border: 1px solid #c7d2fe; background: #eef2ff; color: #3730a3; border-radius: 999px; padding: 3px 8px; margin-bottom: 8px; }
+  .cd-jql-feedback { font-size: 12px; margin-top: 8px; }
+  .cd-jql-feedback.err { color: #b91c1c; }
+  .cd-jql-feedback.ok { color: #0f766e; }
+  .cd-offcanvas-backdrop { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.38); z-index: 1300; opacity: 0; pointer-events: none; transition: opacity .2s ease; }
+  .cd-offcanvas-backdrop.open { opacity: 1; pointer-events: auto; }
+  .cd-offcanvas-panel { position: absolute; top: 0; right: 0; width: min(1320px, 99vw); height: 100%; background: #fff; border-left: 1px solid #e2e8f0; box-shadow: -14px 0 34px rgba(15, 23, 42, .2); transform: translateX(100%); transition: transform .22s ease; display: flex; flex-direction: column; }
+  .cd-offcanvas-backdrop.open .cd-offcanvas-panel { transform: translateX(0); }
+  .cd-offcanvas-head { padding: 16px 20px; border-bottom: 1px solid #e2e8f0; display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+  .cd-offcanvas-title { font-size: 30px; font-weight: 800; color: #0f172a; line-height: 1.15; letter-spacing: -0.01em; }
+  .cd-offcanvas-sub { font-size: 16px; color: #475569; margin-top: 4px; font-weight: 500; }
+  .cd-offcanvas-body { padding: 16px 20px 20px; overflow: auto; }
+  .cd-insight-box { border: 1px solid #fde68a; background: #fffbeb; border-radius: 12px; padding: 14px 16px; margin-bottom: 14px; }
+  .cd-insight-box h4 { font-size: 22px; font-weight: 800; color: #92400e; margin-bottom: 10px; }
+  .cd-magic-title { display: inline-flex; align-items: center; gap: 9px; }
+  .cd-magic-icon {
+    width: 24px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    animation: cd-bot-float 2.4s ease-in-out infinite;
+    filter: drop-shadow(0 2px 6px rgba(37, 99, 235, 0.2));
+  }
+  .cd-magic-icon svg { width: 24px; height: 24px; display: block; }
+  .cd-bot-ant-dot { animation: cd-bot-pulse 1.6s ease-in-out infinite; transform-origin: center; }
+  .cd-bot-eye { animation: cd-bot-blink 3s infinite; transform-origin: center; }
+  .cd-bot-mouth { animation: cd-bot-mouth 1.7s ease-in-out infinite; transform-origin: center; }
+  .cd-insight-list { margin: 0; padding-left: 22px; color: #0f172a; font-size: 17px; line-height: 1.7; }
+  .cd-insight-list li { margin-bottom: 8px; }
+  .cd-area-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+  .cd-area-tag { font-size: 13px; font-weight: 700; color: #92400e; background: #fef3c7; border: 1px solid #fcd34d; border-radius: 999px; padding: 4px 10px; }
+  #cd-race-ai-summary { font-size: 16px !important; line-height: 1.65; color: #78350f !important; margin-bottom: 10px !important; }
+  #cd-race-offcanvas .cd-table th { font-size: 11px; padding-top: 9px; padding-bottom: 9px; }
+  #cd-race-offcanvas .cd-table td { font-size: 13px; line-height: 1.45; padding-top: 9px; padding-bottom: 9px; color: #111827; }
+  #cd-race-offcanvas .cd-pill { font-size: 11px; padding: 3px 8px; }
+  #cd-race-offcanvas .cd-team-dot { width: 12px; height: 12px; }
+  #cd-race-offcanvas .cd-table a { font-size: 13px; font-weight: 700; }
+  .cd-ticket-key-link { display: inline-flex; align-items: center; gap: 6px; color: #1d4ed8; font-weight: 700; text-decoration: none; white-space: nowrap; }
+  .cd-ticket-key-link:hover { text-decoration: underline; }
+  .cd-ticket-key-text { display: inline-block; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 13px; letter-spacing: .01em; background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; border-radius: 6px; padding: 2px 6px; line-height: 1.2; white-space: nowrap; }
+  .cd-race-table-section { background: #f8fafc; color: #334155; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; font-weight: 700; }
+  .cd-typing-cursor { display: inline-block; width: 8px; color: #1d4ed8; animation: cd-blink 1s steps(1) infinite; }
+  @keyframes cd-blink { 50% { opacity: 0; } }
+  @keyframes cd-bot-float {
+    0%, 100% { transform: translateY(0) rotate(0deg); }
+    50% { transform: translateY(-2px) rotate(2deg); }
+  }
+  @keyframes cd-bot-pulse {
+    0%, 100% { transform: scale(1); opacity: 0.85; }
+    50% { transform: scale(1.3); opacity: 1; }
+  }
+  @keyframes cd-bot-blink {
+    0%, 46%, 54%, 100% { transform: scaleY(1); }
+    50% { transform: scaleY(0.15); }
+  }
+  @keyframes cd-bot-mouth {
+    0%, 100% { transform: scaleX(1); opacity: .95; }
+    50% { transform: scaleX(.72); opacity: .6; }
+  }
+  @media (max-width: 960px) { .cd-jql-layout { grid-template-columns: 1fr; } }
   .cd-settings-btn { width: 34px; height: 34px; border-radius: 999px; border: 1px solid #cbd5e1; background: #fff; color: #475569; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: all .15s; }
   .cd-settings-btn:hover { background: #f1f5f9; color: #0f172a; }
   .cd-modal-close { border: none; background: transparent; color: #64748b; font-size: 18px; line-height: 1; cursor: pointer; padding: 0 2px; }
@@ -116,6 +187,61 @@
     resize: vertical;
     background: rgba(147, 51, 234, 0.2);
   }
+  .lp-nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .lp-nav-wrap {
+    width: 100%;
+    height: 64px;
+    padding: 0 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .lp-brand {
+    display: inline-flex;
+    align-items: center;
+    text-decoration: none;
+    line-height: 0;
+  }
+  .lp-brand-logo {
+    height: 30px;
+    width: auto;
+    display: block;
+  }
+  .lp-menu { display: flex; align-items: center; gap: 8px; }
+  .lp-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 12px;
+    border-radius: 999px;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: #475569;
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 700;
+    transition: all .15s;
+  }
+  .lp-link:hover { border-color: #93c5fd; color: #1e3a8a; background: #eff6ff; }
+  .lp-link.active {
+    border-color: #bfdbfe;
+    color: #1d4ed8;
+    background: #eff6ff;
+  }
+  @media (max-width: 700px) {
+    .lp-nav-wrap { padding: 0 10px; }
+    .lp-link span { display: none; }
+  }
   @keyframes cd-panel-pop {
     from { opacity: 0; transform: translateY(-8px) scale(.995); }
     to { opacity: 1; transform: translateY(0) scale(1); }
@@ -124,6 +250,24 @@
 {% endblock %}
 
 {% block content %}
+<nav class="lp-nav">
+  <div class="lp-nav-wrap">
+    <a href="/customer_dashboard" class="lp-brand">
+      <img src="/static/lumber-logo.png" alt="LUMBER" class="lp-brand-logo" />
+    </a>
+    <div class="lp-menu">
+      <a href="/customer_dashboard" class="lp-link active">
+        <i class="fas fa-users"></i><span>Dashboard</span>
+      </a>
+      <a href="/team_productivity" class="lp-link">
+        <i class="fas fa-bolt"></i><span>Productivity</span>
+      </a>
+      <a href="/customer_closure" class="lp-link">
+        <i class="fas fa-circle-check"></i><span>Closure</span>
+      </a>
+    </div>
+  </div>
+</nav>
 <div class="space-y-6">
   <div class="flex items-start justify-between gap-4">
     <div>
@@ -131,12 +275,14 @@
       <p class="text-sm text-slate-500 mt-1">Build customer-focused insights from JQL and explore interactive graphs.</p>
     </div>
     <div class="flex items-center gap-2">
+      <span class="text-xs text-slate-500 hidden xl:inline">Saved Queries</span>
+      <select id="cd-saved-jql" class="cd-input cd-customer-top">
+        <option value="">— Select a saved JQL —</option>
+      </select>
+      <button id="cd-add-jql" class="cd-icon-btn" title="Add new JQL" style="font-size:18px;font-weight:700;">+</button>
       <select id="cd-customer" class="cd-input cd-customer-top" disabled>
         <option value="">All Customers</option>
       </select>
-      <button id="cd-open-builder" class="cd-icon-btn" title="Create / Edit Dashboard">
-        <span id="cd-open-builder-icon" style="font-size:18px;line-height:1;">+</span>
-      </button>
       <button id="cd-toggle-ai" class="cd-settings-btn cd-ai-toggle-btn" title="Show AI Insights">
         <span style="line-height:1;">AI</span>
       </button>
@@ -308,12 +454,29 @@
       <button id="cd-jql-close" class="cd-modal-close" aria-label="Close">&times;</button>
     </div>
     <div class="cd-modal-body">
-      <label class="cd-label">JQL</label>
-      <textarea id="cd-jql-input" class="cd-input" rows="6" placeholder='Example: project = "TIM" AND created >= -30d ORDER BY created DESC'></textarea>
+      <div class="cd-jql-layout">
+        <div>
+          <div id="cd-jql-mode-badge" class="cd-jql-mode">New Query</div>
+          <label class="cd-label">Saved Query Title</label>
+          <input id="cd-jql-title-input" class="cd-input mb-3" type="text" maxlength="80" placeholder="Example: Last 30 days - TIM project" />
+          <p class="text-xs text-slate-500 -mt-1 mb-3">Use a short title so you can quickly find this query later.</p>
+          <label class="cd-label">JQL</label>
+          <textarea id="cd-jql-input" class="cd-input" rows="6" placeholder='Example: project = "TIM" AND created >= -30d ORDER BY created DESC'></textarea>
+          <p id="cd-jql-feedback" class="cd-jql-feedback cd-hidden"></p>
+        </div>
+        <div class="cd-jql-side">
+          <div class="cd-jql-side-head">
+            <span>Saved Queries</span>
+            <span class="text-[10px] text-slate-500">Click Edit to load</span>
+          </div>
+          <div id="cd-jql-saved-list" class="cd-jql-list"></div>
+        </div>
+      </div>
     </div>
     <div class="cd-modal-actions">
       <button id="cd-jql-cancel" class="cd-btn-secondary">Cancel</button>
-      <button id="cd-jql-apply" class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold px-4 py-2 rounded-md">Fetch Dashboard</button>
+      <button id="cd-jql-save" class="cd-btn-secondary">Save JQL</button>
+      <button id="cd-jql-apply" class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold px-4 py-2 rounded-md">Save & Fetch Dashboard</button>
     </div>
   </div>
 </div>
@@ -348,34 +511,220 @@
     <span>Fetching dashboard...</span>
   </div>
 </div>
+<div id="cd-race-offcanvas" class="cd-offcanvas-backdrop" aria-hidden="true">
+  <div class="cd-offcanvas-panel" role="dialog" aria-modal="true" aria-labelledby="cd-race-offcanvas-title">
+    <div class="cd-offcanvas-head">
+      <div>
+        <div id="cd-race-offcanvas-title" class="cd-offcanvas-title">Customer Tickets</div>
+        <div id="cd-race-offcanvas-subtitle" class="cd-offcanvas-sub"></div>
+      </div>
+      <button id="cd-race-offcanvas-close" class="cd-modal-close" aria-label="Close">&times;</button>
+    </div>
+    <div class="cd-offcanvas-body">
+      <div class="cd-insight-box">
+        <h4 class="cd-magic-title">
+          <span class="cd-magic-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M12 2.5v2.3" stroke="#2563eb" stroke-width="1.4" stroke-linecap="round"/>
+              <circle class="cd-bot-ant-dot" cx="12" cy="2" r="1.2" fill="#60a5fa"/>
+              <rect x="4.2" y="6.2" width="15.6" height="13.6" rx="4.2" fill="url(#cdBotBody)" stroke="#93c5fd" stroke-width="1"/>
+              <circle class="cd-bot-eye" cx="9.2" cy="11.6" r="1.35" fill="#1e3a8a"/>
+              <circle class="cd-bot-eye" cx="14.8" cy="11.6" r="1.35" fill="#1e3a8a"/>
+              <rect class="cd-bot-mouth" x="8.2" y="15.1" width="7.6" height="1.7" rx="0.85" fill="#3b82f6"/>
+              <defs>
+                <linearGradient id="cdBotBody" x1="4" y1="6" x2="20" y2="20" gradientUnits="userSpaceOnUse">
+                  <stop stop-color="#eff6ff"/>
+                  <stop offset="1" stop-color="#dbeafe"/>
+                </linearGradient>
+              </defs>
+            </svg>
+          </span>
+          <span>Insights from Claude</span>
+        </h4>
+        <div id="cd-race-ai-tags" class="cd-area-tags"></div>
+        <p id="cd-race-ai-summary" class="text-xs text-slate-700 mb-2">Select a customer bar to load summary.</p>
+        <ul id="cd-race-ai-insights" class="cd-insight-list">
+          <li>Select a customer bar to load insights.</li>
+        </ul>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full cd-table">
+          <thead>
+            <tr class="border-b border-slate-200">
+              <th class="py-2 px-2 text-left">Issue</th>
+              <th class="py-2 px-2 text-left">Summary</th>
+              <th class="py-2 px-2 text-left">Priority</th>
+              <th class="py-2 px-2 text-left">Status</th>
+              <th class="py-2 px-2 text-left">Customers</th>
+              <th class="py-2 px-2 text-left">Team</th>
+              <th class="py-2 px-2 text-left">Launch Blocker</th>
+              <th class="py-2 px-2 text-left">Created</th>
+            </tr>
+          </thead>
+          <tbody id="cd-race-ticket-body">
+            <tr><td colspan="8" class="py-5 px-2 text-center text-slate-400">Click a customer bar to view tickets.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block extra_scripts %}
 <script>
 (() => {
   const JIRA_BASE = ("{{ JIRA_DOMAIN }}" || (window.JIRA_DOMAIN || "https://lumberfi.atlassian.net")).replace(/\/+$/, "");
-  const state = { page: 1, perPage: 20, totalPages: 0, rows: [], hasData: false, currentJql: "", raceTimer: null };
+  const state = {
+    page: 1,
+    perPage: 20,
+    totalPages: 0,
+    rows: [],
+    hasData: false,
+    currentJql: "",
+    raceTimer: null,
+    editingJqlId: "",
+    raceInsightReqId: 0,
+    raceInsightsCache: {},
+    raceInsightsInFlight: {},
+  };
   const LS_KEYS = {
     email: "customer_dashboard_jira_email",
     token: "customer_dashboard_jira_token",
     jql: "customer_dashboard_jql",
+    jqlTitle: "customer_dashboard_jql_title",
+    jqlList: "customer_dashboard_jql_list",
+    selectedJqlId: "customer_dashboard_selected_jql_id",
     customer: "customer_dashboard_selected_customer",
   };
+  const DEFAULT_JQL_ENTRIES = [
+    {
+      id: "default-reported-customer-1w",
+      title: "Issues Reported by Customer ( Last 1 Week )",
+      jql: `"Reported By Customer" = Yes\nAND created >= startOfWeek(-1)\nAND created < startOfWeek()\nORDER BY created DESC`,
+      updatedAt: 0,
+    },
+    {
+      id: "default-reported-customer-2w",
+      title: "Issue's reported by Customer (Last 2 Weeks )",
+      jql: `"Reported By Customer" = Yes\nAND created >= startOfWeek(-2)\nAND created < startOfWeek()\nORDER BY created DESC`,
+      updatedAt: 0,
+    },
+  ];
 
   function getStoredSettings() {
     return {
       email: localStorage.getItem(LS_KEYS.email) || "",
       token: localStorage.getItem(LS_KEYS.token) || "",
       jql: localStorage.getItem(LS_KEYS.jql) || "",
+      jqlTitle: localStorage.getItem(LS_KEYS.jqlTitle) || "",
+      selectedJqlId: localStorage.getItem(LS_KEYS.selectedJqlId) || "",
       customer: localStorage.getItem(LS_KEYS.customer) || "",
     };
   }
 
-  function saveStoredSettings({ email, token, jql, customer }) {
+  function saveStoredSettings({ email, token, jql, jqlTitle, selectedJqlId, customer }) {
     if (email !== undefined) localStorage.setItem(LS_KEYS.email, email || "");
     if (token !== undefined) localStorage.setItem(LS_KEYS.token, token || "");
     if (jql !== undefined) localStorage.setItem(LS_KEYS.jql, jql || "");
+    if (jqlTitle !== undefined) localStorage.setItem(LS_KEYS.jqlTitle, jqlTitle || "");
+    if (selectedJqlId !== undefined) localStorage.setItem(LS_KEYS.selectedJqlId, selectedJqlId || "");
     if (customer !== undefined) localStorage.setItem(LS_KEYS.customer, customer || "");
+  }
+
+  function getSavedJqls() {
+    const defaults = DEFAULT_JQL_ENTRIES.map(item => ({ ...item }));
+    try {
+      const parsed = JSON.parse(localStorage.getItem(LS_KEYS.jqlList) || "[]");
+      const userEntries = Array.isArray(parsed)
+        ? parsed.filter(item => item && item.id && item.title && item.jql)
+        : [];
+      const map = new Map();
+      [...defaults, ...userEntries].forEach(item => map.set(item.id, item));
+      return Array.from(map.values());
+    } catch (_) {
+      return defaults;
+    }
+  }
+
+  function setSavedJqls(entries) {
+    localStorage.setItem(LS_KEYS.jqlList, JSON.stringify(entries || []));
+  }
+
+  function upsertSavedJql(title, jql, preferredId = "") {
+    const safeTitle = (title || "").trim();
+    const finalJql = (jql || "").trim();
+    if (!safeTitle || !finalJql) return "";
+    const entries = getSavedJqls();
+    const existingByTitle = entries.find(item => item.title.toLowerCase() === safeTitle.toLowerCase());
+    const existingById = preferredId ? entries.find(item => item.id === preferredId) : null;
+    const id = existingById?.id || existingByTitle?.id || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const next = [
+      { id, title: safeTitle, jql: finalJql, updatedAt: Date.now() },
+      ...entries.filter(item => item.id !== id),
+    ].slice(0, 30);
+    setSavedJqls(next);
+    return id;
+  }
+
+  function removeSavedJql(id) {
+    const entries = getSavedJqls();
+    const next = entries.filter(item => item.id !== id);
+    setSavedJqls(next);
+    const stored = getStoredSettings();
+    if (stored.selectedJqlId === id) saveStoredSettings({ selectedJqlId: "" });
+  }
+
+  function populateSavedJqlDropdown(selectedId) {
+    const sel = document.getElementById("cd-saved-jql");
+    if (!sel) return;
+    const entries = getSavedJqls();
+    sel.innerHTML = '<option value="">— Select a saved JQL —</option>';
+    entries.forEach(item => {
+      const op = document.createElement("option");
+      op.value = item.id;
+      op.textContent = item.title;
+      sel.appendChild(op);
+    });
+    if (selectedId && entries.some(item => item.id === selectedId)) {
+      sel.value = selectedId;
+    } else {
+      sel.value = "";
+    }
+  }
+
+  function setJqlFeedback(message, isError) {
+    const el = document.getElementById("cd-jql-feedback");
+    if (!el) return;
+    if (!message) {
+      el.classList.add("cd-hidden");
+      el.textContent = "";
+      return;
+    }
+    el.textContent = message;
+    el.classList.remove("cd-hidden", "err", "ok");
+    el.classList.add(isError ? "err" : "ok");
+  }
+
+  function renderSavedJqlList(activeId = "") {
+    const list = document.getElementById("cd-jql-saved-list");
+    if (!list) return;
+    const entries = getSavedJqls();
+    if (!entries.length) {
+      list.innerHTML = '<div class="text-xs text-slate-500">No saved query yet. Add your first query from the form.</div>';
+      return;
+    }
+    list.innerHTML = entries.map(item => `
+      <div class="cd-jql-item ${activeId === item.id ? "ring-2 ring-indigo-200" : ""}">
+        <div class="cd-jql-item-title">${item.title}</div>
+        <div class="cd-jql-item-meta">Updated ${new Date(item.updatedAt || Date.now()).toLocaleString()}</div>
+        <div class="cd-jql-item-actions">
+          <button type="button" class="cd-jql-mini-btn" data-cd-jql-action="use" data-cd-jql-id="${item.id}">Use</button>
+          <button type="button" class="cd-jql-mini-btn" data-cd-jql-action="edit" data-cd-jql-id="${item.id}">Edit</button>
+          <button type="button" class="cd-jql-mini-btn danger" data-cd-jql-action="delete" data-cd-jql-id="${item.id}">Delete</button>
+        </div>
+      </div>
+    `).join("");
   }
 
   function getOrCreateTooltip(container) {
@@ -802,7 +1151,385 @@
     return frames;
   }
 
-  function renderCustomerRace(containerId, monthLabelId, frames) {
+  function getMonthKeyForRow(row) {
+    return /^\d{4}-\d{2}-\d{2}$/.test(row.created_date || "")
+      ? (row.created_date || "").slice(0, 7)
+      : "Unknown";
+  }
+
+  function getCustomerRaceRowsForSelection(rows, customerName, frameMonth) {
+    const cName = String(customerName || "").trim().toLowerCase();
+    return (rows || []).filter(r => {
+      const customers = (r.customers || []).length ? r.customers : ["Unspecified"];
+      const hasCustomer = customers.some(c => String(c).trim().toLowerCase() === cName);
+      if (!hasCustomer) return false;
+      const monthKey = getMonthKeyForRow(r);
+      if (frameMonth === "Unknown") return monthKey === "Unknown";
+      if (monthKey === "Unknown") return false;
+      return monthKey <= frameMonth;
+    });
+  }
+
+  function renderRaceOffcanvasTickets(rows) {
+    const body = document.getElementById("cd-race-ticket-body");
+    if (!body) return;
+    if (!rows || !rows.length) {
+      body.innerHTML = `<tr><td colspan="8" class="py-5 px-2 text-center text-slate-400">No tickets found for this selection.</td></tr>`;
+      return;
+    }
+    const toRelativeAge = (value) => {
+      const raw = String(value || "").trim();
+      if (!raw) return "Unknown";
+      const d = new Date(raw);
+      if (Number.isNaN(d.getTime())) return raw;
+      const now = new Date();
+      const diffMs = now.getTime() - d.getTime();
+      if (diffMs < 0) return "in future";
+      const hours = Math.floor(diffMs / (1000 * 60 * 60));
+      if (hours < 1) return "just now";
+      if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+      const days = Math.floor(hours / 24);
+      if (days < 30) return `${days} day${days === 1 ? "" : "s"} ago`;
+      const months = Math.floor(days / 30);
+      if (months < 12) return `${months} month${months === 1 ? "" : "s"} ago`;
+      const years = Math.floor(months / 12);
+      return `${years} year${years === 1 ? "" : "s"} ago`;
+    };
+    const statusKey = (r) => String(r.status || "").trim().toLowerCase();
+    const issueTypeIcon = (typeName) => {
+      const t = String(typeName || "").trim().toLowerCase();
+      const w = `width="16" height="16" style="display:inline-block;vertical-align:middle;flex-shrink:0;"`;
+      if (t === "task" || t === "sub-task") return `<svg ${w} viewBox="0 0 16 16" title="Task"><rect x="1.5" y="1.5" width="13" height="13" rx="2" fill="none" stroke="#388bff" stroke-width="2"/><path d="M4.3 8.3 6.8 10.8 11.8 5.6" fill="none" stroke="#388bff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+      if (t === "bug") return `<svg ${w} viewBox="0 0 16 16" title="Bug"><g fill="none" stroke="#e34935" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="8" cy="8.5" rx="2.5" ry="3"/><path d="M8 4.1v-1.3M5.2 6.5 3.6 5.7M10.8 6.5l1.6-.8M5.2 8.8H3.2M12.8 8.8h-2M5.4 11.1l-1.6.9M10.6 11.1l1.6.9"/></g></svg>`;
+      if (t === "story") return `<svg ${w} viewBox="0 0 16 16" title="Story"><path d="M3.2 2.3h8.5a1.1 1.1 0 0 1 1.1 1.1v10.3l-3-1.9-3 1.9V3.4a1.1 1.1 0 0 0-1.1-1.1h-2.5z" fill="none" stroke="#5e9f33" stroke-width="1.8" stroke-linejoin="round"/><path d="M6.8 3.2h4.1a1 1 0 0 1 1 1v8l-2.1-1.3-2 1.3z" fill="#5e9f33" opacity=".15"/></svg>`;
+      if (t === "epic") return `<svg ${w} viewBox="0 0 16 16" title="Epic"><path d="M8.8 1.8 4.8 8h2.6L6.3 14.2l5-6.8H8.6z" fill="#8777d9"/></svg>`;
+      if (t === "incident") return `<svg ${w} viewBox="0 0 16 16" title="Incident"><path d="M8 2.2 2.8 12h10.4L8 2.2z" fill="none" stroke="#e97f33" stroke-width="1.6"/><path d="M8 6v3.2M8 10.8v.9" stroke="#e97f33" stroke-width="1.8" stroke-linecap="round"/></svg>`;
+      return `<svg ${w} viewBox="0 0 16 16" title="${escapeHtml(typeName || 'Issue')}"><rect x="1.5" y="1.5" width="13" height="13" rx="2" fill="none" stroke="#388bff" stroke-width="2"/><path d="M4.3 8.3 6.8 10.8 11.8 5.6" fill="none" stroke="#388bff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    };
+    const priorityIcon = (priorityName) => {
+      const p = String(priorityName || "").trim().toLowerCase();
+      const w = `width="16" height="16" style="display:inline-block;vertical-align:middle;"`;
+      if (p === "highest") return `<svg ${w} viewBox="0 0 16 16" title="Highest"><path d="M8 2 3.5 8.5H6V14h4V8.5h2.5Z" fill="#cd1316"/><path d="M8 2.5 4 8h2.3v5.5h3.4V8H12Z" fill="#cd1316"/></svg>`;
+      if (p === "high") return `<svg ${w} viewBox="0 0 16 16" title="High"><path d="M8 3 4 9h2.5v4h3V9H12Z" fill="#e97f33"/></svg>`;
+      if (p === "medium") return `<svg ${w} viewBox="0 0 16 16" title="Medium"><rect x="3" y="5.5" width="10" height="2" rx="1" fill="#e9b849"/><rect x="3" y="8.5" width="10" height="2" rx="1" fill="#e9b849"/></svg>`;
+      if (p === "low") return `<svg ${w} viewBox="0 0 16 16" title="Low"><path d="M8 13 4 7h2.5V3h3v4H12Z" fill="#2d8738"/></svg>`;
+      if (p === "lowest") return `<svg ${w} viewBox="0 0 16 16" title="Lowest"><path d="M8 13.5 4 7.5h2.5V3h3v4.5H12Z" fill="#57a55a"/></svg>`;
+      return `<svg ${w} viewBox="0 0 16 16" title="${escapeHtml(priorityName || 'Unspecified')}"><rect x="3" y="7.5" width="10" height="1.5" rx=".75" fill="#8590a2"/></svg>`;
+    };
+    const topRows = rows.filter(r => {
+      const s = statusKey(r);
+      return s === "open" || s === "ready for dev";
+    });
+    const restRows = rows.filter(r => {
+      const s = statusKey(r);
+      return !(s === "open" || s === "ready for dev");
+    });
+    const sortBugsFirst = (items) => [...items].sort((a, b) => {
+      const aBug = String(a.issue_type || "").trim().toLowerCase() === "bug" ? 0 : 1;
+      const bBug = String(b.issue_type || "").trim().toLowerCase() === "bug" ? 0 : 1;
+      if (aBug !== bBug) return aBug - bBug;
+      return String(a.issue_key || "").localeCompare(String(b.issue_key || ""));
+    });
+    const topRowsSorted = sortBugsFirst(topRows);
+    const restRowsSorted = sortBugsFirst(restRows);
+    const renderRows = (items) => items.map(r => `
+      <tr class="border-b border-slate-100">
+        <td class="py-2 px-2"><a class="cd-ticket-key-link" target="_blank" rel="noopener" href="${JIRA_BASE}/browse/${encodeURIComponent(r.issue_key)}" title="${escapeHtml(r.issue_type || "Ticket")}">${issueTypeIcon(r.issue_type)}<span class="cd-ticket-key-text">${escapeHtml(r.issue_key)}</span></a></td>
+        <td class="py-2 px-2">${escapeHtml(r.summary || "")}</td>
+        <td class="py-2 px-2">${priorityIcon(r.priority)}</td>
+        <td class="py-2 px-2">${escapeHtml(r.status || "")}</td>
+        <td class="py-2 px-2">${(r.customers || []).map(c => `<span class="cd-pill mr-1 mb-1">${escapeHtml(c)}</span>`).join("")}</td>
+        <td class="py-2 px-2"><span class="cd-team-cell"><span class="cd-team-dot" style="background:${colorForCategory(r.team_name || "Unspecified")}"></span>${escapeHtml(r.team_name || "Unspecified")}</span></td>
+        <td class="py-2 px-2">${r.launch_blocker ? `<span class="cd-pill lb">Yes</span>` : `<span class="cd-pill">No</span>`}</td>
+        <td class="py-2 px-2">${escapeHtml(toRelativeAge(r.created_date || ""))}</td>
+      </tr>
+    `).join("");
+    const topSection = topRowsSorted.length
+      ? `<tr class="cd-race-table-section"><td colspan="8" class="py-2 px-2">Open & Ready for Dev</td></tr>${renderRows(topRowsSorted)}`
+      : "";
+    const restSection = restRowsSorted.length
+      ? `<tr class="cd-race-table-section"><td colspan="8" class="py-2 px-2">Other Statuses</td></tr>${renderRows(restRowsSorted)}`
+      : "";
+    body.innerHTML = `${topSection}${restSection}`;
+  }
+
+  async function typeTextIntoElement(el, text, speed = 11) {
+    if (!el) return;
+    const full = String(text || "");
+    el.textContent = "";
+    for (let i = 0; i < full.length; i += 1) {
+      el.textContent += full[i];
+      await new Promise(resolve => setTimeout(resolve, speed));
+    }
+  }
+
+  async function animateRaceInsights(items, requestId) {
+    const list = document.getElementById("cd-race-ai-insights");
+    if (!list) return;
+    list.innerHTML = "";
+    for (const item of items) {
+      if (requestId !== state.raceInsightReqId) return;
+      const li = document.createElement("li");
+      const strong = document.createElement("strong");
+      strong.textContent = `${item.area || "Insight"}: `;
+      li.appendChild(strong);
+      const textSpan = document.createElement("span");
+      li.appendChild(textSpan);
+      const cursor = document.createElement("span");
+      cursor.className = "cd-typing-cursor";
+      cursor.textContent = "|";
+      li.appendChild(cursor);
+      list.appendChild(li);
+      await typeTextIntoElement(textSpan, item.finding || "", 10);
+      if (requestId !== state.raceInsightReqId) return;
+      cursor.remove();
+    }
+  }
+
+  function buildFallbackOverallSummary(rows, titleContext) {
+    const stats = buildStats(rows || []);
+    const topStatus = Object.entries(stats.statusCounts || {}).sort((a, b) => b[1] - a[1])[0];
+    const topPriority = Object.entries(stats.priorityCounts || {}).sort((a, b) => b[1] - a[1])[0];
+    const lbPct = rows.length ? Math.round((stats.launchBlockers / rows.length) * 100) : 0;
+    return `${titleContext || "Selection"} has ${rows.length} tickets. Top status is ${topStatus ? `${topStatus[0]} (${topStatus[1]})` : "N/A"}, top priority is ${topPriority ? `${topPriority[0]} (${topPriority[1]})` : "N/A"}, with ${stats.launchBlockers} launch blockers (${lbPct}%).`;
+  }
+
+  function buildRaceSelectionCacheKey(rows, titleContext) {
+    const keys = (rows || []).map(r => r.issue_key).filter(Boolean).sort();
+    return `${titleContext || "selection"}::${keys.join("|")}`;
+  }
+
+  function normalizeTagToken(token) {
+    return String(token || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, "")
+      .replace(/\s+/g, " ")
+      .slice(0, 36);
+  }
+
+  function extractAreaTags(insights) {
+    const rawAreas = (insights || []).map(i => i?.area).filter(Boolean);
+    const seeds = rawAreas.length ? rawAreas : ["Focus", "Execution", "Priorities"];
+    const seen = new Set();
+    const tags = [];
+    for (const area of seeds) {
+      const normalized = normalizeTagToken(area);
+      if (!normalized || seen.has(normalized)) continue;
+      seen.add(normalized);
+      tags.push(area);
+      if (tags.length >= 6) break;
+    }
+    return tags;
+  }
+
+  function titleCaseWords(text) {
+    return String(text || "")
+      .split(/\s+/)
+      .filter(Boolean)
+      .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+      .join(" ");
+  }
+
+  function extractFocusPhraseFromTicket(row) {
+    const text = `${row?.summary || ""} ${row?.description || ""}`.toLowerCase();
+    const phraseRules = [
+      /\bpw\s+report(s)?\b/g,
+      /\bpw\s+project(s)?\b/g,
+      /\bimputed\s+fring(e|es)\b/g,
+      /\bvacation\s+column\b/g,
+      /\bssn\s+mask(ing|\/unmask)?\b/g,
+      /\btimesheet(\s+grid)?\b/g,
+      /\bmanual\s+penalty\b/g,
+      /\bweb\s+attestation\b/g,
+      /\bca\s+form\b/g,
+      /\bwithhold(ing)?\b/g,
+      /\bnumber,\s*email\b/g,
+    ];
+    for (const re of phraseRules) {
+      const m = text.match(re);
+      if (m && m[0]) return titleCaseWords(m[0].replace(/\s+/g, " "));
+    }
+
+    const stop = new Set([
+      "the","and","for","with","from","that","this","into","under","showing","issue","issues","new","need","work","make","option","configure",
+      "ready","open","resolved","deployed","unable","specific","user","column","screen","team","customer","company","ticket","tickets"
+    ]);
+    const words = text
+      .replace(/[^a-z0-9\s]/g, " ")
+      .split(/\s+/)
+      .map(w => w.trim())
+      .filter(w => w.length >= 4 && !stop.has(w) && !/^tim\d+$/i.test(w) && !/^\d+$/.test(w));
+    if (!words.length) return "";
+    const counts = {};
+    words.forEach(w => { counts[w] = (counts[w] || 0) + 1; });
+    const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || "";
+    return top ? titleCaseWords(top) : "";
+  }
+
+  function buildWorkAreaTagsFromRows(rows, insights) {
+    const tags = [];
+    const seen = new Set();
+    for (const row of (rows || [])) {
+      const phrase = extractFocusPhraseFromTicket(row);
+      const key = normalizeTagToken(phrase);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      tags.push(phrase);
+      if (tags.length >= 7) break;
+    }
+    if (!tags.length) return extractAreaTags(insights).slice(0, 4);
+    return tags;
+  }
+
+  function renderRaceAiTags(tags) {
+    const wrap = document.getElementById("cd-race-ai-tags");
+    if (!wrap) return;
+    if (!tags || !tags.length) {
+      wrap.innerHTML = "";
+      return;
+    }
+    wrap.innerHTML = tags.map(t => `<span class="cd-area-tag">${escapeHtml(t)}</span>`).join("");
+  }
+
+  function buildRaceInsightsSummaryPayload(rows, titleContext) {
+    const stats = buildStats(rows);
+    const doneLike = new Set(["done", "resolved", "closed", "deployed"]);
+    const actionableRows = (rows || []).filter(r => !doneLike.has(String(r.status || "").trim().toLowerCase()));
+    const actionableStatusCounts = {};
+    actionableRows.forEach(r => {
+      const key = String(r.status || "Unknown").trim() || "Unknown";
+      actionableStatusCounts[key] = (actionableStatusCounts[key] || 0) + 1;
+    });
+    return {
+      jql: state.currentJql || null,
+      customer_filter: titleContext || null,
+      expected_insights: "Before generating insights, check ticket status first. Prioritize active tickets (not Resolved/Done/Closed/Deployed). Provide exactly 2 insights only: (1) what exact ticket-level focus area/modules are currently being worked (use concrete feature words from issues, not generic labels), (2) which specific active issue keys should be worked on next and why. If most tickets are resolved, explicitly say so.",
+      total_issues: rows.length,
+      actionable_issue_count: actionableRows.length,
+      high_priority_count: stats.high,
+      launch_blocker_count: stats.launchBlockers,
+      launch_blocker_ratio: rows.length ? Math.round((stats.launchBlockers / rows.length) * 1000) / 1000 : 0,
+      by_team: stats.teamCounts,
+      by_customer: stats.customerCounts,
+      by_status: stats.statusCounts,
+      actionable_by_status: actionableStatusCounts,
+      by_priority: stats.priorityCounts,
+      sample_issues: rows.map(r => ({
+        issue_key: r.issue_key,
+        summary: (r.summary || "").slice(0, 180),
+        description: (r.description || "").slice(0, 900),
+        status: r.status,
+        priority: r.priority,
+        customers: r.customers || [],
+        team: r.team_name || "Unspecified",
+        launch_blocker: !!r.launch_blocker,
+        created: r.created_date || "",
+      })),
+      actionable_issues: actionableRows.map(r => ({
+        issue_key: r.issue_key,
+        summary: (r.summary || "").slice(0, 180),
+        status: r.status,
+        priority: r.priority,
+        team: r.team_name || "Unspecified",
+      })),
+    };
+  }
+
+  async function fetchRaceInsightsWithCache(rows, titleContext) {
+    const cacheKey = buildRaceSelectionCacheKey(rows, titleContext);
+    if (state.raceInsightsCache[cacheKey]) return state.raceInsightsCache[cacheKey];
+    if (state.raceInsightsInFlight[cacheKey]) return state.raceInsightsInFlight[cacheKey];
+    const promise = fetch("/api/customer_dashboard/insights", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ summary: buildRaceInsightsSummaryPayload(rows, titleContext) }),
+    })
+      .then(async res => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "AI insight fetch failed");
+        const insightsOut = Array.isArray(data.insights) ? data.insights : [];
+        const summaryCandidate = insightsOut.find(i => /overall summary/i.test(String(i.area || "")))
+          || insightsOut.find(i => /overall|summary/i.test(String(i.area || "")));
+        const areaRank = (row) => {
+          const area = String(row?.area || "").toLowerCase();
+          if (area.includes("current focus areas")) return 0;
+          if (area.includes("next issues to resolve")) return 1;
+          if (area.includes("overall summary")) return 99;
+          return 10;
+        };
+        const ordered = [...insightsOut].sort((a, b) => areaRank(a) - areaRank(b));
+        const topTwo = ordered.filter(i => !/overall summary/i.test(String(i.area || ""))).slice(0, 2);
+        const packed = {
+          summary: summaryCandidate?.finding || buildFallbackOverallSummary(rows, titleContext),
+          insights: topTwo,
+          tags: buildWorkAreaTagsFromRows(rows, topTwo),
+        };
+        state.raceInsightsCache[cacheKey] = packed;
+        return packed;
+      })
+      .finally(() => {
+        delete state.raceInsightsInFlight[cacheKey];
+      });
+    state.raceInsightsInFlight[cacheKey] = promise;
+    return promise;
+  }
+
+  async function loadRaceSelectionInsights(rows, titleContext) {
+    const list = document.getElementById("cd-race-ai-insights");
+    const summaryEl = document.getElementById("cd-race-ai-summary");
+    if (!list) return;
+    const reqId = Date.now();
+    state.raceInsightReqId = reqId;
+    list.innerHTML = "<li>Generating insights...</li>";
+    if (summaryEl) summaryEl.textContent = "Generating overall summary...";
+    renderRaceAiTags([]);
+    if (!rows || !rows.length) {
+      list.innerHTML = "<li>No tickets in this selection.</li>";
+      if (summaryEl) summaryEl.textContent = "No tickets available for this selection.";
+      return;
+    }
+    try {
+      const packed = await fetchRaceInsightsWithCache(rows, titleContext);
+      if (reqId !== state.raceInsightReqId) return;
+      if (summaryEl) {
+        summaryEl.textContent = packed.summary;
+      }
+      renderRaceAiTags(packed.tags || []);
+      if (!packed.insights || !packed.insights.length) {
+        list.innerHTML = "<li>Could not generate insights for this selection.</li>";
+        return;
+      }
+      await animateRaceInsights(packed.insights, reqId);
+    } catch (e) {
+      if (reqId !== state.raceInsightReqId) return;
+      if (summaryEl) summaryEl.textContent = buildFallbackOverallSummary(rows, titleContext);
+      renderRaceAiTags(["Fallback"]);
+      list.innerHTML = `<li>${escapeHtml(e.message || "Unable to load insights right now.")}</li>`;
+    }
+  }
+
+  async function openRaceOffcanvasForSelection(rows, customerName, frameLabel) {
+    const offcanvas = document.getElementById("cd-race-offcanvas");
+    const title = document.getElementById("cd-race-offcanvas-title");
+    const subtitle = document.getElementById("cd-race-offcanvas-subtitle");
+    if (!offcanvas || !title || !subtitle) return;
+    title.textContent = `${customerName} tickets`;
+    subtitle.textContent = `${rows.length} tickets up to ${frameLabel}`;
+    renderRaceOffcanvasTickets(rows);
+    offcanvas.classList.add("open");
+    offcanvas.setAttribute("aria-hidden", "false");
+    await loadRaceSelectionInsights(rows, `${customerName} up to ${frameLabel}`);
+  }
+
+  function closeRaceOffcanvas() {
+    const offcanvas = document.getElementById("cd-race-offcanvas");
+    if (!offcanvas) return;
+    offcanvas.classList.remove("open");
+    offcanvas.setAttribute("aria-hidden", "true");
+  }
+
+  function renderCustomerRace(containerId, monthLabelId, frames, sourceRows) {
     const container = document.getElementById(containerId);
     const monthEl = document.getElementById(monthLabelId);
     if (!container || !monthEl) return;
@@ -854,7 +1581,25 @@
         .attr("height", y.bandwidth())
         .attr("width", 0)
         .attr("fill", d => d.color)
+        .style("cursor", "pointer")
+        .on("mouseenter", (_, d) => {
+          const selectedRows = getCustomerRaceRowsForSelection(sourceRows || filteredRows(), d.name, frame.month);
+          fetchRaceInsightsWithCache(selectedRows, `${d.name} up to ${frame.label}`).catch(() => {});
+        })
+        .on("click", (_, d) => {
+          const selectedRows = getCustomerRaceRowsForSelection(sourceRows || filteredRows(), d.name, frame.month);
+          openRaceOffcanvasForSelection(selectedRows, d.name, frame.label);
+        })
         .merge(bars)
+        .style("cursor", "pointer")
+        .on("mouseenter", (_, d) => {
+          const selectedRows = getCustomerRaceRowsForSelection(sourceRows || filteredRows(), d.name, frame.month);
+          fetchRaceInsightsWithCache(selectedRows, `${d.name} up to ${frame.label}`).catch(() => {});
+        })
+        .on("click", (_, d) => {
+          const selectedRows = getCustomerRaceRowsForSelection(sourceRows || filteredRows(), d.name, frame.month);
+          openRaceOffcanvasForSelection(selectedRows, d.name, frame.label);
+        })
         .transition().duration(700)
         .attr("y", d => y(d.name))
         .attr("height", y.bandwidth())
@@ -943,6 +1688,7 @@
       sample_issues: rows.slice(0, 45).map(r => ({
         issue_key: r.issue_key,
         summary: (r.summary || "").slice(0, 180),
+        description: (r.description || "").slice(0, 900),
         status: r.status,
         priority: r.priority,
         customers: r.customers || [],
@@ -1166,12 +1912,13 @@
     const customerRaceCard = document.getElementById("cd-customer-race-card");
     if (isAllCustomersView) {
       const raceFrames = buildCustomerRaceFrames(rows);
-      renderCustomerRace("cd-customer-race-chart", "cd-customer-race-month", raceFrames);
+      renderCustomerRace("cd-customer-race-chart", "cd-customer-race-month", raceFrames, rows);
       customerRaceCard.classList.remove("cd-hidden");
     } else {
       customerRaceCard.classList.add("cd-hidden");
       document.getElementById("cd-customer-race-chart").innerHTML = "";
       document.getElementById("cd-customer-race-month").textContent = "";
+      closeRaceOffcanvas();
       if (state.raceTimer) {
         clearInterval(state.raceTimer);
         state.raceTimer = null;
@@ -1196,15 +1943,41 @@
     sel.disabled = false;
   }
 
-  function openJqlDialog() {
+  function openJqlDialog(mode = "new") {
     const modal = document.getElementById("cd-jql-modal");
     const input = document.getElementById("cd-jql-input");
-    input.value = state.currentJql || `project = "{{ project }}" AND created >= -30d ORDER BY created DESC`;
+    const titleInput = document.getElementById("cd-jql-title-input");
+    const modalTitle = document.getElementById("cd-jql-title");
+    const modeBadge = document.getElementById("cd-jql-mode-badge");
+    setJqlFeedback("");
+    if (mode === "edit") {
+      const savedSel = document.getElementById("cd-saved-jql");
+      const selectedId = savedSel?.value || "";
+      const selectedSaved = getSavedJqls().find(item => item.id === selectedId);
+      if (!selectedSaved) {
+        setJqlFeedback("Select a saved JQL first, then click Edit.", true);
+        return;
+      }
+      state.editingJqlId = selectedSaved.id;
+      titleInput.value = selectedSaved?.title || "";
+      input.value = selectedSaved?.jql || state.currentJql || "";
+      modalTitle.textContent = "Edit Saved JQL";
+      modeBadge.textContent = "Editing Existing Query";
+    } else {
+      state.editingJqlId = "";
+      titleInput.value = "";
+      input.value = "";
+      modalTitle.textContent = "Add New JQL";
+      modeBadge.textContent = "New Query";
+    }
+    modal.dataset.mode = mode;
+    renderSavedJqlList(state.editingJqlId || "");
     modal.classList.add("open");
-    setTimeout(() => input.focus(), 0);
+    setTimeout(() => titleInput.focus(), 0);
   }
 
   function closeJqlDialog() {
+    setJqlFeedback("");
     document.getElementById("cd-jql-modal").classList.remove("open");
   }
 
@@ -1224,9 +1997,10 @@
     document.getElementById("cd-loader").classList.toggle("open", !!open);
   }
 
-  async function fetchByJql(jql) {
+  async function fetchByJql(jql, title = "") {
     const status = document.getElementById("cd-status");
     const finalJql = (jql || "").trim();
+    const finalTitle = (title || "").trim();
     const stored = getStoredSettings();
     if (!finalJql) {
       status.textContent = "Please enter JQL first.";
@@ -1240,7 +2014,15 @@
       return;
     }
     state.currentJql = finalJql;
-    saveStoredSettings({ jql: finalJql });
+    const savedId = finalTitle ? upsertSavedJql(finalTitle, finalJql, state.editingJqlId || "") : (stored.selectedJqlId || "");
+    state.editingJqlId = savedId || "";
+    saveStoredSettings({
+      jql: finalJql,
+      jqlTitle: finalTitle || stored.jqlTitle || "",
+      selectedJqlId: savedId || "",
+    });
+    populateSavedJqlDropdown(savedId || stored.selectedJqlId || "");
+    renderSavedJqlList(savedId || "");
     status.textContent = "Loading...";
     status.classList.remove("text-red-400");
     setLoading(true);
@@ -1257,12 +2039,13 @@
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to load dashboard");
       state.rows = data.rows || [];
+      state.raceInsightsCache = {};
+      state.raceInsightsInFlight = {};
       state.page = 1;
       fillCustomerDropdown(data.customers || []);
       document.getElementById("cd-fetched-count").textContent = `Fetched: ${state.rows.length} tickets`;
       updateDashboard();
       setDashboardReady(state.rows.length > 0);
-      document.getElementById("cd-open-builder-icon").textContent = "✎";
       status.textContent = "";
       closeJqlDialog();
     } catch (e) {
@@ -1273,6 +2056,34 @@
     }
   }
 
+  function saveJqlOnly() {
+    const status = document.getElementById("cd-status");
+    const title = (document.getElementById("cd-jql-title-input").value || "").trim();
+    const jql = (document.getElementById("cd-jql-input").value || "").trim();
+    if (!title) {
+      setJqlFeedback("Please add a title before saving.", true);
+      status.textContent = "Please add a Saved Query Title.";
+      status.classList.add("text-red-400");
+      return;
+    }
+    if (!jql) {
+      setJqlFeedback("Please enter JQL before saving.", true);
+      status.textContent = "Please enter JQL first.";
+      status.classList.add("text-red-400");
+      return;
+    }
+    const savedId = upsertSavedJql(title, jql, state.editingJqlId || "");
+    state.editingJqlId = savedId;
+    state.currentJql = jql;
+    saveStoredSettings({ jql, jqlTitle: title, selectedJqlId: savedId });
+    populateSavedJqlDropdown(savedId);
+    renderSavedJqlList(savedId);
+    setJqlFeedback(`Saved "${title}" successfully.`, false);
+    status.textContent = `Saved JQL: ${title}`;
+    status.classList.remove("text-red-400");
+    closeJqlDialog();
+  }
+
   function wireEvents() {
     document.getElementById("cd-customer").addEventListener("change", () => {
       saveStoredSettings({ customer: document.getElementById("cd-customer").value || "" });
@@ -1281,14 +2092,62 @@
     });
     document.getElementById("cd-prev").addEventListener("click", () => { if (state.page > 1) { state.page -= 1; updateDashboard(); } });
     document.getElementById("cd-next").addEventListener("click", () => { if (state.page < state.totalPages) { state.page += 1; updateDashboard(); } });
-    document.getElementById("cd-open-builder").addEventListener("click", openJqlDialog);
+    document.getElementById("cd-add-jql").addEventListener("click", () => openJqlDialog("new"));
+    document.getElementById("cd-saved-jql").addEventListener("change", (e) => {
+      const selectedId = e.target.value || "";
+      saveStoredSettings({ selectedJqlId: selectedId });
+      if (!selectedId) return;
+      const selectedSaved = getSavedJqls().find(item => item.id === selectedId);
+      if (!selectedSaved) return;
+      fetchByJql(selectedSaved.jql, selectedSaved.title);
+    });
     document.getElementById("cd-toggle-ai").addEventListener("click", () => toggleAiPanel());
     document.getElementById("cd-open-settings").addEventListener("click", openSettingsDialog);
     const insBtn = document.getElementById("cd-insights-generate");
     if (insBtn) insBtn.addEventListener("click", () => generateInsights());
     document.getElementById("cd-jql-cancel").addEventListener("click", closeJqlDialog);
     document.getElementById("cd-jql-close").addEventListener("click", closeJqlDialog);
-    document.getElementById("cd-jql-apply").addEventListener("click", () => fetchByJql(document.getElementById("cd-jql-input").value));
+    document.getElementById("cd-jql-save").addEventListener("click", saveJqlOnly);
+    document.getElementById("cd-jql-saved-list").addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-cd-jql-action]");
+      if (!btn) return;
+      const action = btn.dataset.cdJqlAction || "";
+      const id = btn.dataset.cdJqlId || "";
+      if (!id) return;
+      const selectedSaved = getSavedJqls().find(item => item.id === id);
+      if (!selectedSaved) return;
+      if (action === "use") {
+        saveStoredSettings({ selectedJqlId: id });
+        populateSavedJqlDropdown(id);
+        fetchByJql(selectedSaved.jql, selectedSaved.title);
+        return;
+      }
+      if (action === "edit") {
+        state.editingJqlId = id;
+        document.getElementById("cd-jql-title-input").value = selectedSaved.title;
+        document.getElementById("cd-jql-input").value = selectedSaved.jql;
+        document.getElementById("cd-jql-title").textContent = "Edit Saved JQL";
+        document.getElementById("cd-jql-mode-badge").textContent = "Editing Existing Query";
+        renderSavedJqlList(id);
+        setJqlFeedback(`Loaded "${selectedSaved.title}" for editing.`, false);
+        return;
+      }
+      if (action === "delete") {
+        if (!confirm(`Delete "${selectedSaved.title}"?`)) return;
+        removeSavedJql(id);
+        renderSavedJqlList("");
+        populateSavedJqlDropdown("");
+        setJqlFeedback(`Deleted "${selectedSaved.title}".`, false);
+      }
+    });
+    document.getElementById("cd-jql-apply").addEventListener("click", () => {
+      const title = (document.getElementById("cd-jql-title-input").value || "").trim();
+      fetchByJql(document.getElementById("cd-jql-input").value, title);
+    });
+    document.getElementById("cd-race-offcanvas-close").addEventListener("click", closeRaceOffcanvas);
+    document.getElementById("cd-race-offcanvas").addEventListener("click", (e) => {
+      if (e.target.id === "cd-race-offcanvas") closeRaceOffcanvas();
+    });
     document.getElementById("cd-settings-cancel").addEventListener("click", closeSettingsDialog);
     document.getElementById("cd-settings-close").addEventListener("click", closeSettingsDialog);
     document.getElementById("cd-settings-save").addEventListener("click", () => {
@@ -1304,6 +2163,7 @@
       if (e.key === "Escape") {
         closeJqlDialog();
         closeSettingsDialog();
+        closeRaceOffcanvas();
       }
     });
   }
@@ -1318,9 +2178,9 @@
     toggleAiPanel(false);
     checkAiStatus();
     const stored = getStoredSettings();
+    populateSavedJqlDropdown(stored.selectedJqlId || "");
     state.currentJql = stored.jql || `project = "{{ project }}" AND created >= -30d ORDER BY created DESC`;
     setDashboardReady(false);
-    document.getElementById("cd-open-builder-icon").textContent = "+";
     if (stored.jql && stored.email && stored.token) {
       fetchByJql(stored.jql);
     }

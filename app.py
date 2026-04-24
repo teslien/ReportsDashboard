@@ -4,6 +4,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from authlib.integrations.flask_client import OAuth
 from functools import wraps
+from collections import defaultdict
 from dotenv import load_dotenv
 import io
 import re
@@ -407,7 +408,7 @@ def init_db():
         if row:
             perms = json.loads(row[0]) if row[0] else {}
             allowed = perms.get('allowed_pages')
-            default_editor_pages = ['sprint_tracker', 'customer_dashboard', 'sprint_dashboard']
+            default_editor_pages = ['sprint_tracker', 'customer_dashboard', 'sprint_dashboard', 'team_productivity', 'customer_closure']
             if isinstance(allowed, list):
                 for page in default_editor_pages:
                     if page not in allowed:
@@ -1026,6 +1027,8 @@ PAGE_PERMISSIONS = [
     {"key": "dashboard", "label": "Dashboard"},
     {"key": "scoreboard", "label": "Scoreboard"},
     {"key": "customer_dashboard", "label": "Customer Dashboard"},
+    {"key": "team_productivity", "label": "Team Productivity"},
+    {"key": "customer_closure", "label": "Customer Closure"},
     {"key": "sprint_dashboard", "label": "Sprint Dashboard"},
     {"key": "explorer", "label": "Explorer"},
     {"key": "custom_reports", "label": "Custom Reports"},
@@ -1341,6 +1344,19 @@ def customer_dashboard_page():
 def sprint_dashboard_page():
     return render_template("sprint_dashboard.html", project=PROJECT_KEY, show_navbar=False)
 
+
+@app.route("/team_productivity")
+@page_permission_required("team_productivity")
+def team_productivity_page():
+    return render_template("team_productivity.html", project=PROJECT_KEY, show_navbar=False)
+
+
+@app.route("/customer_closure")
+@page_permission_required("customer_closure")
+def customer_closure_page():
+    return render_template("customer_closure.html", project=PROJECT_KEY, show_navbar=False)
+
+
 def _extract_customer_values(raw_value):
     customers = []
     if isinstance(raw_value, list):
@@ -1440,6 +1456,449 @@ def _issue_type_bucket(issue_type_name):
         return "Task"
     return "Other"
 
+
+_CUSTOMER_RESOLUTION_MILESTONE_STATUSES = frozenset(
+    s.lower() for s in ("Resolved", "Done", "Ready for QA")
+)
+
+
+def _reported_by_customer_jql_clause():
+    """Extra JQL fragment (without leading AND). Override with JIRA_REPORTED_BY_CUSTOMER_JQL if the field id differs."""
+    return (os.environ.get("JIRA_REPORTED_BY_CUSTOMER_JQL") or '"Reported By Customer" = Yes').strip()
+
+
+_DEFAULT_CUSTOMER_DONE_STATUSES = (
+    "Done",
+    "Resolved",
+    "Closed",
+    "Ready for QA",
+    "Deployed",
+    "Ready for Staging",
+    "Ready for Internal Demo",
+)
+
+
+def _normalize_status_list(values):
+    if isinstance(values, str):
+        raw_items = re.split(r"[\n,]+", values)
+    elif isinstance(values, list):
+        raw_items = values
+    else:
+        raw_items = []
+
+    out = []
+    seen = set()
+    for item in raw_items:
+        val = str(item or "").strip()
+        if not val:
+            continue
+        key = val.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(val)
+    return out
+
+
+def _customer_created_range_jql(date_start, date_end_exclusive):
+    project_key_str = str(PROJECT_KEY).strip()
+    reported_clause = _reported_by_customer_jql_clause()
+    return (
+        f'project = "{_escape_jql_value(project_key_str)}" AND ({reported_clause}) '
+        f'AND created >= "{date_start}" AND created < "{date_end_exclusive}" '
+        f"ORDER BY created DESC"
+    )
+
+
+def _parse_jira_datetime(ts_str):
+    if not ts_str:
+        return None
+    s = str(ts_str).strip().replace("Z", "+00:00")
+    m = re.search(r"([+-])(\d{2})(\d{2})$", s)
+    if m and s[m.start() - 1 : m.start()] != ":":
+        s = s[: m.start()] + f"{m.group(1)}{m.group(2)}:{m.group(3)}"
+    try:
+        return datetime.fromisoformat(s)
+    except ValueError:
+        return None
+
+
+def _team_name_from_jira_fields(fields_obj):
+    team_raw = fields_obj.get("customfield_10001")
+    if isinstance(team_raw, dict):
+        team_name = (team_raw.get("name") or team_raw.get("value") or "").strip()
+    elif isinstance(team_raw, list) and team_raw:
+        first = team_raw[0]
+        if isinstance(first, dict):
+            team_name = (first.get("name") or first.get("value") or "").strip()
+        else:
+            team_name = str(first).strip()
+    elif team_raw:
+        team_name = str(team_raw).strip()
+    else:
+        team_name = "Unspecified"
+    return team_name or "Unspecified"
+
+
+def _first_customer_resolution_milestone_at(issue, fields_obj):
+    """
+    First time the issue entered Resolved, Done, or Ready for QA (from changelog).
+    Falls back to resolutiondate if no matching status transition is present.
+    """
+    histories = (issue.get("changelog") or {}).get("histories") or []
+    hits = []
+    for history in histories:
+        ts = _parse_jira_datetime(history.get("created"))
+        if not ts:
+            continue
+        for item in history.get("items") or []:
+            if item.get("field") != "status":
+                continue
+            to_s = item.get("toString") or ""
+            if (to_s or "").strip().lower() in _CUSTOMER_RESOLUTION_MILESTONE_STATUSES:
+                hits.append(ts)
+    if hits:
+        return min(hits)
+    res_raw = fields_obj.get("resolutiondate")
+    if res_raw:
+        return _parse_jira_datetime(res_raw)
+    return None
+
+
+@app.route("/api/customer_closure/teams", methods=["POST"])
+@login_required
+def customer_closure_teams():
+    if not current_user.can_view_page("customer_closure"):
+        return jsonify({"error": "Forbidden"}), 403
+
+    payload = request.get_json(silent=True) or {}
+    date_start = (payload.get("date_start") or "").strip()
+    date_end = (payload.get("date_end") or "").strip()
+    if not re.match(r"^\d{4}-\d{2}-\d{2}$", date_start) or not re.match(r"^\d{4}-\d{2}-\d{2}$", date_end):
+        return jsonify({"error": "date_start and date_end are required (YYYY-MM-DD)"}), 400
+    try:
+        ds = datetime.strptime(date_start, "%Y-%m-%d").date()
+        de = datetime.strptime(date_end, "%Y-%m-%d").date()
+    except ValueError:
+        return jsonify({"error": "Invalid date format"}), 400
+    if de < ds:
+        return jsonify({"error": "date_end must be on or after date_start"}), 400
+
+    project_key_str = str(PROJECT_KEY).strip()
+    if not project_key_str:
+        return jsonify({"error": "Missing project key. Save it in Settings first."}), 400
+    if "Authorization" not in dict(HEADERS):
+        return jsonify({"error": "Missing Jira credentials. Save them in Settings first."}), 401
+
+    jql = _customer_created_range_jql(date_start, (de + timedelta(days=1)).strftime("%Y-%m-%d"))
+    headers_dict = dict(HEADERS)
+    params = {
+        "jql": jql,
+        "maxResults": 300,
+        "fields": "customfield_10001",
+    }
+    jira_res = requests.get(
+        f"{JIRA_DOMAIN}/rest/api/3/search/jql",
+        headers=headers_dict,
+        params=params,
+    )
+    if jira_res.status_code != 200:
+        return jsonify({"error": f"Jira API error: {jira_res.text}"}), jira_res.status_code
+
+    teams = set()
+    for issue in (jira_res.json().get("issues") or []):
+        team_name = _team_name_from_jira_fields(issue.get("fields") or {})
+        if team_name:
+            teams.add(team_name)
+    return jsonify({"teams": sorted(teams, key=lambda x: x.lower())})
+
+
+@app.route("/api/customer_closure/data", methods=["POST"])
+@login_required
+def customer_closure_data():
+    if not current_user.can_view_page("customer_closure"):
+        return jsonify({"error": "Forbidden"}), 403
+
+    payload = request.get_json(silent=True) or {}
+    date_start = (payload.get("date_start") or "").strip()
+    date_end = (payload.get("date_end") or "").strip()
+    team_name_filter = (payload.get("team_name") or "").strip()
+    done_statuses = _normalize_status_list(payload.get("done_statuses")) or list(_DEFAULT_CUSTOMER_DONE_STATUSES)
+
+    if not re.match(r"^\d{4}-\d{2}-\d{2}$", date_start) or not re.match(r"^\d{4}-\d{2}-\d{2}$", date_end):
+        return jsonify({"error": "date_start and date_end are required (YYYY-MM-DD)"}), 400
+    try:
+        ds = datetime.strptime(date_start, "%Y-%m-%d").date()
+        de = datetime.strptime(date_end, "%Y-%m-%d").date()
+    except ValueError:
+        return jsonify({"error": "Invalid date format"}), 400
+    if de < ds:
+        return jsonify({"error": "date_end must be on or after date_start"}), 400
+
+    project_key_str = str(PROJECT_KEY).strip()
+    if not project_key_str:
+        return jsonify({"error": "Missing project key. Save it in Settings first."}), 400
+    if "Authorization" not in dict(HEADERS):
+        return jsonify({"error": "Missing Jira credentials. Save them in Settings first."}), 401
+
+    end_exclusive = (de + timedelta(days=1)).strftime("%Y-%m-%d")
+    jql = _customer_created_range_jql(date_start, end_exclusive)
+    done_status_lookup = {s.strip().lower() for s in done_statuses}
+
+    fields = "summary,status,created,resolutiondate,customfield_10001,issuetype"
+    headers_dict = dict(HEADERS)
+    all_issues = []
+    seen_issue_keys = set()
+    start_at = 0
+    next_page_token = None
+    page_safety = 0
+    while page_safety < 80:
+        page_safety += 1
+        params = {"jql": jql, "maxResults": 100, "fields": fields}
+        if next_page_token:
+            params["nextPageToken"] = next_page_token
+        else:
+            params["startAt"] = start_at
+        jira_res = requests.get(
+            f"{JIRA_DOMAIN}/rest/api/3/search/jql",
+            headers=headers_dict,
+            params=params,
+        )
+        if jira_res.status_code != 200:
+            return jsonify({"error": f"Jira API error: {jira_res.text}"}), jira_res.status_code
+        data = jira_res.json()
+        issues = data.get("issues", [])
+        if not issues:
+            break
+        new_count = 0
+        for issue in issues:
+            key = issue.get("key")
+            if not key or key in seen_issue_keys:
+                continue
+            seen_issue_keys.add(key)
+            all_issues.append(issue)
+            new_count += 1
+        if new_count == 0:
+            break
+        next_page_token = data.get("nextPageToken")
+        if next_page_token:
+            continue
+        if len(issues) < 100:
+            break
+        start_at += 100
+
+    teams = set()
+    rows = []
+    closed_count = 0
+    for issue in all_issues:
+        fields_obj = issue.get("fields") or {}
+        team_name = _team_name_from_jira_fields(fields_obj)
+        teams.add(team_name)
+        if team_name_filter and team_name_filter.lower() != "all teams" and team_name.lower() != team_name_filter.lower():
+            continue
+
+        status_obj = fields_obj.get("status") or {}
+        status_name = (status_obj.get("name") or "").strip()
+        is_closed = status_name.lower() in done_status_lookup
+        if is_closed:
+            closed_count += 1
+
+        issue_type_obj = fields_obj.get("issuetype") or {}
+        rows.append({
+            "issue_key": issue.get("key") or "",
+            "summary": (fields_obj.get("summary") or "").strip(),
+            "status": status_name,
+            "team_name": team_name,
+            "issue_type": (issue_type_obj.get("name") or "").strip(),
+            "issue_type_icon": (issue_type_obj.get("iconUrl") or "").strip(),
+            "created": fields_obj.get("created"),
+            "resolution_date": fields_obj.get("resolutiondate"),
+            "is_closed": is_closed,
+        })
+
+    total_count = len(rows)
+    open_count = max(0, total_count - closed_count)
+    closure_rate = round((closed_count / total_count) * 100, 2) if total_count else 0.0
+    rows.sort(key=lambda r: ((not r["is_closed"]), r["team_name"].lower(), r["issue_key"]))
+
+    return jsonify({
+        "jql": jql,
+        "date_start": date_start,
+        "date_end": date_end,
+        "team_name": team_name_filter or "",
+        "done_statuses": done_statuses,
+        "teams": sorted(teams, key=lambda x: x.lower()),
+        "total_count": total_count,
+        "closed_count": closed_count,
+        "open_count": open_count,
+        "closure_rate": closure_rate,
+        "rows": rows,
+    })
+
+
+@app.route("/api/team_productivity/data", methods=["POST"])
+@login_required
+def team_productivity_data():
+    if not current_user.can_view_page("team_productivity"):
+        return jsonify({"error": "Forbidden"}), 403
+
+    payload = request.get_json(silent=True) or {}
+    date_start = (payload.get("date_start") or "").strip()
+    date_end = (payload.get("date_end") or "").strip()
+    if not re.match(r"^\d{4}-\d{2}-\d{2}$", date_start) or not re.match(r"^\d{4}-\d{2}-\d{2}$", date_end):
+        return jsonify({"error": "date_start and date_end are required (YYYY-MM-DD)"}), 400
+
+    try:
+        ds = datetime.strptime(date_start, "%Y-%m-%d").date()
+        de = datetime.strptime(date_end, "%Y-%m-%d").date()
+    except ValueError:
+        return jsonify({"error": "Invalid date format"}), 400
+    if de < ds:
+        return jsonify({"error": "date_end must be on or after date_start"}), 400
+
+    end_exclusive = (de + timedelta(days=1)).strftime("%Y-%m-%d")
+    project_key_str = str(PROJECT_KEY).strip()
+    if not project_key_str:
+        return jsonify({"error": "Missing project key. Save it in Settings first."}), 400
+    if "Authorization" not in dict(HEADERS):
+        return jsonify({"error": "Missing Jira credentials. Save them in Settings first."}), 401
+
+    reported_clause = _reported_by_customer_jql_clause()
+    jql = (
+        f'project = "{_escape_jql_value(project_key_str)}" AND ({reported_clause}) '
+        f'AND created >= "{date_start}" AND created < "{end_exclusive}" '
+        f"ORDER BY created DESC"
+    )
+
+    fields = "summary,status,created,resolutiondate,customfield_10001,issuetype"
+    headers_dict = dict(HEADERS)
+    all_issues = []
+    seen_issue_keys = set()
+    start_at = 0
+    next_page_token = None
+    page_safety = 0
+    while page_safety < 80:
+        page_safety += 1
+        params = {
+            "jql": jql,
+            "maxResults": 100,
+            "fields": fields,
+            "expand": "changelog",
+        }
+        if next_page_token:
+            params["nextPageToken"] = next_page_token
+        else:
+            params["startAt"] = start_at
+        jira_res = requests.get(
+            f"{JIRA_DOMAIN}/rest/api/3/search/jql",
+            headers=headers_dict,
+            params=params,
+        )
+        if jira_res.status_code != 200:
+            return jsonify({"error": f"Jira API error: {jira_res.text}"}), jira_res.status_code
+        data = jira_res.json()
+        issues = data.get("issues", [])
+        if not issues:
+            break
+        new_count = 0
+        for issue in issues:
+            key = issue.get("key")
+            if not key or key in seen_issue_keys:
+                continue
+            seen_issue_keys.add(key)
+            all_issues.append(issue)
+            new_count += 1
+        if new_count == 0:
+            break
+        next_page_token = data.get("nextPageToken")
+        if next_page_token:
+            continue
+        if len(issues) < 100:
+            break
+        start_at += 100
+
+    team_hours = defaultdict(list)
+    team_unresolved = defaultdict(int)
+    team_rows = defaultdict(list)
+    all_hours = []
+
+    for issue in all_issues:
+        fields_obj = issue.get("fields") or {}
+        team = _team_name_from_jira_fields(fields_obj)
+        created_dt = _parse_jira_datetime(fields_obj.get("created"))
+        if not created_dt:
+            continue
+        milestone_dt = _first_customer_resolution_milestone_at(issue, fields_obj)
+        issue_key = issue.get("key") or ""
+        summary = (fields_obj.get("summary") or "").strip()
+        status_name = ((fields_obj.get("status") or {}).get("name") or "").strip()
+        issue_type_obj = fields_obj.get("issuetype") or {}
+        issue_type_name = (issue_type_obj.get("name") or "").strip()
+        issue_type_icon = (issue_type_obj.get("iconUrl") or "").strip()
+
+        row = {
+            "issue_key": issue_key,
+            "summary": summary,
+            "status": status_name,
+            "issue_type": issue_type_name,
+            "issue_type_icon": issue_type_icon,
+            "created": fields_obj.get("created"),
+            "resolved_at": milestone_dt.isoformat() if milestone_dt else None,
+            "resolution_hours": None,
+        }
+        if milestone_dt:
+            delta_h = (milestone_dt - created_dt).total_seconds() / 3600.0
+            if delta_h < 0:
+                team_unresolved[team] += 1
+                row["resolution_note"] = "negative_elapsed_skipped"
+            else:
+                row["resolution_hours"] = round(delta_h, 2)
+                team_hours[team].append(delta_h)
+                all_hours.append(delta_h)
+        else:
+            team_unresolved[team] += 1
+        team_rows[team].append(row)
+
+    def _fmt_hours(h):
+        if h is None:
+            return None
+        if h < 48:
+            return f"{h:.1f} h"
+        return f"{h / 24:.1f} d"
+
+    team_summaries = []
+    for team in sorted(team_rows.keys(), key=lambda x: x.lower()):
+        hrs = team_hours[team]
+        n_res = len(hrs)
+        n_un = team_unresolved.get(team, 0)
+        avg_h = sum(hrs) / n_res if n_res else None
+        team_summaries.append(
+            {
+                "team_name": team,
+                "resolved_count": n_res,
+                "unresolved_count": n_un,
+                "total_in_range": n_res + n_un,
+                "avg_resolution_hours": round(avg_h, 2) if avg_h is not None else None,
+                "avg_resolution_display": _fmt_hours(avg_h) if avg_h is not None else "—",
+                "tickets": sorted(team_rows[team], key=lambda r: r["issue_key"] or ""),
+            }
+        )
+
+    overall_avg = sum(all_hours) / len(all_hours) if all_hours else None
+
+    return jsonify(
+        {
+            "jql": jql,
+            "date_start": date_start,
+            "date_end": date_end,
+            "issue_count": len(all_issues),
+            "overall_avg_resolution_hours": round(overall_avg, 2) if overall_avg is not None else None,
+            "overall_avg_resolution_display": _fmt_hours(overall_avg) if overall_avg is not None else "—",
+            "teams": team_summaries,
+        }
+    )
+
+
 @app.route("/api/customer_dashboard/data", methods=["POST"])
 def customer_dashboard_data():
     payload = request.get_json(silent=True) or {}
@@ -1454,7 +1913,7 @@ def customer_dashboard_data():
         return jsonify({"error": "Missing Jira credentials. Save them in Settings first."}), 401
 
     # customfield_10001 is commonly the Team field (team[team]) in Jira.
-    fields = "summary,status,priority,created,labels,customfield_10077,customfield_10001,assignee"
+    fields = "summary,description,status,priority,issuetype,created,labels,customfield_10077,customfield_10001,assignee"
 
     all_issues = []
     seen_issue_keys = set()
@@ -1535,6 +1994,8 @@ def customer_dashboard_data():
         rows.append({
             "issue_key": issue.get("key"),
             "summary": fields_obj.get("summary") or "",
+            "description": (_adf_to_text(fields_obj.get("description")) or "").strip()[:5000],
+            "issue_type": ((fields_obj.get("issuetype") or {}).get("name") or "Task").strip(),
             "status": status_name,
             "priority": priority_name,
             "created_date": created_for_chart if created_for_chart != "Unknown" else "",
@@ -2192,6 +2653,9 @@ def _claude_customer_dashboard_insights_json(summary, anthropic_api_key, model="
         "Rules:\n"
         "- 6 to 10 insight rows.\n"
         "- priority must be one of: High, Medium, Low.\n"
+        "- MUST include one row with area exactly 'Overall summary'.\n"
+        "- MUST include one row with area exactly 'Current focus areas'.\n"
+        "- MUST include one row with area exactly 'Next issues to resolve'. In this row, include 3-6 issue keys from sample_issues and why each should be worked next.\n"
         "- Vary 'area' across rows: e.g. Launch risk, High priority, Team load, Customer concentration, "
         "Status bottlenecks, Unassigned/ownership, Time window / inflow, Data hygiene — only where the data supports it.\n"
         "- If the sample is too small to infer something, say that in the finding and suggest what data to collect.\n"

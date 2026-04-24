@@ -79,7 +79,7 @@
                     {% endif %}
 
                     <!-- Analysis Dropdown -->
-                    {% set analysis_pages = ['custom_reports', 'customer_dashboard', 'sprint_dashboard', 'explorer', 'query_builder', 'teams', 'work_report', 'assignee_work'] %}
+                    {% set analysis_pages = ['custom_reports', 'customer_dashboard', 'team_productivity', 'customer_closure', 'sprint_dashboard', 'explorer', 'query_builder', 'teams', 'work_report', 'assignee_work'] %}
                     {% for p in analysis_pages %}
                         {% if current_user.can_view_page(p) %}{% set nav.has_analysis = true %}{% endif %}
                     {% endfor %}
@@ -107,6 +107,16 @@
                                 <a href="/customer_dashboard"
                                     class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white"
                                     role="menuitem">Customer Dashboard</a>
+                                {% endif %}
+                                {% if current_user.can_view_page('team_productivity') %}
+                                <a href="/team_productivity"
+                                    class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white"
+                                    role="menuitem">Team Productivity</a>
+                                {% endif %}
+                                {% if current_user.can_view_page('customer_closure') %}
+                                <a href="/customer_closure"
+                                    class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white"
+                                    role="menuitem">Customer Closure</a>
                                 {% endif %}
                                 {% if current_user.can_view_page('sprint_dashboard') %}
                                 <a href="/sprint_dashboard"
@@ -334,6 +344,14 @@
             {% if current_user.can_view_page('customer_dashboard') %}
             <a href="/customer_dashboard"
                 class="block px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:text-white hover:bg-gray-700">Customer Dashboard</a>
+            {% endif %}
+            {% if current_user.can_view_page('team_productivity') %}
+            <a href="/team_productivity"
+                class="block px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:text-white hover:bg-gray-700">Team Productivity</a>
+            {% endif %}
+            {% if current_user.can_view_page('customer_closure') %}
+            <a href="/customer_closure"
+                class="block px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:text-white hover:bg-gray-700">Customer Closure</a>
             {% endif %}
             {% if current_user.can_view_page('sprint_dashboard') %}
             <a href="/sprint_dashboard"

@@ -1,0 +1,368 @@
+{% extends 'base.html' %}
+{% block title %}Team Productivity{% endblock %}
+{% block body_class %}tp-page{% endblock %}
+
+{% block extra_head %}
+<style>
+  body.tp-page { background: #f8fafc !important; color: #0f172a !important; }
+  body.tp-page #theme-toggle-btn { display: none !important; }
+  .lp-nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .lp-nav-wrap {
+    width: 100%;
+    height: 64px;
+    padding: 0 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .lp-brand {
+    display: inline-flex;
+    align-items: center;
+    text-decoration: none;
+    line-height: 0;
+  }
+  .lp-brand-logo {
+    height: 30px;
+    width: auto;
+    display: block;
+  }
+  .lp-menu { display: flex; align-items: center; gap: 8px; }
+  .lp-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 12px;
+    border-radius: 999px;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: #475569;
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 700;
+    transition: all .15s;
+  }
+  .lp-link:hover { border-color: #93c5fd; color: #1e3a8a; background: #eff6ff; }
+  .lp-link.active {
+    border-color: #bfdbfe;
+    color: #1d4ed8;
+    background: #eff6ff;
+  }
+  .tp-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  }
+  .tp-table-wrap { overflow-x: auto; max-height: 320px; overflow-y: auto; }
+  .tp-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .tp-table th {
+    position: sticky; top: 0;
+    background: #f8fafc;
+    text-align: left; padding: 8px 10px;
+    color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .tp-table td { padding: 8px 10px; border-bottom: 1px solid #eef2f7; color: #1f2937; }
+  .tp-table tr:hover td { background: rgba(59, 130, 246, 0.06); }
+  .tp-table tr.tp-row-overdue td { background: #fee2e2; }
+  .tp-table tr.tp-row-overdue:hover td { background: #fecaca; }
+  .tp-status-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    border: 1px solid #cbd5e1;
+    background: #f8fafc;
+    color: #334155;
+  }
+  .tp-status-pill.done { border-color: #86efac; background: #dcfce7; color: #166534; }
+  .tp-status-pill.progress { border-color: #93c5fd; background: #dbeafe; color: #1d4ed8; }
+  .tp-status-pill.blocked { border-color: #fca5a5; background: #fee2e2; color: #b91c1c; }
+  .tp-status-pill.qa { border-color: #c4b5fd; background: #ede9fe; color: #6d28d9; }
+  .tp-status-pill.review { border-color: #fdba74; background: #ffedd5; color: #9a3412; }
+  .tp-key-cell { display: inline-flex; align-items: center; gap: 6px; }
+  .tp-type-icon { width: 14px; height: 14px; border-radius: 3px; flex: 0 0 auto; }
+  .tp-team-head { display: inline-flex; align-items: center; gap: 10px; }
+  .tp-team-avatar {
+    width: 30px;
+    height: 30px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 800;
+    border: 1px solid rgba(15, 23, 42, 0.1);
+    color: #0f172a;
+    user-select: none;
+  }
+  .tp-preset { border: 1px solid #cbd5e1; background: #ffffff; color: #475569; border-radius: 8px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all .15s; }
+  .tp-preset:hover { border-color: #3b82f6; color: #1e293b; background: #eff6ff; }
+  .tp-loader { display: none; align-items: center; gap: 8px; font-size: 13px; color: #64748b; }
+  .tp-loader.open { display: inline-flex; }
+  .tp-spin { width: 14px; height: 14px; border: 2px solid #cbd5e1; border-top-color: #3b82f6; border-radius: 50%; animation: tp-spin .7s linear infinite; }
+  @media (max-width: 700px) {
+    .lp-nav-wrap { padding: 0 10px; }
+    .lp-link span { display: none; }
+  }
+  @keyframes tp-spin { to { transform: rotate(360deg); } }
+</style>
+{% endblock %}
+
+{% block content %}
+<nav class="lp-nav">
+  <div class="lp-nav-wrap">
+    <a href="/customer_dashboard" class="lp-brand">
+      <img src="/static/lumber-logo.png" alt="LUMBER" class="lp-brand-logo" />
+    </a>
+    <div class="lp-menu">
+      <a href="/customer_dashboard" class="lp-link">
+        <i class="fas fa-users"></i><span>Dashboard</span>
+      </a>
+      <a href="/team_productivity" class="lp-link active">
+        <i class="fas fa-bolt"></i><span>Productivity</span>
+      </a>
+      <a href="/customer_closure" class="lp-link">
+        <i class="fas fa-circle-check"></i><span>Closure</span>
+      </a>
+    </div>
+  </div>
+</nav>
+<div class="max-w-7xl mx-auto space-y-8">
+  <div>
+    <h1 class="text-3xl font-bold text-slate-900 tracking-tight">Team productivity</h1>
+    <p class="text-slate-600 mt-2 text-sm leading-relaxed max-w-3xl">
+      Average time from ticket <strong class="text-slate-800">created</strong> to first transition into
+      <strong class="text-slate-800">Resolved</strong>, <strong class="text-slate-800">Done</strong>, or
+      <strong class="text-slate-800">Ready for QA</strong> (from Jira history), for issues where
+      <strong class="text-slate-800">Reported By Customer</strong> is Yes and the issue was created in the selected range.
+      If your Jira uses a different field, set <code class="text-blue-600">JIRA_REPORTED_BY_CUSTOMER_JQL</code> in the environment.
+    </p>
+  </div>
+
+  <div class="tp-card p-6 space-y-5">
+    <div class="flex flex-wrap items-end gap-4">
+      <div>
+        <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Start date</label>
+        <input type="date" id="tp-start" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-900 w-44" />
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">End date</label>
+        <input type="date" id="tp-end" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-900 w-44" />
+      </div>
+      <button type="button" id="tp-run"
+        class="bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold px-5 py-2 rounded-lg transition">
+        Load data
+      </button>
+      <div id="tp-loader" class="tp-loader"><span class="tp-spin"></span> Fetching from Jira…</div>
+    </div>
+    <div>
+      <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider mr-2">Quick range</span>
+      <div class="flex flex-wrap gap-2 mt-2">
+        <button type="button" class="tp-preset" data-days="7">1 week</button>
+        <button type="button" class="tp-preset" data-days="14">2 weeks</button>
+        <button type="button" class="tp-preset" data-days="30">1 month</button>
+        <button type="button" class="tp-preset" data-days="90">3 months</button>
+      </div>
+      <p class="text-xs text-slate-500 mt-2">End date is inclusive. JQL uses <code class="text-slate-700">created &lt; (end + 1 day)</code> at midnight UTC-style dates.</p>
+    </div>
+    <p id="tp-error" class="text-sm text-red-400 hidden"></p>
+    <p id="tp-jql" class="text-xs text-slate-500 font-mono break-all hidden"></p>
+  </div>
+
+  <div id="tp-summary" class="hidden tp-card p-5 grid grid-cols-1 sm:grid-cols-3 gap-4">
+    <div>
+      <div class="text-xs text-slate-500 uppercase font-semibold">Issues in range</div>
+      <div id="tp-count" class="text-2xl font-bold text-slate-900 mt-1">—</div>
+    </div>
+    <div>
+      <div class="text-xs text-slate-500 uppercase font-semibold">Overall avg resolution</div>
+      <div id="tp-overall-avg" class="text-2xl font-bold text-blue-400 mt-1">—</div>
+    </div>
+    <div>
+      <div class="text-xs text-slate-500 uppercase font-semibold">Teams shown</div>
+      <div id="tp-team-count" class="text-2xl font-bold text-slate-900 mt-1">—</div>
+    </div>
+  </div>
+
+  <div id="tp-teams" class="space-y-6"></div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const jiraBase = {{ JIRA_DOMAIN | tojson }};
+
+  function toYMD(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return y + '-' + m + '-' + day;
+  }
+
+  function setInclusiveRangeDays(totalDays) {
+    const end = new Date();
+    const start = new Date();
+    start.setDate(end.getDate() - (totalDays - 1));
+    $('tp-start').value = toYMD(start);
+    $('tp-end').value = toYMD(end);
+  }
+
+  function defaultRange() {
+    setInclusiveRangeDays(7);
+  }
+
+  defaultRange();
+
+  document.querySelectorAll('.tp-preset').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const d = parseInt(btn.getAttribute('data-days'), 10);
+      if (d) setInclusiveRangeDays(d);
+    });
+  });
+
+  function issueUrl(key) {
+    if (!key) return '#';
+    const base = (jiraBase || '').replace(/\/$/, '');
+    return base + '/browse/' + encodeURIComponent(key);
+  }
+
+  function esc(s) {
+    if (s == null) return '';
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+  }
+
+  function teamInitial(name) {
+    const n = (name || '').trim();
+    return n ? n.charAt(0).toUpperCase() : '?';
+  }
+
+  function teamAvatarColor(name) {
+    const palettes = [
+      '#fde68a', '#bfdbfe', '#c7d2fe', '#fecaca', '#bbf7d0',
+      '#a7f3d0', '#fbcfe8', '#ddd6fe', '#bae6fd', '#fed7aa'
+    ];
+    const n = String(name || '');
+    let hash = 0;
+    for (let i = 0; i < n.length; i += 1) hash = ((hash << 5) - hash + n.charCodeAt(i)) | 0;
+    const idx = Math.abs(hash) % palettes.length;
+    return palettes[idx];
+  }
+
+  function statusClass(status) {
+    const s = String(status || '').trim().toLowerCase();
+    if (!s) return '';
+    if (s === 'open') return '';
+    if (s.includes('done') || s.includes('resolved') || s.includes('closed') || s.includes('deployed')) return 'done';
+    if (s.includes('qa')) return 'qa';
+    if (s.includes('review') || s.includes('staging') || s.includes('demo')) return 'review';
+    if (s.includes('block') || s.includes('unable') || s.includes("won't")) return 'blocked';
+    if (s.includes('progress') || s.includes('todo') || s.includes('selected')) return 'progress';
+    return '';
+  }
+
+  async function run() {
+    const ds = $('tp-start').value;
+    const de = $('tp-end').value;
+    $('tp-error').classList.add('hidden');
+    $('tp-loader').classList.add('open');
+    $('tp-run').disabled = true;
+    try {
+      const res = await fetch('/api/team_productivity/data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ date_start: ds, date_end: de }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        $('tp-error').textContent = data.error || ('HTTP ' + res.status);
+        $('tp-error').classList.remove('hidden');
+        $('tp-summary').classList.add('hidden');
+        $('tp-teams').innerHTML = '';
+        return;
+      }
+      $('tp-jql').textContent = 'JQL: ' + (data.jql || '');
+      $('tp-jql').classList.remove('hidden');
+      $('tp-summary').classList.remove('hidden');
+      $('tp-count').textContent = data.issue_count != null ? data.issue_count : '—';
+      $('tp-overall-avg').textContent = data.overall_avg_resolution_display || '—';
+      $('tp-team-count').textContent = (data.teams && data.teams.length) ? data.teams.length : '0';
+
+      const teams = data.teams || [];
+      if (!teams.length) {
+        $('tp-teams').innerHTML = '<div class="text-slate-500 text-sm tp-card p-6">No issues matched for this range.</div>';
+        return;
+      }
+
+      const parts = [];
+      for (const t of teams) {
+        const rows = (t.tickets || []).map((r) => {
+          let elapsedDisplay = '—';
+          if (r.resolution_hours != null) {
+            const elapsedHours = Number(r.resolution_hours);
+            elapsedDisplay = elapsedHours > 24
+              ? (elapsedHours / 24).toFixed(2) + ' d'
+              : elapsedHours + ' h';
+          }
+          const ra = r.resolved_at ? r.resolved_at.replace('T', ' ').slice(0, 19) : '—';
+          const isOverdue = r.resolution_hours != null && Number(r.resolution_hours) > 168;
+          const iconHtml = r.issue_type_icon
+            ? '<img src="' + esc(r.issue_type_icon) + '" alt="' + esc(r.issue_type || 'Type') + '" class="tp-type-icon" />'
+            : '';
+          const sClass = statusClass(r.status);
+          return '<tr' + (isOverdue ? ' class="tp-row-overdue"' : '') + '>'
+            + '<td><span class="tp-key-cell">' + iconHtml + '<a class="text-blue-600 hover:underline font-mono text-xs" href="' + esc(issueUrl(r.issue_key)) + '" target="_blank" rel="noopener">' + esc(r.issue_key) + '</a></span></td>'
+            + '<td>' + esc(r.summary || '') + '</td>'
+            + '<td><span class="tp-status-pill ' + esc(sClass) + '">' + esc(r.status || '') + '</span></td>'
+            + '<td class="whitespace-nowrap">' + esc(elapsedDisplay) + '</td>'
+            + '<td class="text-slate-500 whitespace-nowrap text-xs">' + esc(ra) + '</td>'
+            + '</tr>';
+        }).join('');
+
+        parts.push(
+          '<section class="tp-card overflow-hidden">'
+            + '<div class="px-5 py-4 border-b border-slate-200 flex flex-wrap items-baseline justify-between gap-3">'
+            + '<h2 class="text-lg font-bold text-slate-900 tp-team-head">'
+            + '<span class="tp-team-avatar" style="background:' + esc(teamAvatarColor(t.team_name)) + ';">' + esc(teamInitial(t.team_name)) + '</span>'
+            + '<span>' + esc(t.team_name) + '</span>'
+            + '</h2>'
+            + '<div class="text-sm text-slate-500">'
+            + '<span class="text-slate-700 font-semibold">' + (t.total_in_range || 0) + '</span> tickets'
+            + ' · '
+            + '<span class="text-slate-700 font-semibold">' + esc(t.avg_resolution_display) + '</span>'
+            + ' avg across <span class="text-slate-700">' + t.resolved_count + '</span> resolved'
+            + (t.unresolved_count ? ' · <span class="text-amber-400/90">' + t.unresolved_count + ' not yet at milestone</span>' : '')
+            + '</div></div>'
+            + '<div class="tp-table-wrap">'
+            + '<table class="tp-table"><thead><tr>'
+            + '<th>Key</th><th>Summary</th><th>Status</th><th>Elapsed</th><th>First milestone</th>'
+            + '</tr></thead><tbody>' + rows + '</tbody></table></div>'
+            + '</section>'
+        );
+      }
+      $('tp-teams').innerHTML = parts.join('');
+    } finally {
+      $('tp-loader').classList.remove('open');
+      $('tp-run').disabled = false;
+    }
+  }
+
+  $('tp-run').addEventListener('click', run);
+})();
+</script>
+{% endblock %}

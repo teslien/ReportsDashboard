@@ -1,0 +1,478 @@
+{% extends 'base.html' %}
+{% block title %}Customer Closure{% endblock %}
+{% block body_class %}cc-page{% endblock %}
+{% block main_class %}pt-24 pb-10 px-4 w-full max-w-none{% endblock %}
+
+{% block extra_head %}
+<style>
+  body.cc-page { background: #f8fafc !important; color: #0f172a !important; }
+  body.cc-page #theme-toggle-btn { display: none !important; }
+  .lp-nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .lp-nav-wrap {
+    width: 100%;
+    height: 64px;
+    padding: 0 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .lp-brand { display: inline-flex; align-items: center; text-decoration: none; line-height: 0; }
+  .lp-brand-logo { height: 30px; width: auto; display: block; }
+  .lp-menu { display: flex; align-items: center; gap: 8px; }
+  .lp-link {
+    display: inline-flex; align-items: center; gap: 7px; padding: 8px 12px; border-radius: 999px;
+    border: 1px solid #cbd5e1; background: #ffffff; color: #475569; text-decoration: none;
+    font-size: 13px; font-weight: 700; transition: all .15s;
+  }
+  .lp-link:hover { border-color: #93c5fd; color: #1e3a8a; background: #eff6ff; }
+  .lp-link.active { border-color: #bfdbfe; color: #1d4ed8; background: #eff6ff; }
+
+  .cc-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  }
+  .cc-input, .cc-select, .cc-textarea {
+    width: 100%;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    color: #0f172a;
+    border-radius: 8px;
+    padding: 9px 10px;
+    font-size: 13px;
+  }
+  .cc-textarea { min-height: 88px; resize: vertical; }
+  .cc-label {
+    font-size: 12px;
+    color: #475569;
+    margin-bottom: 6px;
+    display: block;
+    font-weight: 600;
+  }
+  .cc-btn {
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: #334155;
+    border-radius: 8px;
+    padding: 9px 12px;
+    font-size: 12px;
+    font-weight: 700;
+    transition: all .15s;
+  }
+  .cc-btn:hover { background: #f8fafc; }
+  .cc-btn.primary { background: #2563eb; border-color: #2563eb; color: #ffffff; }
+  .cc-btn.primary:hover { background: #1d4ed8; }
+  .cc-preset-btn {
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: #475569;
+    border-radius: 999px;
+    padding: 7px 12px;
+    font-size: 12px;
+    font-weight: 700;
+    transition: all .15s;
+  }
+  .cc-preset-btn:hover { border-color: #93c5fd; color: #1e3a8a; background: #eff6ff; }
+  .cc-preset-btn.active { border-color: #bfdbfe; color: #1d4ed8; background: #eff6ff; }
+  .cc-kpi-title { font-size: 12px; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+  .cc-kpi-value { font-size: 28px; font-weight: 800; color: #0f172a; margin-top: 4px; }
+  .cc-kpi-sub { font-size: 12px; color: #64748b; margin-top: 2px; }
+  .cc-muted { color: #64748b; font-size: 12px; }
+  .cc-jql-preview {
+    background: #0f172a;
+    color: #e2e8f0;
+    border-radius: 12px;
+    padding: 12px 14px;
+    font-size: 12px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    white-space: pre-wrap;
+    overflow: auto;
+  }
+  .cc-status-pill {
+    display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px;
+    font-size: 11px; font-weight: 700; border: 1px solid #cbd5e1; background: #f8fafc; color: #334155;
+  }
+  .cc-status-pill.done { border-color: #86efac; background: #dcfce7; color: #166534; }
+  .cc-key-cell { display: inline-flex; align-items: center; gap: 6px; }
+  .cc-type-icon { width: 14px; height: 14px; border-radius: 3px; flex: 0 0 auto; }
+  .cc-table-wrap { overflow: auto; max-height: 70vh; }
+  .cc-table { width: 100%; border-collapse: collapse; }
+  .cc-table th {
+    position: sticky; top: 0; background: #f8fafc; font-size: 11px; color: #64748b;
+    text-transform: uppercase; letter-spacing: .03em; font-weight: 700; text-align: left;
+    padding: 10px; border-bottom: 1px solid #e2e8f0;
+  }
+  .cc-table td { font-size: 13px; color: #1f2937; padding: 10px; border-bottom: 1px solid #eef2f7; vertical-align: top; }
+  .cc-table tr.cc-closed-row { background: #f0fdf4; }
+  .cc-empty { border: 1px dashed #cbd5e1; border-radius: 12px; padding: 22px; background: #ffffff; text-align: center; color: #64748b; }
+  .cc-feedback.err { color: #b91c1c; }
+  .cc-feedback.ok { color: #0f766e; }
+
+  @media (max-width: 700px) {
+    .lp-nav-wrap { padding: 0 10px; }
+    .lp-link span { display: none; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<nav class="lp-nav">
+  <div class="lp-nav-wrap">
+    <a href="/customer_dashboard" class="lp-brand">
+      <img src="/static/lumber-logo.png" alt="LUMBER" class="lp-brand-logo" />
+    </a>
+    <div class="lp-menu">
+      <a href="/customer_dashboard" class="lp-link">
+        <i class="fas fa-users"></i><span>Dashboard</span>
+      </a>
+      <a href="/team_productivity" class="lp-link">
+        <i class="fas fa-bolt"></i><span>Productivity</span>
+      </a>
+      <a href="/customer_closure" class="lp-link active">
+        <i class="fas fa-circle-check"></i><span>Closure</span>
+      </a>
+    </div>
+  </div>
+</nav>
+
+<div class="max-w-7xl mx-auto space-y-6">
+  <div class="flex flex-wrap items-start justify-between gap-4">
+    <div>
+      <h1 class="text-3xl font-bold text-slate-900 tracking-tight">Customer Closure</h1>
+      <p class="text-sm text-slate-500 mt-1">Count how many customer-reported tickets are closed for a selected week-back range or custom dates.</p>
+    </div>
+  </div>
+
+  <div class="cc-card p-5 space-y-5">
+    <div>
+      <div class="cc-label">Quick range</div>
+      <div class="flex flex-wrap gap-2">
+        <button type="button" class="cc-preset-btn" data-week-back="1">1 Week Back</button>
+        <button type="button" class="cc-preset-btn" data-week-back="2">2 Weeks Back</button>
+        <button type="button" class="cc-preset-btn" data-week-back="3">3 Weeks Back</button>
+        <button type="button" class="cc-preset-btn" data-week-back="4">4 Weeks Back</button>
+      </div>
+      <p class="cc-muted mt-2">Default matches: <code>"Reported By Customer" = Yes AND created &gt;= startOfWeek(-1) AND created &lt; startOfWeek()</code></p>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
+      <div>
+        <label class="cc-label" for="cc-start">Start date</label>
+        <input id="cc-start" type="date" class="cc-input" />
+      </div>
+      <div>
+        <label class="cc-label" for="cc-end">End date</label>
+        <input id="cc-end" type="date" class="cc-input" />
+      </div>
+      <div>
+        <label class="cc-label" for="cc-team">Team filter</label>
+        <select id="cc-team" class="cc-select">
+          <option value="">All Teams</option>
+        </select>
+      </div>
+      <div class="flex items-end gap-2">
+        <button id="cc-refresh-teams" type="button" class="cc-btn">Refresh Teams</button>
+        <button id="cc-run" type="button" class="cc-btn primary">Load Results</button>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div>
+        <label class="cc-label" for="cc-done-statuses">Done status setting</label>
+        <textarea id="cc-done-statuses" class="cc-textarea" placeholder="Done, Resolved, Closed"></textarea>
+        <div class="flex items-center justify-between gap-3 mt-2">
+          <p class="cc-muted">Comma or newline separated. Tickets in these statuses count as closed.</p>
+          <button id="cc-reset-statuses" type="button" class="cc-btn">Reset Defaults</button>
+        </div>
+      </div>
+      <div>
+        <label class="cc-label">JQL used by default</label>
+        <div id="cc-jql-preview" class="cc-jql-preview"></div>
+      </div>
+    </div>
+
+    <p id="cc-feedback" class="cc-feedback cc-muted"></p>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div class="cc-card p-4">
+      <div class="cc-kpi-title">Matched Tickets</div>
+      <div id="cc-kpi-total" class="cc-kpi-value">0</div>
+      <div class="cc-kpi-sub">Based on created date range</div>
+    </div>
+    <div class="cc-card p-4">
+      <div class="cc-kpi-title">Closed Tickets</div>
+      <div id="cc-kpi-closed" class="cc-kpi-value text-emerald-600">0</div>
+      <div class="cc-kpi-sub">Using your done-status setting</div>
+    </div>
+    <div class="cc-card p-4">
+      <div class="cc-kpi-title">Open Tickets</div>
+      <div id="cc-kpi-open" class="cc-kpi-value text-slate-900">0</div>
+      <div class="cc-kpi-sub">Not in done statuses</div>
+    </div>
+    <div class="cc-card p-4">
+      <div class="cc-kpi-title">Closure Rate</div>
+      <div id="cc-kpi-rate" class="cc-kpi-value text-blue-600">0%</div>
+      <div class="cc-kpi-sub">Closed / matched</div>
+    </div>
+  </div>
+
+  <div class="cc-card overflow-hidden">
+    <div class="px-5 py-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h2 class="text-lg font-bold text-slate-900">Ticket List</h2>
+        <p id="cc-table-meta" class="cc-muted mt-1">Load a range to see results.</p>
+      </div>
+    </div>
+    <div id="cc-empty" class="cc-empty">No results loaded yet.</div>
+    <div id="cc-table-wrap" class="cc-table-wrap hidden">
+      <table class="cc-table">
+        <thead>
+          <tr>
+            <th>Key</th>
+            <th>Summary</th>
+            <th>Team</th>
+            <th>Status</th>
+            <th>Created</th>
+            <th>Resolution Date</th>
+          </tr>
+        </thead>
+        <tbody id="cc-table-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(() => {
+  const DEFAULT_DONE_STATUSES = [
+    "Done",
+    "Resolved",
+    "Closed",
+    "Ready for QA",
+    "Deployed",
+    "Ready for Staging",
+    "Ready for Internal Demo",
+  ];
+  const LS_DONE = "customer_closure_done_statuses";
+  const LS_TEAM = "customer_closure_team";
+  const LS_WEEK = "customer_closure_week_back";
+
+  const $ = (id) => document.getElementById(id);
+
+  function toYMD(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+
+  function startOfWeek(d) {
+    const x = new Date(d);
+    const day = x.getDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    x.setHours(0, 0, 0, 0);
+    x.setDate(x.getDate() + diff);
+    return x;
+  }
+
+  function applyWeekBackPreset(weeksBack) {
+    const now = new Date();
+    const currentWeekStart = startOfWeek(now);
+    const start = new Date(currentWeekStart);
+    start.setDate(start.getDate() - (weeksBack * 7));
+    const end = new Date(currentWeekStart);
+    end.setDate(end.getDate() - ((weeksBack - 1) * 7) - 1);
+    $("cc-start").value = toYMD(start);
+    $("cc-end").value = toYMD(end);
+    localStorage.setItem(LS_WEEK, String(weeksBack));
+    document.querySelectorAll("[data-week-back]").forEach((btn) => {
+      btn.classList.toggle("active", btn.getAttribute("data-week-back") === String(weeksBack));
+    });
+    updateJqlPreview();
+  }
+
+  function normalizeDoneStatusesText() {
+    return $("cc-done-statuses").value
+      .split(/[\n,]+/)
+      .map((v) => v.trim())
+      .filter(Boolean);
+  }
+
+  function updateJqlPreview() {
+    const start = $("cc-start").value || "YYYY-MM-DD";
+    const end = $("cc-end").value || "YYYY-MM-DD";
+    const endExclusive = $("cc-end").value ? (() => {
+      const d = new Date($("cc-end").value + "T00:00:00");
+      d.setDate(d.getDate() + 1);
+      return toYMD(d);
+    })() : "YYYY-MM-DD";
+    $("cc-jql-preview").textContent =
+`"Reported By Customer" = Yes
+AND created >= "${start}"
+AND created < "${endExclusive}"
+ORDER BY created DESC`;
+  }
+
+  async function loadTeams() {
+    const start = $("cc-start").value;
+    const end = $("cc-end").value;
+    if (!start || !end) return;
+    const previous = $("cc-team").value || localStorage.getItem(LS_TEAM) || "";
+    const res = await fetch("/api/customer_closure/teams", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ date_start: start, date_end: end }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      $("cc-feedback").textContent = data.error || `Failed to load teams (${res.status})`;
+      $("cc-feedback").className = "cc-feedback cc-muted err";
+      return;
+    }
+    const select = $("cc-team");
+    select.innerHTML = '<option value="">All Teams</option>';
+    (data.teams || []).forEach((team) => {
+      const opt = document.createElement("option");
+      opt.value = team;
+      opt.textContent = team;
+      select.appendChild(opt);
+    });
+    if (previous && Array.from(select.options).some((o) => o.value === previous)) {
+      select.value = previous;
+    }
+  }
+
+  function statusPill(status, isClosed) {
+    return `<span class="cc-status-pill ${isClosed ? "done" : ""}">${escapeHtml(status || "")}</span>`;
+  }
+
+  function escapeHtml(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function issueUrl(key) {
+    const base = ("{{ JIRA_DOMAIN }}" || "").replace(/\/+$/, "");
+    return `${base}/browse/${encodeURIComponent(key || "")}`;
+  }
+
+  async function loadData() {
+    const start = $("cc-start").value;
+    const end = $("cc-end").value;
+    const team = $("cc-team").value || "";
+    const doneStatuses = normalizeDoneStatusesText();
+    if (!start || !end) {
+      $("cc-feedback").textContent = "Select a valid start and end date.";
+      $("cc-feedback").className = "cc-feedback cc-muted err";
+      return;
+    }
+
+    localStorage.setItem(LS_DONE, $("cc-done-statuses").value);
+    localStorage.setItem(LS_TEAM, team);
+    $("cc-feedback").textContent = "Loading customer closure data...";
+    $("cc-feedback").className = "cc-feedback cc-muted";
+
+    const res = await fetch("/api/customer_closure/data", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({
+        date_start: start,
+        date_end: end,
+        team_name: team,
+        done_statuses: doneStatuses,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      $("cc-feedback").textContent = data.error || `Failed to load data (${res.status})`;
+      $("cc-feedback").className = "cc-feedback cc-muted err";
+      return;
+    }
+
+    $("cc-feedback").textContent = `Loaded ${data.total_count || 0} tickets.`;
+    $("cc-feedback").className = "cc-feedback cc-muted ok";
+    $("cc-kpi-total").textContent = data.total_count || 0;
+    $("cc-kpi-closed").textContent = data.closed_count || 0;
+    $("cc-kpi-open").textContent = data.open_count || 0;
+    $("cc-kpi-rate").textContent = `${Number(data.closure_rate || 0).toFixed(2)}%`;
+    $("cc-table-meta").textContent = `${data.team_name || "All Teams"} · ${data.total_count || 0} matched tickets · ${data.closed_count || 0} closed`;
+
+    const rows = data.rows || [];
+    if (!rows.length) {
+      $("cc-empty").classList.remove("hidden");
+      $("cc-empty").textContent = "No tickets matched this range/filter.";
+      $("cc-table-wrap").classList.add("hidden");
+      $("cc-table-body").innerHTML = "";
+      return;
+    }
+
+    $("cc-empty").classList.add("hidden");
+    $("cc-table-wrap").classList.remove("hidden");
+    $("cc-table-body").innerHTML = rows.map((row) => {
+      const iconHtml = row.issue_type_icon
+        ? `<img src="${escapeHtml(row.issue_type_icon)}" alt="${escapeHtml(row.issue_type || "Type")}" class="cc-type-icon" />`
+        : "";
+      const created = row.created ? String(row.created).replace("T", " ").slice(0, 19) : "—";
+      const resolved = row.resolution_date ? String(row.resolution_date).replace("T", " ").slice(0, 19) : "—";
+      return `
+        <tr class="${row.is_closed ? "cc-closed-row" : ""}">
+          <td>
+            <span class="cc-key-cell">
+              ${iconHtml}
+              <a class="text-blue-600 hover:underline font-mono text-xs" href="${escapeHtml(issueUrl(row.issue_key))}" target="_blank" rel="noopener">${escapeHtml(row.issue_key)}</a>
+            </span>
+          </td>
+          <td>${escapeHtml(row.summary || "")}</td>
+          <td>${escapeHtml(row.team_name || "Unspecified")}</td>
+          <td>${statusPill(row.status, row.is_closed)}</td>
+          <td class="whitespace-nowrap text-slate-500 text-xs">${escapeHtml(created)}</td>
+          <td class="whitespace-nowrap text-slate-500 text-xs">${escapeHtml(resolved)}</td>
+        </tr>
+      `;
+    }).join("");
+  }
+
+  async function init() {
+    const storedStatuses = localStorage.getItem(LS_DONE);
+    $("cc-done-statuses").value = storedStatuses || DEFAULT_DONE_STATUSES.join(", ");
+    const weekBack = parseInt(localStorage.getItem(LS_WEEK) || "1", 10);
+    applyWeekBackPreset([1,2,3,4].includes(weekBack) ? weekBack : 1);
+    $("cc-feedback").textContent = "Choose filters, then click Load Results.";
+    $("cc-feedback").className = "cc-feedback cc-muted";
+  }
+
+  document.querySelectorAll("[data-week-back]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      applyWeekBackPreset(parseInt(btn.getAttribute("data-week-back"), 10) || 1);
+    });
+  });
+  $("cc-start").addEventListener("change", updateJqlPreview);
+  $("cc-end").addEventListener("change", updateJqlPreview);
+  $("cc-refresh-teams").addEventListener("click", loadTeams);
+  $("cc-run").addEventListener("click", loadData);
+  $("cc-reset-statuses").addEventListener("click", () => {
+    $("cc-done-statuses").value = DEFAULT_DONE_STATUSES.join(", ");
+  });
+
+  init();
+})();
+</script>
+{% endblock %}
