@@ -600,17 +600,30 @@
   const DEFAULT_JQL_ENTRIES = [
     {
       id: "default-reported-customer-1w",
-      title: "Issues Reported by Customer ( Last 1 Week )",
+      title: "Issues Reported by Customer (1 Week Back)",
       jql: `"Reported By Customer" = Yes\nAND created >= startOfWeek(-1)\nAND created < startOfWeek()\nORDER BY created DESC`,
       updatedAt: 0,
     },
     {
       id: "default-reported-customer-2w",
-      title: "Issue's reported by Customer (Last 2 Weeks )",
+      title: "Issues Reported by Customer (2 Weeks Back)",
       jql: `"Reported By Customer" = Yes\nAND created >= startOfWeek(-2)\nAND created < startOfWeek()\nORDER BY created DESC`,
       updatedAt: 0,
     },
+    {
+      id: "default-reported-customer-3w",
+      title: "Issues Reported by Customer (3 Weeks Back)",
+      jql: `"Reported By Customer" = Yes\nAND created >= startOfWeek(-3)\nAND created < startOfWeek()\nORDER BY created DESC`,
+      updatedAt: 0,
+    },
+    {
+      id: "default-reported-customer-4w",
+      title: "Issues Reported by Customer (4 Weeks Back)",
+      jql: `"Reported By Customer" = Yes\nAND created >= startOfWeek(-4)\nAND created < startOfWeek()\nORDER BY created DESC`,
+      updatedAt: 0,
+    },
   ];
+  const DEFAULT_JQL_IDS = new Set(DEFAULT_JQL_ENTRIES.map(item => item.id));
 
   function getStoredSettings() {
     return {
@@ -637,7 +650,7 @@
     try {
       const parsed = JSON.parse(localStorage.getItem(LS_KEYS.jqlList) || "[]");
       const userEntries = Array.isArray(parsed)
-        ? parsed.filter(item => item && item.id && item.title && item.jql)
+        ? parsed.filter(item => item && item.id && item.title && item.jql && !DEFAULT_JQL_IDS.has(item.id))
         : [];
       const map = new Map();
       [...defaults, ...userEntries].forEach(item => map.set(item.id, item));
