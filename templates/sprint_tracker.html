@@ -157,6 +157,7 @@
 (function(){
   // ─── Constants ──────────────────────────────────────────────
   const JIRA_BASE = (window.JIRA_DOMAIN || "").replace(/\/$/, "") + "/browse/";
+  const CAN_MANAGE = {{ 'true' if can_manage_sprint_tracker else 'false' }};
   const STATUS_COLORS = {
     "Done":"#0891b2","Resolved":"#0891b2","Deployed":"#0891b2",
     "In Development":"#d97706","In Progress":"#d97706",
@@ -170,6 +171,7 @@
   let sprints = [];        // [{id,name,sprint_goal,goal_edited,divider_index,themes:[...]}]
   let activeSprintId = null;
   let anthropicKey = "";
+  let hasConfiguredAnthropicKey = false;
   let rewriteOnSync = true;
   let pendingRequests = 0;
 
@@ -336,10 +338,11 @@
       app.innerHTML = `
         <div class="px-5 py-8 text-center">
           <div class="text-lg font-bold text-slate-800 mb-2">Sprint Tracker</div>
-          <div class="text-sm text-slate-500 mb-4">No sprints yet. Create one to get started.</div>
-          <button class="btn-ghost" id="st-add-first">+ New sprint</button>
+          <div class="text-sm text-slate-500 mb-4">${CAN_MANAGE ? "No sprints yet. Create one to get started." : "No sprints are available yet."}</div>
+          ${CAN_MANAGE ? '<button class="btn-ghost" id="st-add-first">+ New sprint</button>' : '<div class="text-xs text-slate-400">Read-only access</div>'}
         </div>`;
-      document.getElementById("st-add-first").onclick = promptNewSprint;
+      const addFirstBtn = document.getElementById("st-add-first");
+      if (addFirstBtn) addFirstBtn.onclick = promptNewSprint;
       return;
     }
 
@@ -347,15 +350,15 @@
       <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between flex-wrap gap-2">
         <div>
           <h1 class="text-lg font-bold text-slate-800">Sprint Tracker</h1>
-          <p class="text-xs text-slate-400 mt-0.5">Dynamic sprint scope, themes & Jira status</p>
+          <p class="text-xs text-slate-400 mt-0.5">Dynamic sprint scope, themes & Jira status${CAN_MANAGE ? "" : " · read-only"}</p>
         </div>
         <div class="flex items-center gap-3">
           <span id="st-saved" class="saved-badge"></span>
           <button class="btn-ghost" id="st-maximize-btn" title="Toggle maximize view">⛶ Maximize</button>
-          <a href="/settings" class="btn-ghost" title="Manage Anthropic API key in Settings" style="text-decoration:none;">
+          ${CAN_MANAGE ? `<a href="/settings" class="btn-ghost" title="Manage Anthropic API key in Settings" style="text-decoration:none;">
             <span style="font-size:11px;color:#64748b;">Anthropic key</span>
             <span id="st-api-key-status" style="font-size:11px;font-weight:600;color:#94a3b8;">Not set</span>
-          </a>
+          </a>` : `<span class="saved-badge" style="color:#64748b;">View only</span>`}
         </div>
       </div>
 
@@ -363,10 +366,10 @@
         ${sprints.map(s => `
           <button class="tab-btn ${s.id === activeSprintId ? 'active' : ''}" data-sid="${s.id}">${esc(s.name)}</button>
         `).join("")}
-        <span class="tab-add" id="st-new-tab" title="New sprint">+ New</span>
-        <span class="tab-add" id="st-new-jql-tab" title="Create sprint from JQL">+ JQL Sprint</span>
+        ${CAN_MANAGE ? '<span class="tab-add" id="st-new-tab" title="New sprint">+ New</span>' : ''}
+        ${CAN_MANAGE ? '<span class="tab-add" id="st-new-jql-tab" title="Create sprint from JQL">+ JQL Sprint</span>' : ''}
         <span style="flex:1"></span>
-        <button class="tab-add" id="st-delete-sprint" title="Delete this sprint" style="color:#dc2626;">Delete sprint</button>
+        ${CAN_MANAGE ? '<button class="tab-add" id="st-delete-sprint" title="Delete this sprint" style="color:#dc2626;">Delete sprint</button>' : ''}
       </div>
 
       <div class="px-5 py-2 border-b border-slate-100 bg-slate-50">
@@ -379,7 +382,7 @@
 
     const keyStatusEl = document.getElementById("st-api-key-status");
     if (keyStatusEl) {
-      if (anthropicKey) {
+      if (anthropicKey || hasConfiguredAnthropicKey) {
         keyStatusEl.textContent = "Configured";
         keyStatusEl.style.color = "#16a34a";
       } else {
@@ -388,9 +391,12 @@
       }
     }
     document.querySelectorAll(".tab-btn").forEach(b => b.onclick = () => { activeSprintId = parseInt(b.dataset.sid, 10); renderTab(); });
-    document.getElementById("st-new-tab").onclick = promptNewSprint;
-    document.getElementById("st-new-jql-tab").onclick = promptNewSprintFromJql;
-    document.getElementById("st-delete-sprint").onclick = onDeleteSprint;
+    const newTabBtn = document.getElementById("st-new-tab");
+    const newJqlBtn = document.getElementById("st-new-jql-tab");
+    const deleteSprintBtn = document.getElementById("st-delete-sprint");
+    if (newTabBtn) newTabBtn.onclick = promptNewSprint;
+    if (newJqlBtn) newJqlBtn.onclick = promptNewSprintFromJql;
+    if (deleteSprintBtn) deleteSprintBtn.onclick = onDeleteSprint;
     const maxBtn = document.getElementById("st-maximize-btn");
     if (maxBtn) maxBtn.onclick = toggleMaximize;
     document.getElementById("st-legend-toggle").onclick = () => {
@@ -431,8 +437,8 @@
       <div class="px-5 py-3 border-b border-slate-100 flex items-start gap-3">
         <span class="text-xl mt-0.5">🎯</span>
         <div class="goal-wrapper flex items-center gap-1 flex-1">
-          <span class="goal-input" contenteditable="true" data-sprint="${sprint.id}">${esc(sprint.sprint_goal || "")}</span>
-          <span class="pencil" title="Edit goal">✎</span>
+          <span class="goal-input" contenteditable="${CAN_MANAGE ? 'true' : 'false'}" data-sprint="${sprint.id}">${esc(sprint.sprint_goal || "")}</span>
+          ${CAN_MANAGE ? '<span class="pencil" title="Edit goal">✎</span>' : ''}
         </div>
       </div>
       <div class="px-5 py-2.5 border-b border-slate-100 flex items-center justify-between flex-wrap gap-2">
@@ -444,7 +450,7 @@
           ${lbCount ? `<span>·</span><span class="badge-lb">🚨 ${lbCount} launch blocker${lbCount>1?'s':''}</span>` : ""}
         </div>
         <div class="flex items-center gap-2">
-          <button class="sync-btn sync-icon-btn" id="st-sync-jql-btn" title="Sync from JQL" style="display:none;">⇄</button>
+          ${CAN_MANAGE ? '<button class="sync-btn sync-icon-btn" id="st-sync-jql-btn" title="Sync from JQL" style="display:none;">⇄</button>' : ''}
           <span class="sync-status" id="st-sync-status"></span>
         </div>
       </div>
@@ -469,7 +475,7 @@
 
     // Goal editing
     const goalEl = body.querySelector(`.goal-input[data-sprint="${sprint.id}"]`);
-    if (goalEl) {
+    if (CAN_MANAGE && goalEl) {
       goalEl.addEventListener("blur", async () => {
         const val = goalEl.textContent.trim();
         sprint.sprint_goal = val;
@@ -491,31 +497,38 @@
     });
 
     // Inline editing hooks
-    body.querySelectorAll("[data-field]").forEach(el => {
-      el.addEventListener("blur", onCellBlur);
-    });
+    if (CAN_MANAGE) {
+      body.querySelectorAll("[data-field]").forEach(el => {
+        el.addEventListener("blur", onCellBlur);
+      });
+    }
 
     // LB pill toggle
-    body.querySelectorAll(".lb-pill").forEach(el => {
-      el.addEventListener("click", () => onToggleLB(parseInt(el.dataset.themeid, 10)));
-    });
+    if (CAN_MANAGE) {
+      body.querySelectorAll(".lb-pill").forEach(el => {
+        el.addEventListener("click", () => onToggleLB(parseInt(el.dataset.themeid, 10)));
+      });
+    }
 
     // Delete theme buttons
-    body.querySelectorAll(".st-del-theme").forEach(el => {
-      el.addEventListener("click", () => onDeleteTheme(parseInt(el.dataset.themeid, 10)));
-    });
-    body.querySelectorAll(".st-del-note").forEach(el => {
-      el.addEventListener("click", () => onDeleteNote(parseInt(el.dataset.themeid, 10)));
-    });
-    body.querySelectorAll(".st-add-note").forEach(el => {
-      el.addEventListener("click", () => onAddNote(parseInt(el.dataset.themeid, 10)));
-    });
+    if (CAN_MANAGE) {
+      body.querySelectorAll(".st-del-theme").forEach(el => {
+        el.addEventListener("click", () => onDeleteTheme(parseInt(el.dataset.themeid, 10)));
+      });
+      body.querySelectorAll(".st-del-note").forEach(el => {
+        el.addEventListener("click", () => onDeleteNote(parseInt(el.dataset.themeid, 10)));
+      });
+      body.querySelectorAll(".st-add-note").forEach(el => {
+        el.addEventListener("click", () => onAddNote(parseInt(el.dataset.themeid, 10)));
+      });
+    }
 
     // Tab actions
-    document.getElementById("st-sync-jql-btn").onclick = onSyncFromJql;
+    const syncBtn = document.getElementById("st-sync-jql-btn");
+    if (syncBtn) syncBtn.onclick = onSyncFromJql;
 
     // Drag-and-drop attach
-    attachDragAndDrop();
+    if (CAN_MANAGE) attachDragAndDrop();
   }
 
   function buildRows(sprint, order, divIdx) {
@@ -525,13 +538,13 @@
       html += themeRow(sprint, theme, idx >= divIdx);
     });
     if (divIdx >= order.length) html += dividerRow();
-    return html || `<tr><td colspan="8" class="text-center py-6 text-slate-400">No themes yet. Click "+ Theme" to add one.</td></tr>`;
+    return html || `<tr><td colspan="8" class="text-center py-6 text-slate-400">${CAN_MANAGE ? 'No themes yet. Click "+ Theme" to add one.' : 'No themes available in this sprint yet.'}</td></tr>`;
   }
 
   function dividerRow() {
     return `
-      <tr class="divider-row" draggable="true" data-type="divider">
-        <td class="drag-handle text-center">⋮⋮</td>
+      <tr class="divider-row" draggable="${CAN_MANAGE ? 'true' : 'false'}" data-type="divider">
+        <td class="drag-handle text-center" style="${CAN_MANAGE ? '' : 'cursor:default;color:#e2e8f0;'}">⋮⋮</td>
         <td colspan="7" class="text-center py-2">
           <span style="font-size:12px;color:#94a3b8;font-style:italic;">↓ Next Sprint — not in scope (drag items here)</span>
         </td>
@@ -543,34 +556,34 @@
     const lb = themeLB(theme);
     const customers = themeCustomers(theme);
     return `
-      <tr class="theme-row${belowDivider ? ' below-divider' : ''}" draggable="true"
+      <tr class="theme-row${belowDivider ? ' below-divider' : ''}" draggable="${CAN_MANAGE ? 'true' : 'false'}"
         data-type="theme" data-themeid="${theme.id}">
-        <td class="drag-handle text-center text-slate-300">⋮⋮</td>
+        <td class="drag-handle text-center text-slate-300" style="${CAN_MANAGE ? '' : 'cursor:default;color:#e2e8f0;'}">⋮⋮</td>
         <td>
           <div class="editable-cell flex items-start gap-1">
-            <span class="theme-sentence" contenteditable="true"
+            <span class="theme-sentence" contenteditable="${CAN_MANAGE ? 'true' : 'false'}"
               data-themeid="${theme.id}" data-field="sentence">${esc(theme.sentence)}</span>
-            <span class="pencil">✎</span>
+            ${CAN_MANAGE ? '<span class="pencil">✎</span>' : ''}
           </div>
           <div class="text-xs text-slate-400 mt-1 editable-cell">
-            <span contenteditable="true" data-themeid="${theme.id}" data-field="epic_name">${esc(theme.epic_name)}</span>
+            <span contenteditable="${CAN_MANAGE ? 'true' : 'false'}" data-themeid="${theme.id}" data-field="epic_name">${esc(theme.epic_name)}</span>
           </div>
         </td>
         <td class="st-cell-bullets">
           <ul class="bullet-list" data-themeid="${theme.id}" data-field="bullets">
-            ${(theme.bullets || []).map(b => `<li contenteditable="true" class="st-bullet">${esc(b)}</li>`).join("")}
-            <li><span class="btn-ghost st-add-bullet-btn" onclick="window.stAddBullet(${theme.id})" style="font-size:10px;padding:2px 6px;">+ bullet</span></li>
+            ${(theme.bullets || []).map(b => `<li contenteditable="${CAN_MANAGE ? 'true' : 'false'}" class="st-bullet">${esc(b)}</li>`).join("")}
+            ${CAN_MANAGE ? `<li><span class="btn-ghost st-add-bullet-btn" onclick="window.stAddBullet(${theme.id})" style="font-size:10px;padding:2px 6px;">+ bullet</span></li>` : ''}
           </ul>
         </td>
         <td class="st-cell-tickets">
           <div class="flex flex-wrap">
             ${(theme.tickets || []).map(t => ticketChip(t)).join("")}
-            <span class="btn-ghost st-add-ticket-btn" style="font-size:10px;padding:2px 6px;margin:2px;" onclick="window.stAddTicket(${theme.id})">+ ticket</span>
+            ${CAN_MANAGE ? `<span class="btn-ghost st-add-ticket-btn" style="font-size:10px;padding:2px 6px;margin:2px;" onclick="window.stAddTicket(${theme.id})">+ ticket</span>` : ''}
           </div>
           ${renderTicketBullets(theme)}
         </td>
         <td>
-          <span class="lb-pill ${lb ? 'lb-yes' : 'lb-no'}" data-themeid="${theme.id}" title="Click to toggle launch blocker">${lb ? '🚨 Yes' : 'No'}</span>
+          <span class="lb-pill ${lb ? 'lb-yes' : 'lb-no'}" data-themeid="${theme.id}" title="${CAN_MANAGE ? 'Click to toggle launch blocker' : 'Launch blocker status'}">${lb ? '🚨 Yes' : 'No'}</span>
         </td>
         <td>
           <div class="flex flex-wrap gap-0.5">${customers.map(c => `<span class="customer-tag">${esc(c)}</span>`).join("")}</div>
@@ -578,8 +591,8 @@
         <td class="notes-cell">
           ${(theme.notes || "").trim()
             ? `<div class="comment-card">
-                 <button class="comment-delete st-del-note" data-themeid="${theme.id}" title="Delete note">Remove</button>
-                 <div contenteditable="true" class="notes-area"
+                 ${CAN_MANAGE ? `<button class="comment-delete st-del-note" data-themeid="${theme.id}" title="Delete note">Remove</button>` : ''}
+                 <div contenteditable="${CAN_MANAGE ? 'true' : 'false'}" class="notes-area"
                    data-themeid="${theme.id}" data-field="notes"
                    data-placeholder="Add note...">${esc(theme.notes || "")}</div>
                  <div class="notes-foot" title="${esc(theme.notes_updated_by || "Unknown user")}">
@@ -587,15 +600,15 @@
                    <span>${esc(formatWhen(theme.notes_updated_at))}</span>
                  </div>
                </div>`
-            : `<div class="note-hover-target st-add-note" data-themeid="${theme.id}" title="Add note">
+            : CAN_MANAGE ? `<div class="note-hover-target st-add-note" data-themeid="${theme.id}" title="Add note">
                  <span class="note-hover-plus">+</span>
-               </div>`
+               </div>` : `<div class="text-xs text-slate-400 italic py-3">No note</div>`
           }
         </td>
         <td>
-          <div class="row-actions">
+          ${CAN_MANAGE ? `<div class="row-actions">
             <button class="st-del-theme" data-themeid="${theme.id}" title="Delete theme">✕</button>
-          </div>
+          </div>` : ''}
         </td>
       </tr>
     `;
@@ -609,7 +622,7 @@
         ${dot}
         <span title="${esc(t.summary)}">${esc(t.ticket_key)}</span>
       </a>
-      <button class="chip-del" title="Remove ticket" onclick="window.stDeleteTicket(${t.id})">×</button>
+      ${CAN_MANAGE ? `<button class="chip-del" title="Remove ticket" onclick="window.stDeleteTicket(${t.id})">×</button>` : ""}
     </span>`;
   }
 
@@ -620,6 +633,7 @@
 
   // ─── Event handlers ────────────────────────────────────────
   async function onCellBlur(e) {
+    if (!CAN_MANAGE) return;
     const el = e.target;
     const themeId = parseInt(el.dataset.themeid, 10);
     const field = el.dataset.field;
@@ -650,6 +664,7 @@
   }
 
   async function onToggleLB(themeId) {
+    if (!CAN_MANAGE) return;
     const sprint = activeSprint();
     const theme = sprint.themes.find(t => t.id === themeId); if (!theme) return;
     const cur = themeLB(theme);
@@ -662,6 +677,7 @@
   }
 
   async function onDeleteTheme(themeId) {
+    if (!CAN_MANAGE) return;
     const result = await showDialog({
       title: "Delete Theme",
       message: "Delete this theme and all its tickets?",
@@ -678,6 +694,7 @@
   }
 
   async function onDeleteNote(themeId) {
+    if (!CAN_MANAGE) return;
     const sprint = activeSprint();
     const theme = (sprint.themes || []).find(t => t.id === themeId);
     if (!theme || !(theme.notes || "").trim()) return;
@@ -704,6 +721,7 @@
   }
 
   async function onAddNote(themeId) {
+    if (!CAN_MANAGE) return;
     const sprint = activeSprint();
     const theme = (sprint.themes || []).find(t => t.id === themeId);
     if (!theme) return;
@@ -731,6 +749,7 @@
   }
 
   async function onDeleteSprint() {
+    if (!CAN_MANAGE) return;
     const sprint = activeSprint(); if (!sprint) return;
     const result = await showDialog({
       title: "Delete Sprint",
@@ -747,6 +766,7 @@
   }
 
   async function promptNewSprint() {
+    if (!CAN_MANAGE) return;
     const result = await showDialog({
       title: "New Sprint",
       message: "Create a new sprint tab.",
@@ -763,6 +783,7 @@
   }
 
   async function promptNewTheme() {
+    if (!CAN_MANAGE) return;
     const sprint = activeSprint(); if (!sprint) return;
     const result = await showDialog({
       title: "New Theme",
@@ -788,6 +809,7 @@
   }
 
   async function promptNewSprintFromJql() {
+    if (!CAN_MANAGE) return;
     const inputDialog = await showDialog({
       title: "Create Sprint From JQL",
       message: "Enter sprint name and Jira JQL. We will fetch tickets, generate themes via Claude, then ask confirmation.",
@@ -805,12 +827,12 @@
       return;
     }
     const key = await ensureAnthropicKeyWithDialog("Anthropic API key is required to generate theme sentences and bullets from JQL results.");
-    if (!key) return;
+    if (!key && !hasConfiguredAnthropicKey) return;
 
     try {
       const preview = await api("/api/sprint_tracker/jql/preview", {
         method: "POST",
-        body: JSON.stringify({ jql, anthropic_api_key: key }),
+        body: JSON.stringify({ jql, anthropic_api_key: key || "" }),
         loaderText: "Fetching Jira tickets and generating themes..."
       });
       const previewText = [
@@ -857,6 +879,7 @@
   }
 
   window.stAddBullet = async function(themeId) {
+    if (!CAN_MANAGE) return;
     const sprint = activeSprint();
     const theme = sprint.themes.find(t => t.id === themeId); if (!theme) return;
     const result = await showDialog({
@@ -876,6 +899,7 @@
   };
 
   window.stAddTicket = async function(themeId) {
+    if (!CAN_MANAGE) return;
     const result = await showDialog({
       title: "Add Ticket",
       message: "Add a ticket to this theme.",
@@ -898,6 +922,7 @@
   };
 
   window.stDeleteTicket = async function(ticketId) {
+    if (!CAN_MANAGE) return;
     const d = await showDialog({
       title: "Remove Ticket",
       message: "Remove this ticket from the row?",
@@ -924,7 +949,7 @@
   }
 
   async function ensureAnthropicKeyWithDialog(message) {
-    if (anthropicKey) return anthropicKey;
+    if (anthropicKey || hasConfiguredAnthropicKey) return anthropicKey;
     const result = await showDialog({
       title: "Anthropic API Key Required",
       message: (message ? message + " " : "") + "The key is managed in Settings. Ask an admin to add it under Settings → Anthropic API Key.",
@@ -939,6 +964,7 @@
   }
 
   async function promptCreateRowFromTickets() {
+    if (!CAN_MANAGE) return;
     const sprint = activeSprint(); if (!sprint) return;
     const inputDialog = await showDialog({
       title: "Create Theme From Tickets",
@@ -962,14 +988,14 @@
     const key = await ensureAnthropicKeyWithDialog(
       "Anthropic API key is needed to generate theme title and summary from ticket descriptions."
     );
-    if (!key) return;
+    if (!key && !hasConfiguredAnthropicKey) return;
 
     try {
       const generated = await api("/api/sprint_tracker/themes/generate_from_tickets", {
         method: "POST",
         body: JSON.stringify({
           ticket_keys: ticketKeys,
-          anthropic_api_key: key
+          anthropic_api_key: key || ""
         })
       });
 
@@ -1040,6 +1066,7 @@
 
   // Persist bullet edits on blur (delegated)
   document.addEventListener("blur", async (e) => {
+    if (!CAN_MANAGE) return;
     const el = e.target;
     if (!el || !el.classList || !el.classList.contains("st-bullet")) return;
     const ul = el.closest("ul[data-themeid]"); if (!ul) return;
@@ -1055,14 +1082,15 @@
   }, true);
 
   async function onRewriteTicket(ticketId) {
+    if (!CAN_MANAGE) return;
     if (!anthropicKey) {
       const k = await ensureAnthropicKeyWithDialog("Enter your key to rewrite ticket description into max three bullets.");
-      if (!k) return;
+      if (!k && !hasConfiguredAnthropicKey) return;
     }
     try {
       const res = await api(`/api/sprint_tracker/tickets/${ticketId}/rewrite`, {
         method: "POST",
-        body: JSON.stringify({ anthropic_api_key: anthropicKey })
+        body: JSON.stringify({ anthropic_api_key: anthropicKey || "" })
       });
       await load();
       flashOk(`Rewrote ${res.description_bullets?.length || 0} bullets`);
@@ -1070,6 +1098,7 @@
   }
 
   async function onSyncFromJql() {
+    if (!CAN_MANAGE) return;
     const sprint = activeSprint(); if (!sprint) return;
     const cacheKey = `st_sync_jql_${sprint.id}`;
     const prevJql = localStorage.getItem(cacheKey) || `project = "{{ project }}" AND sprint = ${sprint.id}`;
@@ -1134,11 +1163,17 @@
   }
 
   async function loadAnthropicKey() {
+    if (!CAN_MANAGE) return;
     try {
       const res = await fetch("/api/settings/app_config");
       if (res.ok) {
         const data = await res.json();
-        if (data && data.anthropic_api_key) anthropicKey = data.anthropic_api_key;
+        if (data && data.anthropic_api_key) {
+          anthropicKey = data.anthropic_api_key;
+          hasConfiguredAnthropicKey = true;
+        } else if (data && typeof data.anthropic_api_key_configured !== "undefined") {
+          hasConfiguredAnthropicKey = !!data.anthropic_api_key_configured;
+        }
       }
     } catch(_) {}
   }

@@ -180,6 +180,39 @@ def page_permission_required(page_key):
         return decorated_function
     return decorator
 
+
+def _sprint_tracker_action_allowed(action="edit"):
+    if not current_user.is_authenticated:
+        return False
+    if current_user.role_name == 'Admin':
+        return True
+    perms = current_user.permissions or {}
+    legacy_edit = bool(perms.get("edit"))
+    if action == "delete":
+        return legacy_edit or bool(perms.get("delete_tickets"))
+    if action == "create":
+        return legacy_edit or bool(perms.get("create_tickets")) or bool(perms.get("edit_tickets"))
+    return legacy_edit or bool(perms.get("edit_tickets"))
+
+
+def _can_manage_sprint_tracker():
+    return any(_sprint_tracker_action_allowed(action) for action in ("create", "edit", "delete"))
+
+
+def sprint_tracker_write_required(action="edit"):
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if not current_user.is_authenticated:
+                return jsonify({"error": "Authentication required"}), 401
+            if not current_user.can_view_page("sprint_tracker"):
+                return render_template("403.html"), 403
+            if _sprint_tracker_action_allowed(action):
+                return f(*args, **kwargs)
+            return jsonify({"error": "Read-only access. You can view the sprint tracker but cannot modify it."}), 403
+        return decorated_function
+    return decorator
+
 # =========================
 # 🔴 CONFIG (DYNAMIC)
 # =========================
@@ -389,15 +422,26 @@ def init_db():
     if cursor.fetchone()[0] == 0:
         cursor.execute("INSERT INTO roles (name, permissions) VALUES ('Admin', '{\"all\": true}')")
         cursor.execute("INSERT INTO roles (name, permissions) VALUES ('Editor', '{\"view\": true, \"edit\": true}')")
-        cursor.execute("INSERT INTO roles (name, permissions) VALUES ('Viewer', '{\"view\": true, \"allowed_pages\": [\"dashboard\"]}')")
+        cursor.execute("INSERT INTO roles (name, permissions) VALUES ('Viewer', '{\"view\": true, \"allowed_pages\": [\"dashboard\", \"sprint_tracker\"]}')")
     else:
-        # Ensure Viewer role is restricted to dashboard if it was previously seeded without allowed_pages
+        # Ensure Viewer keeps dashboard access and can open the sprint tracker in read-only mode.
         cursor.execute("SELECT permissions FROM roles WHERE name = 'Viewer'")
         row = cursor.fetchone()
         if row:
             perms = json.loads(row[0]) if row[0] else {}
-            if 'allowed_pages' not in perms:
-                perms['allowed_pages'] = ['dashboard']
+            allowed = perms.get('allowed_pages')
+            default_viewer_pages = ['dashboard', 'sprint_tracker']
+            if isinstance(allowed, list):
+                changed = False
+                for page in default_viewer_pages:
+                    if page not in allowed:
+                        allowed.append(page)
+                        changed = True
+                if changed:
+                    perms['allowed_pages'] = allowed
+                    cursor.execute("UPDATE roles SET permissions = %s WHERE name = 'Viewer'", (json.dumps(perms),))
+            else:
+                perms['allowed_pages'] = default_viewer_pages
                 cursor.execute("UPDATE roles SET permissions = %s WHERE name = 'Viewer'", (json.dumps(perms),))
 
         # Ensure Editor role has access to key pages by default. If the role has
@@ -876,6 +920,11 @@ def app_config_settings_api():
             cursor.execute("SELECT config_key, config_value FROM app_config")
             rows = cursor.fetchall()
             config = {row['config_key']: row['config_value'] for row in rows}
+            if current_user.role_name != 'Admin' and not current_user.has_permission("manage_settings"):
+                masked = dict(config)
+                anthropic_value = str(masked.pop("anthropic_api_key", "") or "").strip()
+                masked["anthropic_api_key_configured"] = bool(anthropic_value)
+                return jsonify(masked)
             return jsonify(config)
         except Exception as e:
             return jsonify({"error": str(e)}), 500
@@ -6180,11 +6229,16 @@ def _fetch_sprint_tracker_tree():
 @login_required
 @page_permission_required("sprint_tracker")
 def sprint_tracker_page():
-    return render_template("sprint_tracker.html", project=PROJECT_KEY)
+    return render_template(
+        "sprint_tracker.html",
+        project=PROJECT_KEY,
+        can_manage_sprint_tracker=_can_manage_sprint_tracker(),
+    )
 
 
 @app.route("/api/sprint_tracker/data", methods=["GET"])
 @login_required
+@page_permission_required("sprint_tracker")
 def sprint_tracker_data():
     return jsonify({"sprints": _fetch_sprint_tracker_tree()})
 
@@ -6192,6 +6246,8 @@ def sprint_tracker_data():
 # ---- Sprints CRUD ----
 @app.route("/api/sprint_tracker/sprints", methods=["POST"])
 @login_required
+@page_permission_required("sprint_tracker")
+@sprint_tracker_write_required("create")
 def sprint_tracker_create_sprint():
     data = request.json or {}
     name = (data.get("name") or "").strip()
@@ -6218,7 +6274,12 @@ def sprint_tracker_create_sprint():
 
 @app.route("/api/sprint_tracker/sprints/<int:sprint_id>", methods=["PUT", "DELETE"])
 @login_required
+@page_permission_required("sprint_tracker")
 def sprint_tracker_sprint_detail(sprint_id):
+    if request.method == "DELETE" and not _sprint_tracker_action_allowed("delete"):
+        return jsonify({"error": "Read-only access. You can view the sprint tracker but cannot modify it."}), 403
+    if request.method == "PUT" and not _sprint_tracker_action_allowed("edit"):
+        return jsonify({"error": "Read-only access. You can view the sprint tracker but cannot modify it."}), 403
     conn, cursor = get_db_connection()
     if not conn:
         return jsonify({"error": "Database error"}), 500
@@ -6259,6 +6320,8 @@ def sprint_tracker_sprint_detail(sprint_id):
 # ---- Themes CRUD ----
 @app.route("/api/sprint_tracker/themes", methods=["POST"])
 @login_required
+@page_permission_required("sprint_tracker")
+@sprint_tracker_write_required("create")
 def sprint_tracker_create_theme():
     data = request.json or {}
     sprint_id = data.get("sprint_id")
@@ -6298,7 +6361,12 @@ def sprint_tracker_create_theme():
 
 @app.route("/api/sprint_tracker/themes/<int:theme_id>", methods=["PUT", "DELETE"])
 @login_required
+@page_permission_required("sprint_tracker")
 def sprint_tracker_theme_detail(theme_id):
+    if request.method == "DELETE" and not _sprint_tracker_action_allowed("delete"):
+        return jsonify({"error": "Read-only access. You can view the sprint tracker but cannot modify it."}), 403
+    if request.method == "PUT" and not _sprint_tracker_action_allowed("edit"):
+        return jsonify({"error": "Read-only access. You can view the sprint tracker but cannot modify it."}), 403
     conn, cursor = get_db_connection()
     if not conn:
         return jsonify({"error": "Database error"}), 500
@@ -6361,6 +6429,8 @@ def sprint_tracker_theme_detail(theme_id):
 # ---- Tickets CRUD ----
 @app.route("/api/sprint_tracker/tickets", methods=["POST"])
 @login_required
+@page_permission_required("sprint_tracker")
+@sprint_tracker_write_required("create")
 def sprint_tracker_create_ticket():
     data = request.json or {}
     theme_id = data.get("theme_id")
@@ -6400,7 +6470,12 @@ def sprint_tracker_create_ticket():
 
 @app.route("/api/sprint_tracker/tickets/<int:ticket_id>", methods=["PUT", "DELETE"])
 @login_required
+@page_permission_required("sprint_tracker")
 def sprint_tracker_ticket_detail(ticket_id):
+    if request.method == "DELETE" and not _sprint_tracker_action_allowed("delete"):
+        return jsonify({"error": "Read-only access. You can view the sprint tracker but cannot modify it."}), 403
+    if request.method == "PUT" and not _sprint_tracker_action_allowed("edit"):
+        return jsonify({"error": "Read-only access. You can view the sprint tracker but cannot modify it."}), 403
     conn, cursor = get_db_connection()
     if not conn:
         return jsonify({"error": "Database error"}), 500
@@ -6444,6 +6519,8 @@ def sprint_tracker_ticket_detail(ticket_id):
 # ---- Reorder themes + divider within a sprint ----
 @app.route("/api/sprint_tracker/sprints/<int:sprint_id>/reorder", methods=["POST"])
 @login_required
+@page_permission_required("sprint_tracker")
+@sprint_tracker_write_required("edit")
 def sprint_tracker_reorder(sprint_id):
     data = request.json or {}
     theme_ids = data.get("theme_ids") or []
@@ -6663,6 +6740,8 @@ def _claude_rewrite_description(description_text, anthropic_api_key, model="clau
 
 @app.route("/api/sprint_tracker/sprints/<int:sprint_id>/sync", methods=["POST"])
 @login_required
+@page_permission_required("sprint_tracker")
+@sprint_tracker_write_required("edit")
 def sprint_tracker_sync(sprint_id):
     # Fast sync path: bulk status/summary/customer update only (no Claude rewrite).
     conn, cursor = get_db_connection(dictionary=True)
@@ -6758,6 +6837,8 @@ def sprint_tracker_sync(sprint_id):
 
 @app.route("/api/sprint_tracker/sprints/<int:sprint_id>/sync_jql", methods=["POST"])
 @login_required
+@page_permission_required("sprint_tracker")
+@sprint_tracker_write_required("edit")
 def sprint_tracker_sync_jql(sprint_id):
     payload = request.json or {}
     jql = (payload.get("jql") or "").strip()
@@ -6921,6 +7002,8 @@ def sprint_tracker_sync_jql(sprint_id):
 
 @app.route("/api/sprint_tracker/tickets/<int:ticket_id>/rewrite", methods=["POST"])
 @login_required
+@page_permission_required("sprint_tracker")
+@sprint_tracker_write_required("edit")
 def sprint_tracker_ticket_rewrite(ticket_id):
     payload = request.json or {}
     anthropic_key = (payload.get("anthropic_api_key") or "").strip() or _get_app_config_value("anthropic_api_key")
@@ -6974,6 +7057,8 @@ def sprint_tracker_ticket_rewrite(ticket_id):
 
 @app.route("/api/sprint_tracker/themes/generate_from_tickets", methods=["POST"])
 @login_required
+@page_permission_required("sprint_tracker")
+@sprint_tracker_write_required("create")
 def sprint_tracker_generate_theme_from_tickets():
     payload = request.json or {}
     ticket_keys = payload.get("ticket_keys") or []
@@ -7252,6 +7337,8 @@ def _generate_themes_with_claude(grouped, anthropic_key):
 
 @app.route("/api/sprint_tracker/jql/preview", methods=["POST"])
 @login_required
+@page_permission_required("sprint_tracker")
+@sprint_tracker_write_required("create")
 def sprint_tracker_jql_preview():
     payload = request.json or {}
     jql = (payload.get("jql") or "").strip()
@@ -7349,6 +7436,8 @@ def sprint_tracker_jql_preview():
 
 @app.route("/api/sprint_tracker/sprints/from_generated", methods=["POST"])
 @login_required
+@page_permission_required("sprint_tracker")
+@sprint_tracker_write_required("create")
 def sprint_tracker_create_sprint_from_generated():
     payload = request.json or {}
     sprint_name = (payload.get("sprint_name") or "").strip()
