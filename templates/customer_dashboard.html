@@ -1420,7 +1420,7 @@
     return {
       jql: state.currentJql || null,
       customer_filter: titleContext || null,
-      expected_insights: "Before generating insights, check ticket status first. Prioritize active tickets (not Resolved/Done/Closed/Deployed). Provide exactly 2 insights only: (1) what exact ticket-level focus area/modules are currently being worked (use concrete feature words from issues, not generic labels), (2) which specific active issue keys should be worked on next and why. If most tickets are resolved, explicitly say so.",
+      expected_insights: "Before generating insights, check ticket status first. Prioritize active tickets (not Resolved/Done/Closed/Deployed). Provide exactly 2 insights only: (1) area name must be 'Issue summaries' and the finding must briefly describe the active issues in plain language using concrete issue details, not what team is working on them, (2) area name must be 'Next issues to resolve' and the finding must list which specific active issue keys should be worked on next and why. Do not mention team activity or ownership. If most tickets are resolved, explicitly say so.",
       total_issues: rows.length,
       actionable_issue_count: actionableRows.length,
       high_priority_count: stats.high,
@@ -1469,6 +1469,7 @@
           || insightsOut.find(i => /overall|summary/i.test(String(i.area || "")));
         const areaRank = (row) => {
           const area = String(row?.area || "").toLowerCase();
+          if (area.includes("issue summaries")) return 0;
           if (area.includes("current focus areas")) return 0;
           if (area.includes("next issues to resolve")) return 1;
           if (area.includes("overall summary")) return 99;
