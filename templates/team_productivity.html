@@ -113,6 +113,16 @@
   .tp-loader { display: none; align-items: center; gap: 8px; font-size: 13px; color: #64748b; }
   .tp-loader.open { display: inline-flex; }
   .tp-spin { width: 14px; height: 14px; border: 2px solid #cbd5e1; border-top-color: #3b82f6; border-radius: 50%; animation: tp-spin .7s linear infinite; }
+  .tp-settings-btn { display: inline-flex; align-items: center; gap: 8px; border: 1px solid #cbd5e1; background: #fff; color: #334155; border-radius: 10px; padding: 9px 14px; font-size: 13px; font-weight: 700; transition: all .15s; }
+  .tp-settings-btn:hover { background: #f8fafc; color: #0f172a; }
+  .tp-modal-backdrop { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); display: none; align-items: center; justify-content: center; z-index: 1100; padding: 16px; }
+  .tp-modal-backdrop.open { display: flex; }
+  .tp-modal { width: min(960px, calc(100vw - 24px)); background: #fff; border: 1px solid #e2e8f0; border-radius: 18px; box-shadow: 0 12px 40px rgba(15, 23, 42, 0.24); overflow: hidden; }
+  .tp-modal-head, .tp-modal-actions { padding: 16px 20px; border-bottom: 1px solid #e2e8f0; }
+  .tp-modal-actions { border-bottom: none; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 10px; }
+  .tp-modal-body { padding: 18px 20px; }
+  .tp-modal-close { margin-left: auto; border: none; background: transparent; color: #64748b; font-size: 24px; line-height: 1; cursor: pointer; }
+  .tp-modal-close:hover { color: #0f172a; }
   @media (max-width: 700px) {
     .lp-nav-wrap { padding: 0 10px; }
     .lp-link span { display: none; }
@@ -141,15 +151,20 @@
   </div>
 </nav>
 <div class="max-w-7xl mx-auto space-y-8">
-  <div>
-    <h1 class="text-3xl font-bold text-slate-900 tracking-tight">Team productivity</h1>
-    <p class="text-slate-600 mt-2 text-sm leading-relaxed max-w-3xl">
-      Average time from ticket <strong class="text-slate-800">created</strong> to first transition into
-      <strong class="text-slate-800">Resolved</strong>, <strong class="text-slate-800">Done</strong>, or
-      <strong class="text-slate-800">Ready for QA</strong> (from Jira history), for issues where
-      <strong class="text-slate-800">Reported By Customer</strong> is Yes and the issue was created in the selected range.
-      If your Jira uses a different field, set <code class="text-blue-600">JIRA_REPORTED_BY_CUSTOMER_JQL</code> in the environment.
-    </p>
+  <div class="flex flex-wrap items-start justify-between gap-4">
+    <div>
+      <h1 class="text-3xl font-bold text-slate-900 tracking-tight">Team productivity</h1>
+      <p class="text-slate-600 mt-2 text-sm leading-relaxed max-w-3xl">
+        Average time from ticket <strong class="text-slate-800">created</strong> to first transition into
+        <strong class="text-slate-800">Resolved</strong>, <strong class="text-slate-800">Done</strong>, or
+        <strong class="text-slate-800">Ready for QA</strong> (from Jira history), for issues where
+        <strong class="text-slate-800">Reported By Customer</strong> is Yes and the issue was created in the selected range.
+        If your Jira uses a different field, set <code class="text-blue-600">JIRA_REPORTED_BY_CUSTOMER_JQL</code> in the environment.
+      </p>
+    </div>
+    <button type="button" id="tp-open-settings" class="tp-settings-btn">
+      <i class="fas fa-key"></i><span>Jira Credentials</span>
+    </button>
   </div>
 
   <div class="tp-card p-6 space-y-5">
@@ -199,6 +214,31 @@
 
   <div id="tp-teams" class="space-y-6"></div>
 </div>
+<div id="tp-settings-modal" class="tp-modal-backdrop">
+  <div class="tp-modal" role="dialog" aria-modal="true" aria-labelledby="tp-settings-title">
+    <div class="tp-modal-head flex items-center gap-3">
+      <span id="tp-settings-title" class="text-xl font-bold text-slate-900">Jira Credentials (Local)</span>
+      <button id="tp-settings-close" class="tp-modal-close" aria-label="Close">&times;</button>
+    </div>
+    <div class="tp-modal-body">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 mb-2">Jira Email</label>
+          <input id="tp-setting-email" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-900 w-full" type="email" placeholder="you@company.com" />
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 mb-2">Jira API Token</label>
+          <input id="tp-setting-token" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-900 w-full" type="password" placeholder="ATATT..." />
+        </div>
+      </div>
+      <p class="text-xs text-slate-500 mt-3">Stored in your browser local storage and reused after reload.</p>
+    </div>
+    <div class="tp-modal-actions">
+      <button id="tp-settings-cancel" class="px-4 py-2 border border-slate-300 rounded-lg text-sm font-semibold text-slate-700 bg-white hover:bg-slate-50">Cancel</button>
+      <button id="tp-settings-save" class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold px-4 py-2 rounded-lg">Save Settings</button>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block extra_scripts %}
@@ -206,6 +246,42 @@
 (function () {
   const $ = (id) => document.getElementById(id);
   const jiraBase = {{ JIRA_DOMAIN | tojson }};
+  const LS_KEYS = {
+    email: 'customer_dashboard_jira_email',
+    token: 'customer_dashboard_jira_token',
+  };
+
+  function getStoredJiraSettings() {
+    return {
+      email: localStorage.getItem(LS_KEYS.email) || '',
+      token: localStorage.getItem(LS_KEYS.token) || '',
+    };
+  }
+
+  function saveStoredJiraSettings({ email, token }) {
+    if (email !== undefined) localStorage.setItem(LS_KEYS.email, email || '');
+    if (token !== undefined) localStorage.setItem(LS_KEYS.token, token || '');
+  }
+
+  function openSettingsDialog() {
+    const stored = getStoredJiraSettings();
+    $('tp-setting-email').value = stored.email;
+    $('tp-setting-token').value = stored.token;
+    $('tp-settings-modal').classList.add('open');
+  }
+
+  function closeSettingsDialog() {
+    $('tp-settings-modal').classList.remove('open');
+  }
+
+  function ensureLocalJiraSettings() {
+    const stored = getStoredJiraSettings();
+    if (stored.email && stored.token) return stored;
+    $('tp-error').textContent = 'Add your Jira email and API token in Jira Credentials first.';
+    $('tp-error').classList.remove('hidden');
+    openSettingsDialog();
+    return null;
+  }
 
   function toYMD(d) {
     const y = d.getFullYear();
@@ -278,13 +354,19 @@
   async function run() {
     const ds = $('tp-start').value;
     const de = $('tp-end').value;
+    const stored = ensureLocalJiraSettings();
+    if (!stored) return;
     $('tp-error').classList.add('hidden');
     $('tp-loader').classList.add('open');
     $('tp-run').disabled = true;
     try {
       const res = await fetch('/api/team_productivity/data', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Jira-Email': stored.email,
+          'X-Jira-Token': stored.token,
+        },
         credentials: 'same-origin',
         body: JSON.stringify({ date_start: ds, date_end: de }),
       });
@@ -363,6 +445,18 @@
   }
 
   $('tp-run').addEventListener('click', run);
+  $('tp-open-settings').addEventListener('click', openSettingsDialog);
+  $('tp-settings-cancel').addEventListener('click', closeSettingsDialog);
+  $('tp-settings-close').addEventListener('click', closeSettingsDialog);
+  $('tp-settings-save').addEventListener('click', () => {
+    const email = ($('tp-setting-email').value || '').trim();
+    const token = ($('tp-setting-token').value || '').trim();
+    saveStoredJiraSettings({ email, token });
+    closeSettingsDialog();
+    $('tp-error').textContent = 'Jira credentials saved locally.';
+    $('tp-error').classList.remove('hidden');
+    $('tp-error').classList.remove('text-red-400');
+  });
 })();
 </script>
 {% endblock %}

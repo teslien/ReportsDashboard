@@ -118,6 +118,28 @@
   .cc-empty { border: 1px dashed #cbd5e1; border-radius: 12px; padding: 22px; background: #ffffff; text-align: center; color: #64748b; }
   .cc-feedback.err { color: #b91c1c; }
   .cc-feedback.ok { color: #0f766e; }
+  .cc-settings-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: #334155;
+    border-radius: 10px;
+    padding: 9px 14px;
+    font-size: 13px;
+    font-weight: 700;
+    transition: all .15s;
+  }
+  .cc-settings-btn:hover { background: #f8fafc; color: #0f172a; }
+  .cc-modal-backdrop { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); display: none; align-items: center; justify-content: center; z-index: 1100; padding: 16px; }
+  .cc-modal-backdrop.open { display: flex; }
+  .cc-modal { width: min(960px, calc(100vw - 24px)); background: #fff; border: 1px solid #e2e8f0; border-radius: 18px; box-shadow: 0 12px 40px rgba(15, 23, 42, 0.24); overflow: hidden; }
+  .cc-modal-head, .cc-modal-actions { padding: 16px 20px; border-bottom: 1px solid #e2e8f0; }
+  .cc-modal-actions { border-bottom: none; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 10px; }
+  .cc-modal-body { padding: 18px 20px; }
+  .cc-modal-close { margin-left: auto; border: none; background: transparent; color: #64748b; font-size: 24px; line-height: 1; cursor: pointer; }
+  .cc-modal-close:hover { color: #0f172a; }
 
   @media (max-width: 700px) {
     .lp-nav-wrap { padding: 0 10px; }
@@ -152,6 +174,9 @@
       <h1 class="text-3xl font-bold text-slate-900 tracking-tight">Customer Closure</h1>
       <p class="text-sm text-slate-500 mt-1">Count how many customer-reported tickets are closed for a selected week-back range or custom dates.</p>
     </div>
+    <button type="button" id="cc-open-settings" class="cc-settings-btn">
+      <i class="fas fa-key"></i><span>Jira Credentials</span>
+    </button>
   </div>
 
   <div class="cc-card p-5 space-y-5">
@@ -253,11 +278,40 @@
     </div>
   </div>
 </div>
+<div id="cc-settings-modal" class="cc-modal-backdrop">
+  <div class="cc-modal" role="dialog" aria-modal="true" aria-labelledby="cc-settings-title">
+    <div class="cc-modal-head flex items-center gap-3">
+      <span id="cc-settings-title" class="text-xl font-bold text-slate-900">Jira Credentials (Local)</span>
+      <button id="cc-settings-close" class="cc-modal-close" aria-label="Close">&times;</button>
+    </div>
+    <div class="cc-modal-body">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 mb-2">Jira Email</label>
+          <input id="cc-setting-email" class="cc-input" type="email" placeholder="you@company.com" />
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 mb-2">Jira API Token</label>
+          <input id="cc-setting-token" class="cc-input" type="password" placeholder="ATATT..." />
+        </div>
+      </div>
+      <p class="text-xs text-slate-500 mt-3">Stored in your browser local storage and reused after reload.</p>
+    </div>
+    <div class="cc-modal-actions">
+      <button id="cc-settings-cancel" class="cc-btn">Cancel</button>
+      <button id="cc-settings-save" class="cc-btn primary">Save Settings</button>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block extra_scripts %}
 <script>
 (() => {
+  const LS_KEYS = {
+    email: "customer_dashboard_jira_email",
+    token: "customer_dashboard_jira_token",
+  };
   const DEFAULT_DONE_STATUSES = [
     "Done",
     "Resolved",
@@ -274,6 +328,38 @@
   const LS_WEEK = "customer_closure_week_back";
 
   const $ = (id) => document.getElementById(id);
+
+  function getStoredJiraSettings() {
+    return {
+      email: localStorage.getItem(LS_KEYS.email) || "",
+      token: localStorage.getItem(LS_KEYS.token) || "",
+    };
+  }
+
+  function saveStoredJiraSettings({ email, token }) {
+    if (email !== undefined) localStorage.setItem(LS_KEYS.email, email || "");
+    if (token !== undefined) localStorage.setItem(LS_KEYS.token, token || "");
+  }
+
+  function openSettingsDialog() {
+    const stored = getStoredJiraSettings();
+    $("cc-setting-email").value = stored.email;
+    $("cc-setting-token").value = stored.token;
+    $("cc-settings-modal").classList.add("open");
+  }
+
+  function closeSettingsDialog() {
+    $("cc-settings-modal").classList.remove("open");
+  }
+
+  function ensureLocalJiraSettings() {
+    const stored = getStoredJiraSettings();
+    if (stored.email && stored.token) return stored;
+    $("cc-feedback").textContent = "Add your Jira email and API token in Jira Credentials first.";
+    $("cc-feedback").className = "cc-feedback cc-muted err";
+    openSettingsDialog();
+    return null;
+  }
 
   function toYMD(d) {
     const y = d.getFullYear();
@@ -333,10 +419,16 @@ ORDER BY created DESC`;
     const start = $("cc-start").value;
     const end = $("cc-end").value;
     if (!start || !end) return;
+    const stored = ensureLocalJiraSettings();
+    if (!stored) return;
     const previous = $("cc-team").value || localStorage.getItem(LS_TEAM) || "";
     const res = await fetch("/api/customer_closure/teams", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "X-Jira-Email": stored.email,
+        "X-Jira-Token": stored.token,
+      },
       credentials: "same-origin",
       body: JSON.stringify({ date_start: start, date_end: end }),
     });
@@ -380,6 +472,8 @@ ORDER BY created DESC`;
     const end = $("cc-end").value;
     const team = $("cc-team").value || "";
     const doneStatuses = normalizeDoneStatusesText();
+    const stored = ensureLocalJiraSettings();
+    if (!stored) return;
     if (!start || !end) {
       $("cc-feedback").textContent = "Select a valid start and end date.";
       $("cc-feedback").className = "cc-feedback cc-muted err";
@@ -393,7 +487,11 @@ ORDER BY created DESC`;
 
     const res = await fetch("/api/customer_closure/data", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "X-Jira-Email": stored.email,
+        "X-Jira-Token": stored.token,
+      },
       credentials: "same-origin",
       body: JSON.stringify({
         date_start: start,
@@ -470,6 +568,17 @@ ORDER BY created DESC`;
   $("cc-end").addEventListener("change", updateJqlPreview);
   $("cc-refresh-teams").addEventListener("click", loadTeams);
   $("cc-run").addEventListener("click", loadData);
+  $("cc-open-settings").addEventListener("click", openSettingsDialog);
+  $("cc-settings-cancel").addEventListener("click", closeSettingsDialog);
+  $("cc-settings-close").addEventListener("click", closeSettingsDialog);
+  $("cc-settings-save").addEventListener("click", () => {
+    const email = ($("cc-setting-email").value || "").trim();
+    const token = ($("cc-setting-token").value || "").trim();
+    saveStoredJiraSettings({ email, token });
+    closeSettingsDialog();
+    $("cc-feedback").textContent = "Jira credentials saved locally.";
+    $("cc-feedback").className = "cc-feedback cc-muted ok";
+  });
   $("cc-reset-statuses").addEventListener("click", () => {
     $("cc-done-statuses").value = DEFAULT_DONE_STATUSES.join(", ");
   });

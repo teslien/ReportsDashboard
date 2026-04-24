@@ -313,6 +313,27 @@ def _get_jira_headers():
         "Content-Type": "application/json"
     }
 
+
+def _get_explicit_request_jira_headers():
+    """Return Jira auth headers only when the request explicitly supplies user credentials."""
+    if not has_request_context():
+        return {"Content-Type": "application/json"}
+
+    req_email = request.headers.get("X-Jira-Email") or request.args.get("jira_email") or request.cookies.get("jira_email")
+    req_token = request.headers.get("X-Jira-Token") or request.args.get("jira_token") or request.cookies.get("jira_token")
+    email = _decode_value(req_email).strip() if req_email else ""
+    token = _decode_value(req_token).strip() if req_token else ""
+
+    if not email or not token:
+        return {"Content-Type": "application/json"}
+
+    auth_str = f"{email}:{token}"
+    auth_b64 = base64.b64encode(auth_str.encode()).decode()
+    return {
+        "Authorization": f"Basic {auth_b64}",
+        "Content-Type": "application/json",
+    }
+
 # Proxies to allow dynamic access per request while keeping existing code working
 PROJECT_KEY = LocalProxy(_get_project_key)
 HEADERS = LocalProxy(_get_jira_headers)
@@ -1632,11 +1653,11 @@ def customer_closure_teams():
     project_key_str = str(PROJECT_KEY).strip()
     if not project_key_str:
         return jsonify({"error": "Missing project key. Save it in Settings first."}), 400
-    if "Authorization" not in dict(HEADERS):
-        return jsonify({"error": "Missing Jira credentials. Save them in Settings first."}), 401
+    headers_dict = _get_explicit_request_jira_headers()
+    if "Authorization" not in headers_dict:
+        return jsonify({"error": "Add Jira email and API token in local settings first."}), 401
 
     jql = _customer_created_range_jql(date_start, (de + timedelta(days=1)).strftime("%Y-%m-%d"))
-    headers_dict = dict(HEADERS)
     params = {
         "jql": jql,
         "maxResults": 300,
@@ -1679,15 +1700,15 @@ def customer_closure_data():
     project_key_str = str(PROJECT_KEY).strip()
     if not project_key_str:
         return jsonify({"error": "Missing project key. Save it in Settings first."}), 400
-    if "Authorization" not in dict(HEADERS):
-        return jsonify({"error": "Missing Jira credentials. Save them in Settings first."}), 401
+    headers_dict = _get_explicit_request_jira_headers()
+    if "Authorization" not in headers_dict:
+        return jsonify({"error": "Add Jira email and API token in local settings first."}), 401
 
     end_exclusive = (de + timedelta(days=1)).strftime("%Y-%m-%d")
     jql = _customer_created_range_jql(date_start, end_exclusive)
     done_status_lookup = {s.strip().lower() for s in done_statuses}
 
     fields = "summary,status,created,resolutiondate,customfield_10001,issuetype"
-    headers_dict = dict(HEADERS)
     all_issues = []
     seen_issue_keys = set()
     start_at = 0
@@ -1797,8 +1818,9 @@ def team_productivity_data():
     project_key_str = str(PROJECT_KEY).strip()
     if not project_key_str:
         return jsonify({"error": "Missing project key. Save it in Settings first."}), 400
-    if "Authorization" not in dict(HEADERS):
-        return jsonify({"error": "Missing Jira credentials. Save them in Settings first."}), 401
+    headers_dict = _get_explicit_request_jira_headers()
+    if "Authorization" not in headers_dict:
+        return jsonify({"error": "Add Jira email and API token in local settings first."}), 401
 
     reported_clause = _reported_by_customer_jql_clause()
     jql = (
@@ -1808,7 +1830,6 @@ def team_productivity_data():
     )
 
     fields = "summary,status,created,resolutiondate,customfield_10001,issuetype"
-    headers_dict = dict(HEADERS)
     all_issues = []
     seen_issue_keys = set()
     start_at = 0
@@ -1946,15 +1967,15 @@ def customer_dashboard_data():
     project_key_str = str(PROJECT_KEY).strip()
     if not project_key_str:
         return jsonify({"error": "Missing project key. Save it in Settings first."}), 400
-    if "Authorization" not in dict(HEADERS):
-        return jsonify({"error": "Missing Jira credentials. Save them in Settings first."}), 401
+    headers_dict = _get_explicit_request_jira_headers()
+    if "Authorization" not in headers_dict:
+        return jsonify({"error": "Add Jira email and API token in local settings first."}), 401
 
     # customfield_10001 is commonly the Team field (team[team]) in Jira.
     fields = "summary,description,status,priority,issuetype,created,labels,customfield_10077,customfield_10001,assignee"
 
     all_issues = []
     seen_issue_keys = set()
-    headers_dict = dict(HEADERS)
     start_at = 0
     next_page_token = None
     page_safety = 0
