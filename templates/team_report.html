@@ -16,7 +16,7 @@
     background: #f8fafc !important;
     color: #0f172a !important;
   }
-  #theme-toggle, .theme-toggle, [data-theme-toggle] { display: none !important; }
+  #theme-toggle-btn, #theme-toggle, .theme-toggle, [data-theme-toggle] { display: none !important; }
 
   /* ── Nav (shared style) ─────────────────────────────────────────── */
   .lp-nav { position:fixed;top:0;left:0;right:0;z-index:1000;background:rgba(255,255,255,.97);backdrop-filter:blur(8px);border-bottom:1px solid #e2e8f0; }
@@ -651,8 +651,12 @@ async function generatePDF() {
 
 // ── Init ───────────────────────────────────────────────────────────────
 (function init() {
+  document.documentElement.setAttribute("data-theme", "light");
+  localStorage.setItem("jira-dash-theme", "light");
   document.documentElement.classList.remove("dark");
   document.body.classList.remove("dark");
+  const themeBtn = document.getElementById("theme-toggle-btn");
+  if (themeBtn) themeBtn.remove();
   const today = new Date().toISOString().slice(0,10);
   const month = new Date(Date.now() - 30*24*60*60*1000).toISOString().slice(0,10);
   if (!document.getElementById("tr-date-from").value) document.getElementById("tr-date-from").value = month;
