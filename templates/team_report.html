@@ -535,15 +535,13 @@ async function generatePDF() {
   // KPI chips on cover
   const teams = Object.keys(_teamMap).sort((a,b) => _teamMap[b].length - _teamMap[a].length);
   const done  = _allRows.filter(r => DONE_STATUSES.has((r.status||"").toLowerCase())).length;
-  const bugs  = _allRows.filter(r => (r.issue_type||"").toLowerCase() === "bug").length;
+  const open  = _allRows.filter(r => OPEN_STATUSES.has((r.status||"").toLowerCase())).length;
   const kpis  = [
     { lbl:"Total Tickets",     val:_allRows.length },
     { lbl:"Completed",         val:done },
-    { lbl:"Open / In Progress",val:_allRows.length - done },
-    { lbl:"Bugs",              val:bugs },
-    { lbl:"Teams",             val:teams.length },
+    { lbl:"Open",              val:open },
   ];
-  const chipW = (W - margin*2 - 8*4) / 5;
+  const chipW = (W - margin*2 - 8*2) / 3;
   kpis.forEach((k, i) => {
     const cx = margin + i*(chipW + 8);
     doc.setFillColor(248,250,252); doc.setDrawColor(226,232,240);
