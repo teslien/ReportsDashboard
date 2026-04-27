@@ -463,12 +463,12 @@
               <div>
                 <span class="inline-block w-2 h-2 rounded-full bg-blue-400 mr-1"></span>
                 <span class="font-medium text-blue-300">Open</span>
-                <span class="text-slate-400"> — Open, To Do, New, Reopened</span>
+                <span class="text-slate-400"> — Open, To Do, New, Reopened, Ready for Dev, Ready for Design</span>
               </div>
               <div>
                 <span class="inline-block w-2 h-2 rounded-full bg-amber-400 mr-1"></span>
                 <span class="font-medium text-amber-300">In Progress</span>
-                <span class="text-slate-400"> — In Development, Ready for Dev, In Review, Ready for Design, and any other active status not in Open or On Hold</span>
+                <span class="text-slate-400"> — In Progress, In Development, In Review, and any other active status not in Open or On Hold</span>
               </div>
               <div>
                 <span class="inline-block w-2 h-2 rounded-full bg-red-400 mr-1"></span>
@@ -2574,7 +2574,8 @@
     const pri = Object.keys(stats.priorityCounts).sort((a, b) => stats.priorityCounts[b] - stats.priorityCounts[a]);
     renderBarChart("cd-priority", pri, pri.map(k => stats.priorityCounts[k]), "#7c3aed");
     // Collapse all statuses into 4 buckets: Open, In Progress, On Hold, Completed
-    const STATUS_OPEN = new Set(['open','to do','new','reopened']);
+    const STATUS_OPEN = new Set(['open','to do','new','reopened','ready for dev','ready for design']);
+    const STATUS_IN_PROGRESS = new Set(['in progress','in development']);
     const STATUS_HOLD = new Set(['on hold','blocked','waiting','pending','parked']);
     const stBuckets = { 'Open': 0, 'In Progress': 0, 'On Hold': 0, 'Completed': 0 };
     Object.entries(stats.statusCounts || {}).forEach(([s, cnt]) => {
@@ -2582,6 +2583,7 @@
         if (TIMELINE_DONE_STATUSES.has(key))       stBuckets['Completed']   += cnt;
         else if (STATUS_HOLD.has(key))             stBuckets['On Hold']     += cnt;
         else if (STATUS_OPEN.has(key))             stBuckets['Open']        += cnt;
+        else if (STATUS_IN_PROGRESS.has(key))      stBuckets['In Progress'] += cnt;
         else                                       stBuckets['In Progress'] += cnt;
     });
     const stLabels = ['Open', 'In Progress', 'On Hold', 'Completed'];
