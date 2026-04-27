@@ -5719,6 +5719,202 @@ def work_report():
     return render_template("work_report.html", project=PROJECT_KEY)
 
 
+@app.route("/team_report")
+def team_report_page():
+    return render_template("team_report.html", project=PROJECT_KEY, show_navbar=False)
+
+
+@app.route("/api/team_report/data", methods=["POST"])
+def team_report_data():
+    """Fetch Jira tickets for an arbitrary JQL query, returning rows with team info."""
+    payload = request.get_json(silent=True) or {}
+    jql = (payload.get("jql") or "").strip()
+    if not jql:
+        return jsonify({"error": "JQL is required"}), 400
+
+    headers_dict = _get_explicit_request_jira_headers()
+    if "Authorization" not in headers_dict:
+        return jsonify({"error": "Add Jira email and API token in local settings first."}), 401
+
+    fields = "summary,status,priority,issuetype,created,updated,assignee,labels,customfield_10001,customfield_10020"
+    _plat_cf = _get_platform_checkboxes_field_id()
+    if _plat_cf:
+        fields += f",{_plat_cf}"
+
+    all_issues = []
+    seen_keys = set()
+    start_at = 0
+    next_page_token = None
+    page_safety = 0
+    while page_safety < 80:
+        page_safety += 1
+        params = {"jql": jql, "maxResults": 100, "fields": fields}
+        if next_page_token:
+            params["nextPageToken"] = next_page_token
+        else:
+            params["startAt"] = start_at
+        jira_res = requests.get(
+            f"{JIRA_DOMAIN}/rest/api/3/search/jql",
+            headers=headers_dict,
+            params=params,
+        )
+        if jira_res.status_code != 200:
+            return jsonify({"error": f"Jira API error: {jira_res.text}"}), jira_res.status_code
+        data = jira_res.json()
+        issues = data.get("issues", [])
+        if not issues:
+            break
+        new_count = 0
+        for issue in issues:
+            key = issue.get("key")
+            if not key or key in seen_keys:
+                continue
+            seen_keys.add(key)
+            all_issues.append(issue)
+            new_count += 1
+        if new_count == 0:
+            break
+        next_page_token = data.get("nextPageToken")
+        if next_page_token:
+            continue
+        if len(issues) < 100:
+            break
+        start_at += 100
+
+    rows = []
+    for issue in all_issues:
+        f = issue.get("fields") or {}
+        status_name = ((f.get("status") or {}).get("name") or "Unknown").strip()
+        priority_name = ((f.get("priority") or {}).get("name") or "Unspecified").strip()
+        issue_type = ((f.get("issuetype") or {}).get("name") or "Task").strip()
+        assignee = (f.get("assignee") or {}).get("displayName") or "Unassigned"
+        created = (f.get("created") or "")[:10]
+        updated = (f.get("updated") or "")[:10]
+        labels = f.get("labels") or []
+        # Team
+        team_raw = f.get("customfield_10001")
+        if isinstance(team_raw, dict):
+            team_name = (team_raw.get("name") or team_raw.get("value") or "").strip()
+        elif isinstance(team_raw, list) and team_raw:
+            first = team_raw[0]
+            team_name = (first.get("name") or first.get("value") or str(first)).strip() if isinstance(first, dict) else str(first).strip()
+        elif team_raw:
+            team_name = str(team_raw).strip()
+        else:
+            team_name = "Unspecified"
+        # Sprints
+        raw_sprints = f.get("customfield_10020") or []
+        sprint_names = []
+        if isinstance(raw_sprints, list):
+            for s in raw_sprints:
+                if isinstance(s, dict):
+                    nm = s.get("name")
+                    if nm:
+                        sprint_names.append(nm)
+                elif isinstance(s, str):
+                    import re as _re
+                    m = _re.search(r"name=([^,\]]+)", s)
+                    if m:
+                        sprint_names.append(m.group(1))
+        # Platform / production
+        _plat_raw = f.get(_plat_cf) if _plat_cf else None
+        is_production = _jira_platform_includes_production(_plat_raw)
+
+        rows.append({
+            "issue_key": issue.get("key"),
+            "summary": f.get("summary") or "",
+            "status": status_name,
+            "priority": priority_name,
+            "issue_type": issue_type,
+            "assignee": assignee,
+            "team_name": team_name or "Unspecified",
+            "sprints": sprint_names,
+            "labels": labels,
+            "created": created,
+            "updated": updated,
+            "is_production": is_production,
+        })
+
+    return jsonify({"rows": rows, "total": len(rows), "jql": jql})
+
+
+@app.route("/api/team_report/ai_summary", methods=["POST"])
+def team_report_ai_summary():
+    """Generate a per-team AI summary using Claude."""
+    payload = request.get_json(silent=True) or {}
+    team_name = str(payload.get("team_name") or "").strip()
+    tickets = payload.get("tickets") or []
+    report_title = str(payload.get("report_title") or "").strip()
+    model = payload.get("model") or "claude-sonnet-4-20250514"
+
+    anthropic_key = (_get_app_config_value("anthropic_api_key") or "").strip()
+    if not anthropic_key:
+        return jsonify({"error": "Anthropic API key not configured."}), 400
+    if not tickets:
+        return jsonify({"error": "No tickets provided."}), 400
+
+    _open_statuses = {"open", "to do", "new", "reopened"}
+    compact_all = [
+        {
+            "key": t.get("issue_key"),
+            "type": t.get("issue_type"),
+            "status": t.get("status"),
+            "priority": t.get("priority"),
+            "summary": str(t.get("summary") or "")[:140],
+            "assignee": t.get("assignee"),
+        }
+        for t in tickets[:100]
+    ]
+    # AI summary should focus on client pain points and avoid open-ticket narration.
+    compact = [t for t in compact_all if str(t.get("status") or "").strip().lower() not in _open_statuses]
+    if not compact:
+        compact = compact_all[:40]
+    tickets_json = json.dumps(compact, ensure_ascii=False)
+    context = f" for the report '{report_title}'" if report_title else ""
+
+    prompt = (
+        f"You are a customer-impact analyst. Below is a JSON list of Jira tickets for the '{team_name}' team{context}.\n"
+        "Write concise bullets ONLY about customer-facing problems, pain points, and unresolved needs.\n"
+        "Rules:\n"
+        "- DO NOT describe internal implementation, team activity, or engineering work.\n"
+        "- DO NOT use future-tense action language (e.g., 'will fix', 'working on', 'we are fixing').\n"
+        "- DO NOT mention ticket workflow/state words like 'open tickets', 'in progress', 'closed'.\n"
+        "- Keep each bullet factual, neutral, and client-impact focused.\n"
+        "Return ONLY a JSON array of 4-8 bullet strings (plain English, no markdown), e.g.:\n"
+        '[\"Payroll export mismatch creates reconciliation delays for client finance teams\"]\n\n'
+        f"Tickets:\n{tickets_json}"
+    )
+
+    try:
+        res = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "Content-Type": "application/json",
+                "x-api-key": anthropic_key,
+                "anthropic-version": "2023-06-01",
+            },
+            json={
+                "model": model,
+                "max_tokens": 800,
+                "messages": [{"role": "user", "content": prompt}],
+            },
+            timeout=60,
+        )
+        if not res.ok:
+            return jsonify({"error": f"Claude HTTP {res.status_code}"}), 502
+        body = res.json()
+        raw = (body.get("content") or [{}])[0].get("text", "").strip()
+        raw = raw.strip("`").strip()
+        if raw.startswith("json"):
+            raw = raw[4:].strip()
+        bullets = json.loads(raw)
+        if not isinstance(bullets, list):
+            bullets = [str(bullets)]
+        return jsonify({"team": team_name, "bullets": bullets})
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
 @app.route("/assignee_work")
 @page_permission_required("assignee_work")
 def assignee_work_page():

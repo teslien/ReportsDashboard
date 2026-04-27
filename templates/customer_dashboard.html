@@ -6,6 +6,7 @@
 {% block extra_head %}
 <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
 <script src="https://cdn.jsdelivr.net/npm/wordcloud@1.2.2/src/wordcloud2.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
   body { background: #f8fafc !important; color: #0f172a !important; }
   body.cd-page #theme-toggle-btn { display: none !important; }
@@ -161,6 +162,14 @@
   @keyframes cd-spin { to { transform: rotate(360deg); } }
   .cd-pack-label { font-size: 12px; fill: #334155; text-anchor: middle; pointer-events: none; font-weight: 600; }
   .cd-pack-value { font-size: 10px; fill: #64748b; text-anchor: middle; pointer-events: none; }
+  .cd-team-sel {
+    height: 28px; padding: 0 20px 0 8px; font-size: 12px; font-weight: 500;
+    border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; color: #334155;
+    appearance: none; outline: none; cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 6px center;
+  }
+  .cd-team-sel:focus { border-color: #a5b4fc; box-shadow: 0 0 0 2px rgba(99,102,241,.15); }
   .cd-insights-table th, .cd-insights-table td { vertical-align: top; }
   .cd-insight-p { font-size: 11px; }
   .cd-insight-p.High { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
@@ -260,6 +269,9 @@
       </a>
       <a href="/customer_closure" class="lp-link">
         <i class="fas fa-circle-check"></i><span>Closure</span>
+      </a>
+      <a href="/team_report" class="lp-link">
+        <i class="fas fa-file-lines"></i><span>Team Report</span>
       </a>
     </div>
   </div>
@@ -529,9 +541,31 @@
   </div>
 
   <div class="cd-card p-4">
-    <div class="flex items-center justify-between mb-3">
-      <h3 class="text-sm font-semibold text-slate-700">Customer Tickets</h3>
-      <div class="text-xs text-slate-500" id="cd-pagination-info">0 results</div>
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+      <div class="flex items-center gap-2 min-w-0">
+        <h3 class="text-sm font-semibold text-slate-700 shrink-0">Customer Tickets</h3>
+        <span id="cd-table-team-badge" class="hidden items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-semibold">
+          <span id="cd-table-team-label">All Teams</span>
+          <span class="text-indigo-400">·</span>
+          <span id="cd-table-team-count" class="tabular-nums">0</span>
+        </span>
+      </div>
+      <div class="flex items-center gap-2 shrink-0">
+        <select id="cd-table-team-filter" class="cd-team-sel">
+          <option value="">All Teams</option>
+        </select>
+        <button id="cd-export-excel" type="button"
+          class="inline-flex items-center gap-1.5 h-7 px-3 text-xs font-semibold rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:border-emerald-300 transition disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Export filtered tickets to Excel" disabled>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <path d="M14 2v6h6"/>
+            <path d="M9 13l2 2 4-4"/>
+          </svg>
+          Excel
+        </button>
+        <div class="text-xs text-slate-500" id="cd-pagination-info">0 results</div>
+      </div>
     </div>
     <div class="overflow-x-auto">
       <table class="min-w-full cd-table">
@@ -745,6 +779,7 @@
     raceInsightReqId: 0,
     raceInsightsCache: {},
     raceInsightsInFlight: {},
+    lastTableRows: [],
   };
   const LS_KEYS = {
     email: "customer_dashboard_jira_email",
@@ -2189,6 +2224,27 @@
     return state.rows.filter(r => (r.customers || []).some(c => String(c).toLowerCase() === selectedCustomer));
   }
 
+  function filteredTableRows(rows) {
+    const sel = (document.getElementById("cd-table-team-filter")?.value || "").trim().toLowerCase();
+    if (!sel) return rows;
+    return rows.filter(r => (r.team_name || "Unspecified").trim().toLowerCase() === sel);
+  }
+
+  function populateTeamTableDropdown(rows) {
+    const sel = document.getElementById("cd-table-team-filter");
+    if (!sel) return;
+    const prev = sel.value;
+    const teams = [...new Set(rows.map(r => (r.team_name || "Unspecified").trim()))].sort();
+    sel.innerHTML = '<option value="">All Teams</option>';
+    teams.forEach(t => {
+      const op = document.createElement("option");
+      op.value = t.toLowerCase();
+      op.textContent = t;
+      if (t.toLowerCase() === prev) op.selected = true;
+      sel.appendChild(op);
+    });
+  }
+
   function buildSummaryForAi() {
     const rows = filteredRows();
     const stats = buildStats(rows);
@@ -2392,7 +2448,83 @@
     return { timeline, priorityCounts, statusCounts, customerCounts, teamCounts, high, launchBlockers };
   }
 
+  function exportTableToExcel() {
+    const rows = state.lastTableRows || [];
+    if (!rows.length) return;
+    if (typeof XLSX === "undefined") {
+      alert("Excel library not loaded yet. Please try again in a moment.");
+      return;
+    }
+
+    const teamSel = document.getElementById("cd-table-team-filter");
+    const customerSel = document.getElementById("cd-customer");
+    const teamLabel = teamSel && teamSel.value ? (teamSel.options[teamSel.selectedIndex]?.text || "") : "All_Teams";
+    const customerLabel = customerSel && customerSel.value ? customerSel.value : "All_Customers";
+
+    const data = rows.map(r => ({
+      "Issue":          r.issue_key || "",
+      "Summary":        r.summary || "",
+      "Priority":       r.priority || "",
+      "Status":         r.status || "",
+      "Customers":      (r.customers || []).join(", "),
+      "Team":           r.team_name || "Unspecified",
+      "Launch Blocker": r.launch_blocker ? "Yes" : "No",
+      "Created":        r.created_date || "",
+      "Assignee":       r.assignee_name || "Unassigned",
+      "Issue Type":     r.issue_type || "",
+      "Labels":         (r.labels || []).join(", "),
+      "URL":            `${JIRA_BASE}/browse/${r.issue_key || ""}`,
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(data);
+
+    // Auto-size columns based on content
+    const cols = Object.keys(data[0] || {});
+    ws["!cols"] = cols.map(col => {
+      let max = col.length;
+      data.forEach(row => {
+        const v = String(row[col] ?? "");
+        if (v.length > max) max = v.length;
+      });
+      return { wch: Math.min(60, Math.max(10, max + 2)) };
+    });
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Tickets");
+
+    const ts = new Date().toISOString().slice(0,10);
+    const safe = (s) => String(s).replace(/[^a-z0-9]+/gi, "_").replace(/^_+|_+$/g, "").slice(0, 40) || "all";
+    const filename = `customer_tickets_${safe(customerLabel)}_${safe(teamLabel)}_${ts}.xlsx`;
+    XLSX.writeFile(wb, filename);
+  }
+
   function updateTable(rows) {
+    populateTeamTableDropdown(rows);
+    rows = filteredTableRows(rows);
+
+    // Update team badge
+    const teamSel    = document.getElementById("cd-table-team-filter");
+    const teamBadge  = document.getElementById("cd-table-team-badge");
+    const teamLabel  = document.getElementById("cd-table-team-label");
+    const teamCount  = document.getElementById("cd-table-team-count");
+    const selTeam    = teamSel ? teamSel.options[teamSel.selectedIndex]?.text : "";
+    if (teamBadge) {
+      if (teamSel && teamSel.value) {
+        teamBadge.classList.remove("hidden");
+        teamBadge.classList.add("inline-flex");
+        if (teamLabel) teamLabel.textContent = selTeam;
+        if (teamCount) teamCount.textContent = rows.length + (rows.length === 1 ? " ticket" : " tickets");
+      } else {
+        teamBadge.classList.add("hidden");
+        teamBadge.classList.remove("inline-flex");
+      }
+    }
+
+    // Cache rows currently shown (after team filter) for Excel export
+    state.lastTableRows = rows;
+    const exportBtn = document.getElementById("cd-export-excel");
+    if (exportBtn) exportBtn.disabled = rows.length === 0;
+
     const body = document.getElementById("cd-table-body");
     const info = document.getElementById("cd-pagination-info");
     const total = rows.length;
@@ -2644,8 +2776,13 @@
       state.page = 1;
       updateDashboard();
     });
-    document.getElementById("cd-prev").addEventListener("click", () => { if (state.page > 1) { state.page -= 1; updateDashboard(); } });
-    document.getElementById("cd-next").addEventListener("click", () => { if (state.page < state.totalPages) { state.page += 1; updateDashboard(); } });
+    document.getElementById("cd-export-excel").addEventListener("click", exportTableToExcel);
+    document.getElementById("cd-table-team-filter").addEventListener("change", () => {
+      state.page = 1;
+      updateTable(filteredRows());
+    });
+    document.getElementById("cd-prev").addEventListener("click", () => { if (state.page > 1) { state.page -= 1; updateTable(filteredRows()); } });
+    document.getElementById("cd-next").addEventListener("click", () => { if (state.page < state.totalPages) { state.page += 1; updateTable(filteredRows()); } });
     document.getElementById("cd-add-jql").addEventListener("click", () => openJqlDialog("new"));
     document.getElementById("cd-saved-jql").addEventListener("change", (e) => {
       const selectedId = e.target.value || "";

@@ -1,0 +1,662 @@
+{% extends "base.html" %}
+{% block title %}Team Report{% endblock %}
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+  * { box-sizing: border-box; }
+  html, body {
+    font-family: 'Inter', sans-serif;
+    background: #f8fafc;
+    color: #0f172a;
+    color-scheme: light;
+  }
+  .dark body {
+    background: #f8fafc !important;
+    color: #0f172a !important;
+  }
+  #theme-toggle, .theme-toggle, [data-theme-toggle] { display: none !important; }
+
+  /* ── Nav (shared style) ─────────────────────────────────────────── */
+  .lp-nav { position:fixed;top:0;left:0;right:0;z-index:1000;background:rgba(255,255,255,.97);backdrop-filter:blur(8px);border-bottom:1px solid #e2e8f0; }
+  .lp-nav-wrap { width:100%;height:58px;padding:0 24px;display:flex;align-items:center;justify-content:space-between;gap:12px; }
+  .lp-brand { display:inline-flex;align-items:center;text-decoration:none;line-height:0; }
+  .lp-brand-logo { height:28px;width:auto;display:block; }
+  .lp-menu { display:flex;align-items:stretch;gap:0;height:58px; }
+  .lp-link { position:relative;display:inline-flex;align-items:center;gap:7px;padding:0 16px;color:#64748b;text-decoration:none;font-size:13px;font-weight:600;transition:color .18s;white-space:nowrap; }
+  .lp-link::after { content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:#2563eb;border-radius:2px 2px 0 0;transform:scaleX(0);transform-origin:center;transition:transform .22s cubic-bezier(.4,0,.2,1); }
+  .lp-link:hover { color:#1e40af; }
+  .lp-link:hover::after { transform:scaleX(1); }
+  .lp-link.active { color:#1d4ed8;font-weight:700; }
+  .lp-link.active::after { transform:scaleX(1); }
+  @media(max-width:900px){
+    .tr-wrap { padding: 0 14px; }
+    .tr-card { padding: 16px; }
+  }
+  @media(max-width:700px){ .lp-nav-wrap{padding:0 12px;} .lp-link{padding:0 12px;} .lp-link span{display:none;} }
+
+  /* ── Layout ─────────────────────────────────────────────────────── */
+  .tr-wrap { max-width: 1200px; margin: 74px auto 48px; padding: 0 20px; overflow-x: hidden; }
+
+  /* ── Card ───────────────────────────────────────────────────────── */
+  .tr-card { background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:20px 24px;margin-bottom:20px; box-shadow:0 1px 2px rgba(15,23,42,.03); }
+
+  /* ── Filter bar ─────────────────────────────────────────────────── */
+  .tr-label { font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#94a3b8;margin-bottom:4px; }
+  .tr-input { width:100%;min-width:0;border:1px solid #e2e8f0;border-radius:10px;padding:8px 12px;font-size:13px;color:#0f172a;background:#f8fafc;outline:none;transition:border .15s; }
+  .tr-input:focus { border-color:#93c5fd;background:#fff; }
+  textarea.tr-input { min-height:72px;resize:vertical; }
+  .tr-btn { display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border-radius:10px;font-size:13px;font-weight:600;border:none;cursor:pointer;transition:all .15s; }
+  .tr-btn-primary { background:#4f46e5;color:#fff; }
+  .tr-btn-primary:hover { background:#4338ca; }
+  .tr-btn-primary:disabled { opacity:.5;cursor:not-allowed; }
+  .tr-btn-outline { background:#fff;color:#334155;border:1px solid #e2e8f0; }
+  .tr-btn-outline:hover { background:#f1f5f9; }
+  .tr-btn-sm { padding:6px 14px;font-size:12px;border-radius:8px; }
+
+  /* ── Credentials modal ──────────────────────────────────────────── */
+  .tr-modal-bg { position:fixed;inset:0;background:rgba(15,23,42,.4);z-index:900;display:none;align-items:center;justify-content:center; }
+  .tr-modal-bg.open { display:flex; }
+  .tr-modal { background:#fff;border-radius:16px;padding:28px;width:420px;max-width:96vw;box-shadow:0 20px 60px rgba(15,23,42,.2); }
+  .tr-modal h3 { font-size:16px;font-weight:700;color:#0f172a;margin:0 0 16px; }
+
+  /* ── Status badge ───────────────────────────────────────────────── */
+  .tr-status-pill { display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600; }
+  .tr-status-done  { background:#dcfce7;color:#166534; }
+  .tr-status-open  { background:#dbeafe;color:#1e40af; }
+  .tr-status-hold  { background:#fee2e2;color:#991b1b; }
+  .tr-status-prog  { background:#fef3c7;color:#92400e; }
+
+  /* ── KPI chips ──────────────────────────────────────────────────── */
+  .tr-kpi-row { display:flex;flex-wrap:wrap;gap:10px;margin-bottom:20px; }
+  .tr-kpi { background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:10px 18px;text-align:center;min-width:100px; }
+  .tr-kpi-val { font-size:24px;font-weight:800;color:#0f172a; }
+  .tr-kpi-lbl { font-size:11px;font-weight:600;color:#94a3b8;margin-top:1px;text-transform:uppercase;letter-spacing:.05em; }
+
+  /* ── Team section ───────────────────────────────────────────────── */
+  .tr-team-section { margin-bottom:28px; }
+  .tr-team-header { display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px; }
+  .tr-team-name { font-size:17px;font-weight:800;color:#1e293b; }
+  .tr-team-count { font-size:12px;font-weight:600;color:#64748b;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:999px;padding:2px 10px; }
+  .tr-team-metrics { display:flex; flex-wrap:wrap; gap:6px; }
+  .tr-metric-chip { font-size:11px; font-weight:700; border-radius:999px; padding:3px 9px; border:1px solid #e2e8f0; background:#f8fafc; color:#334155; }
+  .tr-metric-chip.open { background:#dbeafe; border-color:#bfdbfe; color:#1e40af; }
+  .tr-metric-chip.done { background:#dcfce7; border-color:#bbf7d0; color:#166534; }
+
+  /* ── AI summary box ─────────────────────────────────────────────── */
+  .tr-ai-box { background: linear-gradient(135deg,#f0f4ff,#eef2ff);border:1px solid #c7d2fe;border-radius:12px;padding:14px 18px;margin-bottom:14px; }
+  .tr-ai-box-head { display:flex;align-items:center;gap:8px;margin-bottom:8px; }
+  .tr-ai-loading { display:flex;align-items:center;gap:6px;font-size:12px;color:#6366f1; }
+  @keyframes tr-spin { to { transform:rotate(360deg); } }
+  .tr-spin { width:14px;height:14px;border:2px solid #c7d2fe;border-top-color:#4f46e5;border-radius:50%;animation:tr-spin .7s linear infinite; }
+  .tr-ai-bullets { margin:0;padding-left:18px;list-style:disc; }
+  .tr-ai-bullets li { font-size:13px;color:#312e81;margin-bottom:4px;line-height:1.5; }
+  .tr-ai-err { font-size:12px;color:#b91c1c; }
+
+  /* ── Table ──────────────────────────────────────────────────────── */
+  .tr-table-wrap { overflow-x:auto;border-radius:10px;border:1px solid #e2e8f0; }
+  .tr-table { width:100%;border-collapse:collapse;font-size:12px; }
+  .tr-table th { background:#f8fafc;padding:9px 12px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#64748b;border-bottom:1px solid #e2e8f0;white-space:nowrap; }
+  .tr-table td { padding:8px 12px;border-bottom:1px solid #f1f5f9;vertical-align:top;color:#1e293b; }
+  .tr-table tr:last-child td { border-bottom:none; }
+  .tr-table tr:hover td { background:#f8fafc; }
+  .tr-key-link { color:#2563eb;font-weight:700;text-decoration:none;font-family:monospace;font-size:12px; }
+  .tr-key-link:hover { text-decoration:underline; }
+  .tr-type-pill { display:inline-block;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:700;background:#e0e7ff;color:#3730a3; }
+
+  /* ── Empty / error ──────────────────────────────────────────────── */
+  .tr-empty { padding:48px;text-align:center;color:#94a3b8;font-size:14px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<nav class="lp-nav">
+  <div class="lp-nav-wrap">
+    <a href="/customer_dashboard" class="lp-brand">
+      <img src="/static/lumber-logo.png" alt="LUMBER" class="lp-brand-logo" />
+    </a>
+    <div class="lp-menu">
+      <a href="/customer_dashboard" class="lp-link"><i class="fas fa-users"></i><span>Dashboard</span></a>
+      <a href="/team_productivity" class="lp-link"><i class="fas fa-bolt"></i><span>Productivity</span></a>
+      <a href="/customer_closure" class="lp-link"><i class="fas fa-circle-check"></i><span>Closure</span></a>
+      <a href="/team_report" class="lp-link active"><i class="fas fa-file-lines"></i><span>Team Report</span></a>
+    </div>
+  </div>
+</nav>
+
+<div class="tr-wrap">
+  <!-- Header -->
+  <div class="flex items-start justify-between flex-wrap gap-4 mb-6">
+    <div>
+      <h1 class="text-2xl font-bold text-slate-900 tracking-tight">Team Report</h1>
+      <p class="text-sm text-slate-400 mt-0.5">Run any JQL query and get team-wise breakdown with AI summaries and PDF export.</p>
+    </div>
+    <div class="text-xs text-slate-400">Uses your existing Jira credentials</div>
+  </div>
+
+  <!-- Filter card -->
+  <div class="tr-card">
+    <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_300px] gap-4 mb-4">
+      <div>
+        <p class="tr-label">Report Title</p>
+        <input id="tr-title" type="text" class="tr-input" placeholder="e.g. Q2 Team Status Report" />
+      </div>
+      <div class="min-w-0">
+        <p class="tr-label">Date range (label only)</p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <input id="tr-date-from" type="date" class="tr-input" />
+          <input id="tr-date-to" type="date" class="tr-input" />
+        </div>
+      </div>
+    </div>
+    <div class="mb-4">
+      <p class="tr-label">JQL Query</p>
+      <textarea id="tr-jql" class="tr-input font-mono" placeholder='project = "TIM" AND created >= "2026-01-01" ORDER BY team ASC'></textarea>
+    </div>
+    <div class="flex flex-wrap items-center gap-3">
+      <button id="tr-load-btn" class="tr-btn tr-btn-primary" onclick="loadReport()">
+        <i class="fas fa-magnifying-glass text-xs"></i> Load Tickets
+      </button>
+      <button id="tr-ai-btn" class="tr-btn tr-btn-outline" style="display:none" onclick="generateAllAI()">
+        <span class="tr-ai-box-head" style="margin:0;gap:6px;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style="flex-shrink:0">
+            <path d="M12 2.5v2.3" stroke="#4f46e5" stroke-width="1.6" stroke-linecap="round"/>
+            <circle cx="12" cy="2" r="1.2" fill="#818cf8"/>
+            <rect x="4.2" y="6.2" width="15.6" height="13.6" rx="4.2" fill="#eef2ff" stroke="#a5b4fc" stroke-width="1"/>
+            <circle cx="9.2" cy="11.6" r="1.35" fill="#3730a3"/>
+            <circle cx="14.8" cy="11.6" r="1.35" fill="#3730a3"/>
+            <rect x="8.2" y="15.1" width="7.6" height="1.7" rx="0.85" fill="#6366f1"/>
+          </svg>
+          Generate AI Summaries
+        </span>
+      </button>
+      <button id="tr-pdf-btn" class="tr-btn tr-btn-outline" style="display:none" onclick="generatePDF()">
+        <i class="fas fa-file-pdf text-xs text-red-500"></i> Export PDF
+      </button>
+      <span id="tr-status" class="text-xs text-slate-400"></span>
+    </div>
+  </div>
+
+  <!-- KPI row -->
+  <div id="tr-kpi-row" class="tr-kpi-row" style="display:none"></div>
+
+  <!-- Results -->
+  <div id="tr-results">
+    <div class="tr-card tr-empty">Enter a JQL query above and click <strong>Load Tickets</strong>.</div>
+  </div>
+</div>
+
+<script>
+const JIRA_BASE = "https://lumberfi.atlassian.net";
+const LS = {
+  email: "customer_dashboard_jira_email",
+  token: "customer_dashboard_jira_token",
+  jql: "tr_jql",
+  title: "tr_title",
+  from: "tr_date_from",
+  to: "tr_date_to",
+};
+
+const DONE_STATUSES = new Set([
+  "done","resolved","closed","ready for qa","deployed","ready for staging",
+  "ready for internal demo","not a bug","unable to reproduce","staged","qa in progress",
+]);
+const OPEN_STATUSES = new Set(["open", "to do", "new", "reopened"]);
+const HOLD_STATUSES = new Set(["on hold","blocked","waiting","pending","parked"]);
+
+// ── Persist inputs ─────────────────────────────────────────────────────
+["tr-jql","tr-title","tr-date-from","tr-date-to"].forEach(id => {
+  const el = document.getElementById(id), key = LS[id.replace("tr-","").replace("-","")];
+  if (key && localStorage.getItem(key)) el.value = localStorage.getItem(key);
+  el.addEventListener("input", () => { if (key) localStorage.setItem(key, el.value); });
+});
+
+function setStatus(msg, cls="text-slate-400") {
+  const el = document.getElementById("tr-status");
+  el.textContent = msg;
+  el.className = `text-xs ${cls}`;
+}
+
+// ── State ──────────────────────────────────────────────────────────────
+let _allRows = [];
+let _teamMap = {};          // teamName → [rows]
+let _aiResults = {};        // teamName → bullets[]
+
+function statusClass(s) {
+  const k = (s || "").toLowerCase();
+  if (DONE_STATUSES.has(k)) return "tr-status-done";
+  if (HOLD_STATUSES.has(k)) return "tr-status-hold";
+  if (OPEN_STATUSES.has(k)) return "tr-status-open";
+  return "tr-status-prog";
+}
+
+function sortRowsOpenFirst(rows) {
+  const bucket = (status) => {
+    const k = String(status || "").trim().toLowerCase();
+    if (OPEN_STATUSES.has(k)) return 0;  // must be on top
+    if (HOLD_STATUSES.has(k)) return 1;
+    if (!DONE_STATUSES.has(k)) return 2; // in-progress/other active
+    return 3;                            // done last
+  };
+  return [...rows].sort((a, b) => {
+    const diff = bucket(a.status) - bucket(b.status);
+    if (diff !== 0) return diff;
+    const ad = String(a.created || "");
+    const bd = String(b.created || "");
+    return bd.localeCompare(ad);
+  });
+}
+
+function teamCounts(rows) {
+  const total = rows.length;
+  const open = rows.filter(r => OPEN_STATUSES.has(String(r.status || "").trim().toLowerCase())).length;
+  const completed = rows.filter(r => DONE_STATUSES.has(String(r.status || "").trim().toLowerCase())).length;
+  return { total, open, completed };
+}
+
+function escH(v) {
+  return String(v || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+// ── Load ───────────────────────────────────────────────────────────────
+async function loadReport() {
+  const jql = document.getElementById("tr-jql").value.trim();
+  if (!jql) { setStatus("Please enter a JQL query.", "text-red-500"); return; }
+
+  const email = localStorage.getItem(LS.email) || "";
+  const token = localStorage.getItem(LS.token) || "";
+  if (!email || !token) {
+    setStatus("Jira credentials not found. Save them once in Customer Dashboard or Settings.", "text-red-500");
+    return;
+  }
+
+  setStatus("Fetching tickets from Jira…", "text-indigo-500");
+  document.getElementById("tr-load-btn").disabled = true;
+
+  try {
+    const res = await fetch("/api/team_report/data", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Jira-Email": email,
+        "X-Jira-Token": token,
+      },
+      body: JSON.stringify({ jql }),
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || "API error");
+
+    _allRows = data.rows || [];
+    _aiResults = {};
+
+    // Group by team
+    _teamMap = {};
+    for (const row of _allRows) {
+      const t = row.team_name || "Unspecified";
+      if (!_teamMap[t]) _teamMap[t] = [];
+      _teamMap[t].push(row);
+    }
+
+    // Sort teams by ticket count desc
+    const teams = Object.keys(_teamMap).sort((a,b) => _teamMap[b].length - _teamMap[a].length);
+
+    setStatus(`${_allRows.length} tickets across ${teams.length} teams.`);
+    renderKPIs(teams);
+    renderTeamSections(teams);
+
+    document.getElementById("tr-ai-btn").style.display = "inline-flex";
+    document.getElementById("tr-pdf-btn").style.display = "inline-flex";
+  } catch(e) {
+    setStatus("Error: " + e.message, "text-red-500");
+    document.getElementById("tr-results").innerHTML = `<div class="tr-card tr-empty text-red-400">${escH(e.message)}</div>`;
+  } finally {
+    document.getElementById("tr-load-btn").disabled = false;
+  }
+}
+
+function renderKPIs(teams) {
+  const total = _allRows.length;
+  const done  = _allRows.filter(r => DONE_STATUSES.has((r.status||"").toLowerCase())).length;
+  const bugs  = _allRows.filter(r => (r.issue_type||"").toLowerCase() === "bug").length;
+  const prod  = _allRows.filter(r => r.is_production).length;
+  const row = document.getElementById("tr-kpi-row");
+  row.style.display = "flex";
+  row.innerHTML = [
+    { val: total,        lbl: "Total Tickets" },
+    { val: done,         lbl: "Completed" },
+    { val: total - done, lbl: "Open / In Progress" },
+    { val: bugs,         lbl: "Bugs" },
+    { val: prod,         lbl: "Production" },
+    { val: teams.length, lbl: "Teams" },
+  ].map(k => `
+    <div class="tr-kpi">
+      <div class="tr-kpi-val">${k.val}</div>
+      <div class="tr-kpi-lbl">${k.lbl}</div>
+    </div>
+  `).join("");
+}
+
+function renderTeamSections(teams) {
+  const container = document.getElementById("tr-results");
+  container.innerHTML = teams.map(team => {
+    const rows = sortRowsOpenFirst(_teamMap[team] || []);
+    const counts = teamCounts(rows);
+    const tid = "team-" + team.replace(/[^a-z0-9]/gi, "_");
+    return `
+      <div class="tr-card tr-team-section" id="${escH(tid)}">
+        <div class="tr-team-header">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="tr-team-name">${escH(team)}</span>
+            <span class="tr-team-count">${counts.total} ticket${counts.total===1?"":"s"}</span>
+            <div class="tr-team-metrics">
+              <span class="tr-metric-chip">Total: ${counts.total}</span>
+              <span class="tr-metric-chip open">Open: ${counts.open}</span>
+              <span class="tr-metric-chip done">Completed: ${counts.completed}</span>
+            </div>
+          </div>
+          <button class="tr-btn tr-btn-outline tr-btn-sm" onclick="generateTeamAI(${JSON.stringify(team)})">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" style="flex-shrink:0">
+              <path d="M12 2.5v2.3" stroke="#4f46e5" stroke-width="1.6" stroke-linecap="round"/>
+              <circle cx="12" cy="2" r="1.2" fill="#818cf8"/>
+              <rect x="4.2" y="6.2" width="15.6" height="13.6" rx="4.2" fill="#eef2ff" stroke="#a5b4fc" stroke-width="1"/>
+              <circle cx="9.2" cy="11.6" r="1.35" fill="#3730a3"/>
+              <circle cx="14.8" cy="11.6" r="1.35" fill="#3730a3"/>
+              <rect x="8.2" y="15.1" width="7.6" height="1.7" rx="0.85" fill="#6366f1"/>
+            </svg>
+            Summarize
+          </button>
+        </div>
+
+        <!-- AI summary area -->
+        <div id="ai-${escH(tid)}" class="tr-ai-box" style="display:none">
+          <div class="tr-ai-box-head">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <path d="M12 2.5v2.3" stroke="#4f46e5" stroke-width="1.6" stroke-linecap="round"/>
+              <circle cx="12" cy="2" r="1.2" fill="#818cf8"/>
+              <rect x="4.2" y="6.2" width="15.6" height="13.6" rx="4.2" fill="#eef2ff" stroke="#a5b4fc" stroke-width="1"/>
+              <circle cx="9.2" cy="11.6" r="1.35" fill="#3730a3"/>
+              <circle cx="14.8" cy="11.6" r="1.35" fill="#3730a3"/>
+              <rect x="8.2" y="15.1" width="7.6" height="1.7" rx="0.85" fill="#6366f1"/>
+            </svg>
+            <span class="text-xs font-semibold text-indigo-700">AI Summary — ${escH(team)}</span>
+            <span class="text-xs text-indigo-400 ml-auto">Powered by Claude</span>
+          </div>
+          <div id="ai-body-${escH(tid)}">
+            <div class="tr-ai-loading"><div class="tr-spin"></div>Generating summary…</div>
+          </div>
+        </div>
+
+        <!-- Table -->
+        <div class="tr-table-wrap">
+          <table class="tr-table">
+            <thead>
+              <tr>
+                <th>Issue</th>
+                <th>Summary</th>
+                <th>Type</th>
+                <th>Status</th>
+                <th>Priority</th>
+                <th>Assignee</th>
+                <th>Created</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows.map(r => `
+                <tr>
+                  <td><a class="tr-key-link" href="${JIRA_BASE}/browse/${escH(r.issue_key)}" target="_blank" rel="noopener">${escH(r.issue_key)}</a></td>
+                  <td style="max-width:340px">${escH(r.summary)}</td>
+                  <td><span class="tr-type-pill">${escH(r.issue_type)}</span></td>
+                  <td><span class="tr-status-pill ${statusClass(r.status)}">${escH(r.status)}</span></td>
+                  <td>${escH(r.priority)}</td>
+                  <td>${escH(r.assignee)}</td>
+                  <td class="whitespace-nowrap">${escH(r.created)}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+// ── AI ─────────────────────────────────────────────────────────────────
+async function generateTeamAI(teamName) {
+  const tid = "team-" + teamName.replace(/[^a-z0-9]/gi, "_");
+  const aiBox  = document.getElementById("ai-" + tid);
+  const aiBody = document.getElementById("ai-body-" + tid);
+  if (!aiBox || !aiBody) return;
+
+  aiBox.style.display = "block";
+  aiBody.innerHTML = `<div class="tr-ai-loading"><div class="tr-spin"></div>Generating summary…</div>`;
+
+  const email = localStorage.getItem(LS.email) || "";
+  const token = localStorage.getItem(LS.token) || "";
+  const title = document.getElementById("tr-title").value.trim();
+
+  try {
+    const res = await fetch("/api/team_report/ai_summary", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Jira-Email": email,
+        "X-Jira-Token": token,
+      },
+      body: JSON.stringify({
+        team_name: teamName,
+        tickets: _teamMap[teamName] || [],
+        report_title: title,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || "API error");
+    _aiResults[teamName] = data.bullets || [];
+    aiBody.innerHTML = `<ul class="tr-ai-bullets">${(_aiResults[teamName]).map(b => `<li>${escH(b)}</li>`).join("")}</ul>`;
+  } catch(e) {
+    aiBody.innerHTML = `<span class="tr-ai-err">Error: ${escH(e.message)}</span>`;
+  }
+}
+
+async function generateAllAI() {
+  const teams = Object.keys(_teamMap).sort((a,b) => _teamMap[b].length - _teamMap[a].length);
+  setStatus(`Generating AI summaries for ${teams.length} teams…`, "text-indigo-500");
+  for (const team of teams) {
+    if (!_aiResults[team]) await generateTeamAI(team);
+  }
+  setStatus("All AI summaries generated.", "text-green-600");
+}
+
+// ── PDF ────────────────────────────────────────────────────────────────
+async function generatePDF() {
+  if (!_allRows.length) { setStatus("No data to export.", "text-red-500"); return; }
+  setStatus("Building PDF…", "text-indigo-500");
+
+  const { jsPDF } = window.jspdf;
+  // Use landscape so the team table fits comfortably on each page.
+  const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "landscape" });
+  const W = doc.internal.pageSize.getWidth();
+  const H = doc.internal.pageSize.getHeight();
+  const margin = 14;
+
+  const title  = document.getElementById("tr-title").value.trim() || "Team Report";
+  const dFrom  = document.getElementById("tr-date-from").value;
+  const dTo    = document.getElementById("tr-date-to").value;
+  const fmtDate = d => {
+    if (!d) return "";
+    const [y,m,dy] = d.split("-");
+    return `${parseInt(dy)} ${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][parseInt(m)-1]} ${y}`;
+  };
+
+  // ── Load logo ──────────────────────────────────────────────────────
+  let logoDataUrl = null;
+  try {
+    const img = new Image();
+    await new Promise(resolve => {
+      img.onload = resolve; img.onerror = resolve;
+      img.src = "/static/lumber-logo.png";
+    });
+    const c = document.createElement("canvas");
+    c.width = img.naturalWidth; c.height = img.naturalHeight;
+    c.getContext("2d").drawImage(img, 0, 0);
+    logoDataUrl = c.toDataURL("image/png");
+  } catch(_) {}
+
+  // ── Page header helper ─────────────────────────────────────────────
+  let pageNum = 0;
+  function addPageHeader() {
+    pageNum++;
+    doc.setFillColor(255,255,255);
+    doc.rect(0,0,W,14,"F");
+    if (logoDataUrl) {
+      try { doc.addImage(logoDataUrl,"PNG",margin,2,22,8); } catch(_) {}
+    }
+    doc.setFontSize(7); doc.setTextColor(148,163,184);
+    doc.text(title, W - margin, 7, { align:"right" });
+    doc.text(`Page ${pageNum}`, W - margin, 11, { align:"right" });
+    doc.setDrawColor(226,232,240);
+    doc.line(margin, 14, W - margin, 14);
+  }
+
+  // ── Cover page ─────────────────────────────────────────────────────
+  addPageHeader();
+  let y = 30;
+  doc.setFontSize(22); doc.setTextColor(15,23,42); doc.setFont("helvetica","bold");
+  doc.text(title, margin, y); y += 10;
+  if (dFrom || dTo) {
+    doc.setFontSize(11); doc.setFont("helvetica","normal"); doc.setTextColor(100,116,139);
+    const range = dFrom && dTo ? `${fmtDate(dFrom)} — ${fmtDate(dTo)}` : (fmtDate(dFrom) || fmtDate(dTo));
+    doc.text(range, margin, y); y += 8;
+  }
+  doc.setFontSize(10); doc.setTextColor(100,116,139); doc.setFont("helvetica","normal");
+  doc.text(`Generated: ${new Date().toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"})}`, margin, y);
+  y += 16;
+
+  // KPI chips on cover
+  const teams = Object.keys(_teamMap).sort((a,b) => _teamMap[b].length - _teamMap[a].length);
+  const done  = _allRows.filter(r => DONE_STATUSES.has((r.status||"").toLowerCase())).length;
+  const bugs  = _allRows.filter(r => (r.issue_type||"").toLowerCase() === "bug").length;
+  const kpis  = [
+    { lbl:"Total Tickets",     val:_allRows.length },
+    { lbl:"Completed",         val:done },
+    { lbl:"Open / In Progress",val:_allRows.length - done },
+    { lbl:"Bugs",              val:bugs },
+    { lbl:"Teams",             val:teams.length },
+  ];
+  const chipW = (W - margin*2 - 8*4) / 5;
+  kpis.forEach((k, i) => {
+    const cx = margin + i*(chipW + 8);
+    doc.setFillColor(248,250,252); doc.setDrawColor(226,232,240);
+    doc.roundedRect(cx, y, chipW, 22, 3, 3, "FD");
+    doc.setFontSize(16); doc.setFont("helvetica","bold"); doc.setTextColor(15,23,42);
+    doc.text(String(k.val), cx + chipW/2, y + 11, { align:"center" });
+    doc.setFontSize(7); doc.setFont("helvetica","normal"); doc.setTextColor(100,116,139);
+    doc.text(k.lbl, cx + chipW/2, y + 18, { align:"center" });
+  });
+  y += 32;
+
+  // Team summary table on cover
+  doc.setFontSize(11); doc.setFont("helvetica","bold"); doc.setTextColor(15,23,42);
+  doc.text("Teams Overview", margin, y); y += 6;
+  doc.autoTable({
+    startY: y,
+    margin: { left: margin, right: margin },
+    head: [["Team","Tickets","Completed","Open","Bugs"]],
+    body: teams.map(t => {
+      const rows = _teamMap[t];
+      const tdone = rows.filter(r => DONE_STATUSES.has((r.status||"").toLowerCase())).length;
+      const tbugs = rows.filter(r => (r.issue_type||"").toLowerCase() === "bug").length;
+      return [t, rows.length, tdone, rows.length-tdone, tbugs];
+    }),
+    styles: { fontSize:9, cellPadding:3 },
+    headStyles: { fillColor:[79,70,229], textColor:255, fontStyle:"bold", fontSize:8 },
+    alternateRowStyles: { fillColor:[248,250,252] },
+    columnStyles: { 0:{cellWidth:70}, 1:{halign:"center"}, 2:{halign:"center"}, 3:{halign:"center"}, 4:{halign:"center"} },
+  });
+
+  // ── Per-team pages ─────────────────────────────────────────────────
+  for (const team of teams) {
+    doc.addPage();
+    addPageHeader();
+    y = 22;
+    const teamRows = sortRowsOpenFirst(_teamMap[team] || []);
+    const counts = teamCounts(teamRows);
+
+    // Team heading bar
+    doc.setFillColor(238,242,255);
+    doc.roundedRect(margin, y, W - margin*2, 16, 3, 3, "F");
+    doc.setFontSize(13); doc.setFont("helvetica","bold"); doc.setTextColor(49,46,129);
+    doc.text(team, margin + 5, y + 8);
+    doc.setFontSize(8.5); doc.setFont("helvetica","bold"); doc.setTextColor(71,85,105);
+    const metricText = `Total: ${counts.total}    Open: ${counts.open}    Completed: ${counts.completed}`;
+    doc.text(metricText, W - margin - 5, y + 8, { align:"right" });
+    y += 22;
+
+    // AI summary
+    const bullets = _aiResults[team];
+    if (bullets && bullets.length) {
+      doc.setFillColor(240,244,255);
+      const boxH = 8 + bullets.length * 6 + 4;
+      doc.roundedRect(margin, y, W - margin*2, boxH, 3, 3, "F");
+      doc.setFontSize(8); doc.setFont("helvetica","bold"); doc.setTextColor(79,70,229);
+      doc.text("AI Summary — Powered by Claude", margin + 5, y + 6);
+      doc.setFont("helvetica","normal"); doc.setTextColor(49,46,129);
+      bullets.forEach((b, i) => {
+        doc.text(`• ${b}`, margin + 7, y + 12 + i * 6, { maxWidth: W - margin*2 - 14 });
+      });
+      y += boxH + 6;
+    }
+
+    // Table
+    doc.autoTable({
+      startY: y,
+      margin: { left: margin, right: margin },
+      head: [["Issue","Summary","Type","Status","Priority","Assignee","Created"]],
+      body: teamRows.map(r => [
+        r.issue_key,
+        (r.summary || "").slice(0, 72),
+        r.issue_type,
+        r.status,
+        r.priority,
+        r.assignee,
+        r.created,
+      ]),
+      tableWidth: "auto",
+      styles: { fontSize:7.5, cellPadding:2.1, overflow:"linebreak", valign: "top" },
+      headStyles: { fillColor:[79,70,229], textColor:255, fontStyle:"bold", fontSize:7.2 },
+      alternateRowStyles: { fillColor:[248,250,252] },
+      columnStyles: {
+        0: { cellWidth:24, fontStyle:"bold", textColor:[37,99,235] },
+        1: { cellWidth:108 },  // summary gets most room
+        2: { cellWidth:22 },
+        3: { cellWidth:34 },
+        4: { cellWidth:24 },
+        5: { cellWidth:38 },
+        6: { cellWidth:24 },
+      },
+      didParseCell: function(d) {
+        if (d.section === "body" && d.column.index === 3) {
+          const s = (d.cell.raw || "").toLowerCase();
+          if (DONE_STATUSES.has(s)) { d.cell.styles.textColor = [22,101,52]; d.cell.styles.fillColor = [220,252,231]; }
+          else if (["open","to do","new","reopened"].includes(s)) { d.cell.styles.textColor = [30,64,175]; }
+          else if (["on hold","blocked"].includes(s)) { d.cell.styles.textColor = [153,27,27]; }
+        }
+      },
+    });
+  }
+
+  doc.save((title || "team-report").replace(/[^a-z0-9]/gi,"_").toLowerCase() + ".pdf");
+  setStatus("PDF downloaded.", "text-green-600");
+}
+
+// ── Init ───────────────────────────────────────────────────────────────
+(function init() {
+  document.documentElement.classList.remove("dark");
+  document.body.classList.remove("dark");
+  const today = new Date().toISOString().slice(0,10);
+  const month = new Date(Date.now() - 30*24*60*60*1000).toISOString().slice(0,10);
+  if (!document.getElementById("tr-date-from").value) document.getElementById("tr-date-from").value = month;
+  if (!document.getElementById("tr-date-to").value)   document.getElementById("tr-date-to").value   = today;
+})();
+</script>
+{% endblock %}
