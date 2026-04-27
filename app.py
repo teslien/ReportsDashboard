@@ -2896,6 +2896,77 @@ def customer_dashboard_insights():
     return jsonify({"insights": insights})
 
 
+@app.route("/api/customer_dashboard/wordcloud", methods=["POST"])
+def customer_dashboard_wordcloud():
+    """
+    Given a list of ticket summaries for a company, ask Claude to extract
+    the most meaningful keywords/themes and return them with importance weights
+    for rendering a word cloud.
+    Returns: { words: [{text, weight}, ...] }
+    """
+    payload = request.get_json(silent=True) or {}
+    tickets  = payload.get("tickets") or []
+    context  = str(payload.get("context") or "this company").strip()
+    model    = payload.get("model") or "claude-sonnet-4-20250514"
+
+    anthropic_key = (_get_app_config_value("anthropic_api_key") or "").strip()
+    if not anthropic_key:
+        return jsonify({"error": "Anthropic API key not configured."}), 400
+    if not tickets:
+        return jsonify({"error": "No tickets provided."}), 400
+
+    summaries = [str(t.get("summary") or "").strip() for t in tickets if t.get("summary")]
+    summaries = summaries[:150]   # cap to avoid token overflow
+    blob = "\n".join(f"- {s}" for s in summaries)
+
+    prompt = (
+        f"You are analysing Jira ticket summaries for {context}.\n"
+        "Extract the 30-50 most meaningful technical keywords, feature areas, product domains, "
+        "or recurring themes from the list of ticket summaries below.\n"
+        "Assign each keyword an integer importance weight from 1 (low) to 10 (high) "
+        "based on how frequently and prominently it appears.\n"
+        "Return ONLY valid JSON — an array of objects with 'text' and 'weight' keys, e.g.:\n"
+        '[{"text":"payments","weight":9},{"text":"bug fix","weight":6}]\n\n'
+        "Rules:\n"
+        "- No markdown fences, no extra prose — raw JSON array only.\n"
+        "- Use concise 1-3 word phrases; no full sentences.\n"
+        "- Avoid generic words like 'ticket', 'jira', 'issue', 'task', 'please'.\n\n"
+        f"Ticket summaries:\n{blob}"
+    )
+
+    try:
+        res = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "Content-Type": "application/json",
+                "x-api-key": anthropic_key,
+                "anthropic-version": "2023-06-01",
+            },
+            json={
+                "model": model,
+                "max_tokens": 1024,
+                "messages": [{"role": "user", "content": prompt}],
+            },
+            timeout=60,
+        )
+        if not res.ok:
+            return jsonify({"error": f"Claude HTTP {res.status_code}"}), 502
+        body = res.json()
+        raw  = (body.get("content") or [{}])[0].get("text", "").strip()
+        raw  = raw.strip("`").strip()
+        if raw.startswith("json"):
+            raw = raw[4:].strip()
+        words = json.loads(raw)
+        if not isinstance(words, list):
+            raise ValueError("Expected list")
+        # Normalise
+        words = [{"text": str(w.get("text","")).strip(), "weight": int(w.get("weight",1))}
+                 for w in words if w.get("text")]
+        return jsonify({"words": words})
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
 # =========================
 # FETCH SCOREBOARD DATA
 # =========================
@@ -5706,11 +5777,14 @@ def assignee_work_search():
     jql = " AND ".join(jql_parts) + " ORDER BY updated DESC"
 
     try:
+        _base_aw_fields = "summary,status,assignee,priority,created,updated,issuetype,labels,customfield_10020"
+        _plat_cf = _get_platform_checkboxes_field_id()
+        _fields = f"{_base_aw_fields},{_plat_cf}" if _plat_cf else _base_aw_fields
         params = {
             "jql": jql,
             "maxResults": 100,
             "startAt": 0,
-            "fields": "summary,status,assignee,priority,created,updated,issuetype,labels,customfield_10020"
+            "fields": _fields
         }
         res = requests.get(
             f"{JIRA_DOMAIN}/rest/api/3/search/jql",
@@ -5747,6 +5821,7 @@ def assignee_work_search():
                         if m:
                             sprint_names.append(m.group(1))
 
+            _plat_raw = f.get(_plat_cf) if _plat_cf else None
             formatted.append({
                 "key": i.get("key"),
                 "summary": f.get("summary"),
@@ -5757,7 +5832,8 @@ def assignee_work_search():
                 "labels": f.get("labels") or [],
                 "sprints": sprint_names,
                 "created": f.get("created"),
-                "updated": f.get("updated")
+                "updated": f.get("updated"),
+                "platform_production": _jira_platform_includes_production(_plat_raw),
             })
 
         return jsonify({
@@ -5769,6 +5845,183 @@ def assignee_work_search():
         return jsonify({"error": "Jira request timed out.", "jql": jql}), 504
     except Exception as e:
         return jsonify({"error": str(e), "jql": jql}), 500
+
+
+@app.route("/api/assignee_work_by_sprint", methods=["POST"])
+def assignee_work_by_sprint():
+    """Fetch ALL tickets for a named sprint (no date filter) using
+    JQL: project = X AND sprint = "sprint_name" ORDER BY updated DESC.
+    Returns the same flat issue format as /api/assignee_work."""
+    headers_dict = dict(HEADERS)
+    project_key_str = str(PROJECT_KEY)
+
+    if not project_key_str:
+        return jsonify({"error": "Missing project key."}), 400
+    if "Authorization" not in headers_dict:
+        return jsonify({"error": "Missing Jira credentials."}), 401
+
+    data = request.get_json(silent=True) or {}
+    sprint_name = (data.get("sprint_name") or "").strip()
+    if not sprint_name:
+        return jsonify({"error": "sprint_name is required."}), 400
+
+    # Escape double quotes inside the sprint name
+    safe_sprint = sprint_name.replace('"', '\\"')
+    jql = (
+        f'project = "{project_key_str}" AND sprint = "{safe_sprint}"'
+        ' ORDER BY updated DESC'
+    )
+
+    try:
+        _base_aw_fields = "summary,status,assignee,priority,created,updated,issuetype,labels,customfield_10020"
+        _plat_cf = _get_platform_checkboxes_field_id()
+        _fields = f"{_base_aw_fields},{_plat_cf}" if _plat_cf else _base_aw_fields
+        params = {"jql": jql, "maxResults": 200, "startAt": 0, "fields": _fields}
+        res = requests.get(
+            f"{JIRA_DOMAIN}/rest/api/3/search/jql",
+            headers=headers_dict, params=params, timeout=30
+        )
+        if res.status_code != 200:
+            try:
+                err_body = res.json()
+            except Exception:
+                err_body = {}
+            msg = (err_body.get("errorMessages") or
+                   err_body.get("error") or
+                   f"Jira API error ({res.status_code})")
+            return jsonify({"error": msg, "jql": jql}), res.status_code
+
+        payload = res.json()
+        issues  = payload.get("issues", [])
+        formatted = []
+        import re as _re
+        for i in issues:
+            f = i.get("fields") or {}
+            sprint_names = []
+            raw_sprints = f.get("customfield_10020") or []
+            if isinstance(raw_sprints, list):
+                for sp in raw_sprints:
+                    if isinstance(sp, dict):
+                        sprint_names.append(sp.get("name", ""))
+                    elif isinstance(sp, str):
+                        m = _re.search(r'name=([^,\]]+)', sp)
+                        if m:
+                            sprint_names.append(m.group(1))
+            _plat_raw = f.get(_plat_cf) if _plat_cf else None
+            formatted.append({
+                "key":      i.get("key"),
+                "summary":  f.get("summary"),
+                "status":   (f.get("status") or {}).get("name"),
+                "assignee": (f.get("assignee") or {}).get("displayName") if f.get("assignee") else "Unassigned",
+                "priority": (f.get("priority") or {}).get("name"),
+                "type":     (f.get("issuetype") or {}).get("name"),
+                "labels":   f.get("labels") or [],
+                "sprints":  sprint_names,
+                "created":  f.get("created"),
+                "updated":  f.get("updated"),
+                "platform_production": _jira_platform_includes_production(_plat_raw),
+            })
+
+        return jsonify({"issues": formatted, "total": len(formatted), "jql": jql})
+
+    except requests.Timeout:
+        return jsonify({"error": "Jira request timed out.", "jql": jql}), 504
+    except Exception as e:
+        return jsonify({"error": str(e), "jql": jql}), 500
+
+
+@app.route("/api/assignee_work_ai_summary", methods=["POST"])
+def assignee_work_ai_summary():
+    """
+    Accept a list of Jira tickets for a chosen sprint and return two AI summaries:
+      - overall_bullets : what the team accomplished this sprint
+      - production_bullets : production issue fixes summary
+    Uses the server-side anthropic_api_key from app config.
+    """
+    data = request.get_json(silent=True) or {}
+    sprint_name = str(data.get("sprint") or "").strip()
+    tickets = data.get("tickets") or []
+    model = data.get("model") or "claude-sonnet-4-20250514"
+
+    anthropic_key = (_get_app_config_value("anthropic_api_key") or "").strip()
+    if not anthropic_key:
+        return jsonify({"error": "Anthropic API key not configured. Save it in Settings."}), 400
+    if not tickets:
+        return jsonify({"error": "No tickets provided."}), 400
+
+    def _compact(t):
+        return {
+            "key": t.get("key"),
+            "type": t.get("type"),
+            "status": t.get("status"),
+            "summary": str(t.get("summary") or "")[:120],
+            "assignee": t.get("assignee"),
+            "priority": t.get("priority"),
+            "production": t.get("platform_production", False),
+        }
+
+    compact_tickets = [_compact(t) for t in tickets[:120]]  # cap to avoid token overflow
+    prod_tickets    = [t for t in compact_tickets if t["production"]]
+    tickets_json    = json.dumps(compact_tickets, ensure_ascii=False)
+    prod_json       = json.dumps(prod_tickets, ensure_ascii=False) if prod_tickets else "[]"
+    sprint_label    = sprint_name or "the selected sprint"
+
+    overall_prompt = (
+        f"You are an engineering team analyst. Below is a JSON list of Jira tickets worked on during '{sprint_label}'.\n"
+        "Write a concise sprint accomplishment summary for this team — what was built, fixed, or shipped.\n"
+        "Return ONLY a JSON array of bullet-point strings (plain English, no markdown, 6-10 items), e.g.:\n"
+        '[\"Delivered X feature\",\"Fixed Y bug\"]\n\n'
+        f"Tickets:\n{tickets_json}"
+    )
+
+    production_prompt = (
+        f"You are an engineering team analyst. Below is a JSON list of production-related Jira tickets from '{sprint_label}'.\n"
+        "Summarise what production issues were fixed or worked on — be specific and brief.\n"
+        "Return ONLY a JSON array of bullet-point strings (plain English, no markdown, 4-8 items), e.g.:\n"
+        '[\"Fixed critical payment crash on iOS\",\"Resolved DB timeout in reports API\"]\n\n'
+        "If the list is empty, return: [\"No production tickets in this sprint.\"]\n\n"
+        f"Production tickets:\n{prod_json}"
+    )
+
+    def _call_claude(prompt_text):
+        try:
+            res = requests.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={
+                    "Content-Type": "application/json",
+                    "x-api-key": anthropic_key,
+                    "anthropic-version": "2023-06-01",
+                },
+                json={
+                    "model": model,
+                    "max_tokens": 1024,
+                    "messages": [{"role": "user", "content": prompt_text}],
+                },
+                timeout=90,
+            )
+            if not res.ok:
+                return None, f"Claude HTTP {res.status_code}"
+            body = res.json()
+            raw = (body.get("content") or [{}])[0].get("text", "").strip()
+            # Strip possible markdown fences
+            raw = raw.strip("`").strip()
+            if raw.startswith("json"):
+                raw = raw[4:].strip()
+            bullets = json.loads(raw)
+            if not isinstance(bullets, list):
+                bullets = [str(bullets)]
+            return bullets, None
+        except Exception as exc:
+            return None, str(exc)
+
+    overall_bullets, err1 = _call_claude(overall_prompt)
+    prod_bullets,    err2 = _call_claude(production_prompt)
+
+    return jsonify({
+        "sprint": sprint_label,
+        "overall_bullets":    overall_bullets or [err1 or "Failed to generate summary."],
+        "production_bullets": prod_bullets    or [err2 or "Failed to generate production summary."],
+    })
 
 
 @app.route("/api/reports/generate", methods=["POST"])
@@ -6611,6 +6864,65 @@ def _extract_jira_customers(cust_val):
             seen.add(c)
             result.append(c)
     return result
+
+
+# Jira "platform[checkboxes]" (checkbox multi-select). Override if field discovery fails.
+_PLATFORM_CHECKBOXES_FIELD_ID = None
+_PLATFORM_CHECKBOXES_FIELD_DOMAIN = None
+
+
+def _jira_platform_includes_production(raw):
+    """True if the platform[checkboxes] value list includes the PRODUCTION option."""
+    if raw is None:
+        return False
+    if isinstance(raw, list):
+        for item in raw:
+            if isinstance(item, dict):
+                v = item.get("value") or item.get("name") or ""
+                if str(v).strip().upper() == "PRODUCTION":
+                    return True
+            elif isinstance(item, str) and str(item).strip().upper() == "PRODUCTION":
+                return True
+    elif isinstance(raw, dict):
+        v = raw.get("value") or raw.get("name") or ""
+        if str(v).strip().upper() == "PRODUCTION":
+            return True
+    elif isinstance(raw, str) and raw.strip().upper() == "PRODUCTION":
+        return True
+    return False
+
+
+def _get_platform_checkboxes_field_id():
+    """Resolve custom field id for JQL field name platform[checkboxes]."""
+    global _PLATFORM_CHECKBOXES_FIELD_ID, _PLATFORM_CHECKBOXES_FIELD_DOMAIN
+    manual = (os.environ.get("JIRA_PLATFORM_CHECKBOXES_FIELD") or "").strip()
+    if manual:
+        return manual
+    dom = str(JIRA_DOMAIN)
+    if _PLATFORM_CHECKBOXES_FIELD_ID and _PLATFORM_CHECKBOXES_FIELD_DOMAIN == dom:
+        return _PLATFORM_CHECKBOXES_FIELD_ID
+    headers_dict = dict(HEADERS)
+    if "Authorization" not in headers_dict:
+        return None
+    try:
+        res = requests.get(
+            f"{JIRA_DOMAIN}/rest/api/3/field",
+            headers=headers_dict,
+            timeout=20
+        )
+        if res.status_code != 200:
+            return None
+        for fld in res.json() or []:
+            for cl in fld.get("clauseNames") or []:
+                if str(cl).strip().lower() == "platform[checkboxes]":
+                    fid = fld.get("id")
+                    if fid and str(fid).startswith("customfield_"):
+                        _PLATFORM_CHECKBOXES_FIELD_ID = fid
+                        _PLATFORM_CHECKBOXES_FIELD_DOMAIN = dom
+                        return fid
+    except Exception:
+        return None
+    return None
 
 
 NON_CUSTOMER_LABELS = {

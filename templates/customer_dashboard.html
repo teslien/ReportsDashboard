@@ -5,6 +5,7 @@
 
 {% block extra_head %}
 <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="https://cdn.jsdelivr.net/npm/wordcloud@1.2.2/src/wordcloud2.js"></script>
 <style>
   body { background: #f8fafc !important; color: #0f172a !important; }
   body.cd-page #theme-toggle-btn { display: none !important; }
@@ -52,10 +53,20 @@
   .cd-legend-swatch { width: 10px; height: 10px; border-radius: 3px; border: 1px solid rgba(15, 23, 42, 0.15); }
   .cd-team-cell { display: inline-flex; align-items: center; gap: 6px; }
   .cd-team-dot { width: 10px; height: 10px; border-radius: 50%; border: 1px solid rgba(15, 23, 42, 0.2); display: inline-block; }
-  .cd-icon-btn { width: 34px; height: 34px; border-radius: 999px; border: 1px solid #cbd5e1; background: #fff; color: #475569; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: all .15s; }
-  .cd-icon-btn:hover { background: #f1f5f9; color: #0f172a; }
+  .cd-icon-btn { width: 32px; height: 32px; border-radius: 8px; border: 1px solid #e2e8f0; background: #f8fafc; color: #64748b; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: all .15s; }
+  .cd-icon-btn:hover { background: #e2e8f0; color: #0f172a; }
   .cd-empty { border: 1px dashed #cbd5e1; border-radius: 12px; padding: 22px; background: #ffffff; text-align: center; color: #64748b; }
-  .cd-customer-top { min-width: 280px; max-width: 360px; }
+  .cd-customer-top { min-width: 200px; max-width: 320px; }
+  .cd-header-select {
+    background: #f8fafc; border: 1px solid #e2e8f0; color: #0f172a;
+    border-radius: 8px; padding: 6px 30px 6px 10px; font-size: 13px; font-weight: 500;
+    appearance: none; outline: none; cursor: pointer; transition: border .15s;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 9px center;
+  }
+  .cd-header-select:focus { border-color: #93c5fd; background-color: #fff; }
+  .cd-header-group { display: flex; flex-direction: column; gap: 2px; }
+  .cd-header-group-label { font-size: 10px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: .06em; }
   .cd-modal-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,0.45); display: none; align-items: center; justify-content: center; z-index: 1100; }
   .cd-modal-backdrop.open { display: flex; }
   .cd-modal { width: min(860px, calc(100vw - 24px)); background: #fff; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 16px 44px rgba(15,23,42,.28); }
@@ -111,6 +122,11 @@
   #cd-race-offcanvas .cd-pill { font-size: 11px; padding: 3px 8px; }
   #cd-race-offcanvas .cd-team-dot { width: 12px; height: 12px; }
   #cd-race-offcanvas .cd-table a { font-size: 13px; font-weight: 700; }
+  #cd-wc-toggle-btn { display: none; }
+  #cd-wc-toggle-btn.flex { display: inline-flex; }
+  #cd-wc-toggle-btn.active { background: #4f46e5; color: #fff; border-color: #4f46e5; }
+  #cd-wc-toggle-btn:hover { background: #eef2ff; color: #4338ca; border-color: #a5b4fc; }
+  #cd-wc-toggle-btn.active:hover { background: #4338ca; color: #fff; border-color: #4338ca; }
   .cd-ticket-key-link { display: inline-flex; align-items: center; gap: 6px; color: #1d4ed8; font-weight: 700; text-decoration: none; white-space: nowrap; }
   .cd-ticket-key-link:hover { text-decoration: underline; }
   .cd-ticket-key-text { display: inline-block; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 13px; letter-spacing: .01em; background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; border-radius: 6px; padding: 2px 6px; line-height: 1.2; white-space: nowrap; }
@@ -134,8 +150,8 @@
     50% { transform: scaleX(.72); opacity: .6; }
   }
   @media (max-width: 960px) { .cd-jql-layout { grid-template-columns: 1fr; } }
-  .cd-settings-btn { width: 34px; height: 34px; border-radius: 999px; border: 1px solid #cbd5e1; background: #fff; color: #475569; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: all .15s; }
-  .cd-settings-btn:hover { background: #f1f5f9; color: #0f172a; }
+  .cd-settings-btn { width: 32px; height: 32px; border-radius: 8px; border: 1px solid #e2e8f0; background: #f8fafc; color: #64748b; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: all .15s; }
+  .cd-settings-btn:hover { background: #e2e8f0; color: #0f172a; }
   .cd-modal-close { border: none; background: transparent; color: #64748b; font-size: 18px; line-height: 1; cursor: pointer; padding: 0 2px; }
   .cd-modal-close:hover { color: #0f172a; }
   .cd-loader-backdrop { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(15,23,42,0.24); z-index: 1200; }
@@ -151,18 +167,15 @@
   .cd-insight-p.Medium { background: #fef3c7; color: #92400e; border-color: #fde68a; }
   .cd-insight-p.Low { background: #e0e7ff; color: #3730a3; border-color: #c7d2fe; }
   .cd-ai-toggle-btn {
-    min-width: 42px;
-    padding: 0 10px;
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: .04em;
-    border-radius: 999px;
+    min-width: 44px; width: auto; padding: 0 10px;
+    font-size: 11px; font-weight: 700; letter-spacing: .05em;
+    border-radius: 8px;
   }
   .cd-ai-toggle-btn.active {
     border-color: #c7d2fe;
     background: linear-gradient(135deg, #eef2ff, #e0e7ff);
     color: #3730a3;
-    box-shadow: 0 4px 12px rgba(79, 70, 229, 0.15);
+    box-shadow: 0 2px 8px rgba(79,70,229,.15);
   }
   .cd-ai-panel-pop {
     animation: cd-panel-pop .24s ease-out;
@@ -180,69 +193,49 @@
     margin-top: 2px;
   }
 
-  #cd-ai-panel{
-    background: rgb(255 255 255 / 63%);
-  }
+  #cd-ai-panel { background: #fff; }
 
   .cd-ai-expect {
-    width: 100%;
-    min-height: 74px;
-    resize: vertical;
-    background: rgba(147, 51, 234, 0.2);
+    width: 100%; min-height: 68px; resize: vertical;
+    background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;
+    padding: 8px 11px; font-size: 13px; color: #0f172a; font-family: inherit;
+    outline: none; transition: border .15s;
   }
+  .cd-ai-expect:focus { border-color: #93c5fd; background: #fff; }
   .lp-nav {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    z-index: 1000;
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(8px);
+    position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+    background: rgba(255,255,255,0.97); backdrop-filter: blur(8px);
     border-bottom: 1px solid #e2e8f0;
   }
   .lp-nav-wrap {
-    width: 100%;
-    height: 64px;
-    padding: 0 16px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
+    width: 100%; height: 58px; padding: 0 24px;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
   }
-  .lp-brand {
-    display: inline-flex;
-    align-items: center;
-    text-decoration: none;
-    line-height: 0;
-  }
-  .lp-brand-logo {
-    height: 30px;
-    width: auto;
-    display: block;
-  }
-  .lp-menu { display: flex; align-items: center; gap: 8px; }
+  .lp-brand { display: inline-flex; align-items: center; text-decoration: none; line-height: 0; }
+  .lp-brand-logo { height: 28px; width: auto; display: block; }
+  .lp-menu { display: flex; align-items: stretch; gap: 0; height: 58px; }
   .lp-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    padding: 8px 12px;
-    border-radius: 999px;
-    border: 1px solid #cbd5e1;
-    background: #ffffff;
-    color: #475569;
-    text-decoration: none;
-    font-size: 13px;
-    font-weight: 700;
-    transition: all .15s;
+    position: relative;
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 0 16px;
+    color: #64748b; text-decoration: none;
+    font-size: 13px; font-weight: 600;
+    transition: color .18s;
+    white-space: nowrap;
   }
-  .lp-link:hover { border-color: #93c5fd; color: #1e3a8a; background: #eff6ff; }
-  .lp-link.active {
-    border-color: #bfdbfe;
-    color: #1d4ed8;
-    background: #eff6ff;
+  .lp-link::after {
+    content: ''; position: absolute; bottom: 0; left: 0; right: 0;
+    height: 2px; background: #2563eb; border-radius: 2px 2px 0 0;
+    transform: scaleX(0); transform-origin: center;
+    transition: transform .22s cubic-bezier(.4,0,.2,1);
   }
+  .lp-link:hover { color: #1e40af; }
+  .lp-link:hover::after { transform: scaleX(1); }
+  .lp-link.active { color: #1d4ed8; font-weight: 700; }
+  .lp-link.active::after { transform: scaleX(1); }
   @media (max-width: 700px) {
-    .lp-nav-wrap { padding: 0 10px; }
+    .lp-nav-wrap { padding: 0 12px; }
+    .lp-link { padding: 0 12px; }
     .lp-link span { display: none; }
   }
   @keyframes cd-panel-pop {
@@ -272,26 +265,39 @@
   </div>
 </nav>
 <div class="space-y-6">
-  <div class="flex items-start justify-between gap-4">
+  <div class="flex flex-wrap items-center justify-between gap-4">
     <div>
-      <h1 class="text-2xl font-bold text-slate-900">Customer Dashboard</h1>
-      <p class="text-sm text-slate-500 mt-1">Build customer-focused insights from JQL and explore interactive graphs.</p>
+      <h1 class="text-2xl font-bold text-slate-900 tracking-tight">Customer Dashboard</h1>
+      <p class="text-sm text-slate-400 mt-0.5">Build customer-focused insights from JQL and explore interactive graphs.</p>
     </div>
-    <div class="flex items-center gap-2">
-      <span class="text-xs text-slate-500 hidden xl:inline">Saved Queries</span>
-      <select id="cd-saved-jql" class="cd-input cd-customer-top">
-        <option value="">— Select a saved JQL —</option>
-      </select>
-      <button id="cd-add-jql" class="cd-icon-btn" title="Add new JQL" style="font-size:18px;font-weight:700;">+</button>
-      <select id="cd-customer" class="cd-input cd-customer-top" disabled>
-        <option value="">All Customers</option>
-      </select>
-      <button id="cd-toggle-ai" class="cd-settings-btn cd-ai-toggle-btn" title="Show AI Insights">
-        <span style="line-height:1;">AI</span>
-      </button>
-      <button id="cd-open-settings" class="cd-settings-btn" title="Jira Settings">
-        <span style="font-size:14px;line-height:1;">⚙</span>
-      </button>
+    <div class="flex items-end gap-3">
+      <!-- Saved query picker -->
+      <div class="cd-header-group">
+        <span class="cd-header-group-label">Saved query</span>
+        <select id="cd-saved-jql" class="cd-header-select cd-customer-top">
+          <option value="">— Select —</option>
+        </select>
+      </div>
+      <!-- Add JQL -->
+      <button id="cd-add-jql" class="cd-icon-btn mb-0.5" title="Add new JQL" style="font-size:17px;font-weight:700;line-height:1">+</button>
+      <!-- Customer filter -->
+      <div class="cd-header-group">
+        <span class="cd-header-group-label">Customer</span>
+        <select id="cd-customer" class="cd-header-select cd-customer-top" disabled>
+          <option value="">All Customers</option>
+        </select>
+      </div>
+      <!-- AI + Settings -->
+      <div class="flex items-center gap-1.5 mb-0.5">
+        <button id="cd-toggle-ai" class="cd-settings-btn cd-ai-toggle-btn" title="Show AI Insights">
+          <span style="line-height:1;font-size:11px;font-weight:700;">AI</span>
+        </button>
+        <button id="cd-open-settings" class="cd-settings-btn" title="Jira Settings">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </button>
+      </div>
     </div>
   </div>
 
@@ -331,44 +337,70 @@
     </div>
   </div>
 
-  <div id="cd-ai-panel" class="cd-card p-4 cd-hidden">
-    <div class="cd-ai-head">
-      <div>
-        <h3 class="text-sm font-semibold text-slate-700">AI insights (Claude)</h3>
-        <p class="cd-ai-sub">Generate focused recommendations from the current dashboard view.</p>
-        <p id="cd-ai-config-hint" class="text-xs mt-1 text-slate-400"></p>
+  <div id="cd-ai-panel" class="cd-card cd-hidden" style="overflow:hidden">
+    <!-- Header -->
+    <div class="flex items-center justify-between gap-4 px-5 py-4 border-b border-slate-100">
+      <div class="flex items-center gap-3">
+        <!-- Animated AI bot icon (matches the one used in offcanvas insights) -->
+        <div class="w-9 h-9 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0">
+          <span class="cd-magic-icon" aria-hidden="true" style="width:22px;height:22px;">
+            <svg viewBox="0 0 24 24" fill="none" style="width:22px;height:22px;">
+              <path d="M12 2.5v2.3" stroke="#2563eb" stroke-width="1.4" stroke-linecap="round"/>
+              <circle class="cd-bot-ant-dot" cx="12" cy="2" r="1.2" fill="#60a5fa"/>
+              <rect x="4.2" y="6.2" width="15.6" height="13.6" rx="4.2" fill="url(#cdBotBodyAi)" stroke="#93c5fd" stroke-width="1"/>
+              <circle class="cd-bot-eye" cx="9.2" cy="11.6" r="1.35" fill="#1e3a8a"/>
+              <circle class="cd-bot-eye" cx="14.8" cy="11.6" r="1.35" fill="#1e3a8a"/>
+              <rect class="cd-bot-mouth" x="8.2" y="15.1" width="7.6" height="1.7" rx="0.85" fill="#3b82f6"/>
+              <defs>
+                <linearGradient id="cdBotBodyAi" x1="4" y1="6" x2="20" y2="20" gradientUnits="userSpaceOnUse">
+                  <stop stop-color="#eff6ff"/>
+                  <stop offset="1" stop-color="#dbeafe"/>
+                </linearGradient>
+              </defs>
+            </svg>
+          </span>
+        </div>
+        <div>
+          <div class="text-sm font-bold text-slate-800">AI Insights <span class="text-xs font-normal text-slate-400 ml-1">powered by Claude</span></div>
+          <p id="cd-ai-config-hint" class="text-xs text-slate-400 mt-0.5"></p>
+        </div>
       </div>
       <div class="flex items-center gap-2 shrink-0">
-        <span id="cd-insights-generating" class="text-xs text-slate-500 cd-hidden">Generating…</span>
-        <button type="button" id="cd-insights-generate" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold rounded-lg disabled:opacity-40 disabled:cursor-not-allowed" disabled>
+        <span id="cd-insights-generating" class="text-xs text-slate-400 cd-hidden">Generating…</span>
+        <button type="button" id="cd-insights-generate"
+          class="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-lg transition disabled:opacity-40 disabled:cursor-not-allowed"
+          disabled>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/></svg>
           Generate insights
         </button>
       </div>
     </div>
-    <div class="mb-3">
-      <label class="cd-label mb-1" for="cd-insights-expectation">What insights do you expect?</label>
+    <!-- Prompt input -->
+    <div class="px-5 py-3 border-b border-slate-100">
       <textarea
         id="cd-insights-expectation"
-        class="cd-input cd-ai-expect"
+        class="cd-ai-expect"
         rows="2"
-        placeholder="Example: highlight top risky customers, stuck statuses, overloaded teams, and next actions"
+        placeholder="What should Claude focus on? e.g. top risky customers, stuck statuses, overloaded teams…"
       ></textarea>
     </div>
-    <p id="cd-insights-error" class="text-xs text-red-600 mb-2 cd-hidden"></p>
+    <!-- Error -->
+    <p id="cd-insights-error" class="text-xs text-red-500 px-5 pt-2 cd-hidden"></p>
+    <!-- Table -->
     <div class="overflow-x-auto">
       <table class="min-w-full cd-table cd-insights-table">
         <thead>
-          <tr class="border-b border-slate-200">
-            <th class="py-2 px-2 text-left w-36">Area</th>
-            <th class="py-2 px-2 text-left">Finding</th>
-            <th class="py-2 px-2 text-left">Suggestion</th>
-            <th class="py-2 px-2 text-left w-28">Priority</th>
+          <tr class="border-b border-slate-100">
+            <th class="py-2.5 px-4 text-left w-36">Area</th>
+            <th class="py-2.5 px-4 text-left">Finding</th>
+            <th class="py-2.5 px-4 text-left">Suggestion</th>
+            <th class="py-2.5 px-4 text-left w-28">Priority</th>
           </tr>
         </thead>
         <tbody id="cd-insights-body">
           <tr>
-            <td colspan="4" class="py-5 px-2 text-center text-slate-400 text-sm">
-              Load tickets with JQL, then click <strong>Generate insights</strong> to fill this table.
+            <td colspan="4" class="py-8 px-4 text-center text-sm text-slate-400">
+              Load tickets with JQL, then click <strong class="text-slate-600">Generate insights</strong> to fill this table.
             </td>
           </tr>
         </tbody>
@@ -378,7 +410,28 @@
 
   <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
     <div class="cd-card p-4">
-      <h3 class="text-sm font-semibold text-slate-700 mb-3">Tickets Created Timeline</h3>
+      <div class="flex items-center gap-1.5 mb-3">
+        <h3 class="text-sm font-semibold text-slate-700">Tickets Created vs Done-Status Mix</h3>
+        <div class="relative group inline-flex">
+          <span class="w-4 h-4 rounded-full bg-slate-200 text-slate-500 text-[10px] font-bold flex items-center justify-center cursor-default select-none leading-none">i</span>
+          <div class="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-72 bg-slate-800 text-white text-xs rounded-xl shadow-xl p-3 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-150 z-50">
+            <p class="font-semibold text-slate-200 mb-1.5">How this chart is grouped:</p>
+            <div class="space-y-1.5">
+              <div>
+                <span class="inline-block w-2 h-2 rounded-full bg-blue-400 mr-1"></span>
+                <span class="font-medium text-blue-300">Other created tickets</span>
+                <span class="text-slate-400"> — every ticket created on that date that isn't in a done-style status</span>
+              </div>
+              <div>
+                <span class="inline-block w-2 h-2 rounded-full bg-green-400 mr-1"></span>
+                <span class="font-medium text-green-300">Done-status tickets</span>
+                <span class="text-slate-400"> — Done, Resolved, Closed, Ready for QA, Deployed, Ready for Staging, Ready for Internal Demo, Not a Bug, Unable to Reproduce</span>
+              </div>
+            </div>
+            <div class="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-slate-800"></div>
+          </div>
+        </div>
+      </div>
       <div id="cd-timeline-legend" class="cd-legend"></div>
       <div id="cd-timeline" class="cd-chart"></div>
     </div>
@@ -388,7 +441,38 @@
       <div id="cd-priority" class="cd-chart"></div>
     </div>
     <div class="cd-card p-4 xl:col-span-2">
-      <h3 class="text-sm font-semibold text-slate-700 mb-3">Status Distribution</h3>
+      <div class="flex items-center gap-1.5 mb-3">
+        <h3 class="text-sm font-semibold text-slate-700">Status Distribution</h3>
+        <div class="relative group inline-flex">
+          <span class="w-4 h-4 rounded-full bg-slate-200 text-slate-500 text-[10px] font-bold flex items-center justify-center cursor-default select-none leading-none">i</span>
+          <div class="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-72 bg-slate-800 text-white text-xs rounded-xl shadow-xl p-3 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-150 z-50">
+            <p class="font-semibold text-slate-200 mb-1.5">How statuses are grouped:</p>
+            <div class="space-y-1.5">
+              <div>
+                <span class="inline-block w-2 h-2 rounded-full bg-blue-400 mr-1"></span>
+                <span class="font-medium text-blue-300">Open</span>
+                <span class="text-slate-400"> — Open, To Do, New, Reopened</span>
+              </div>
+              <div>
+                <span class="inline-block w-2 h-2 rounded-full bg-amber-400 mr-1"></span>
+                <span class="font-medium text-amber-300">In Progress</span>
+                <span class="text-slate-400"> — In Development, Ready for Dev, In Review, Ready for Design, and any other active status not in Open or On Hold</span>
+              </div>
+              <div>
+                <span class="inline-block w-2 h-2 rounded-full bg-red-400 mr-1"></span>
+                <span class="font-medium text-red-300">On Hold</span>
+                <span class="text-slate-400"> — On Hold, Blocked, Waiting, Pending, Parked</span>
+              </div>
+              <div>
+                <span class="inline-block w-2 h-2 rounded-full bg-green-500 mr-1"></span>
+                <span class="font-medium text-green-300">Completed</span>
+                <span class="text-slate-400"> — Done, Resolved, Closed, Ready for QA, Deployed, Ready for Staging, Ready for Internal Demo, Not a Bug, Unable to Reproduce, Staged, QA In Progress</span>
+              </div>
+            </div>
+            <div class="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-slate-800"></div>
+          </div>
+        </div>
+      </div>
       <div id="cd-status-legend" class="cd-legend"></div>
       <div id="cd-status-chart" class="cd-chart" style="height:270px;"></div>
     </div>
@@ -414,7 +498,34 @@
   <div class="cd-card p-4">
     <h3 class="text-sm font-semibold text-slate-700 mb-3">Team Ticket Bubbles</h3>
     <div id="cd-team-pack-legend" class="cd-legend mb-2"></div>
-    <div id="cd-team-pack-chart" class="cd-chart" style="height:520px;"></div>
+    <div class="grid grid-cols-1 xl:grid-cols-[1fr_280px] gap-4 items-start">
+      <div id="cd-team-pack-chart" class="cd-chart" style="height:520px;"></div>
+      <div class="border border-slate-200 rounded-lg overflow-hidden bg-white">
+        <div class="px-3 py-2 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+          <span class="text-xs font-semibold text-slate-600 uppercase tracking-wide">Team Counts</span>
+          <span id="cd-team-pack-total" class="text-xs font-semibold text-slate-800">0</span>
+        </div>
+        <div class="max-h-[480px] overflow-auto">
+          <table class="w-full text-xs">
+            <thead class="bg-slate-50 sticky top-0">
+              <tr class="text-slate-500">
+                <th class="py-1.5 px-3 text-left font-medium">Team</th>
+                <th class="py-1.5 px-3 text-right font-medium">Tickets</th>
+              </tr>
+            </thead>
+            <tbody id="cd-team-pack-table">
+              <tr><td colspan="2" class="py-4 px-3 text-center text-slate-400">No data</td></tr>
+            </tbody>
+            <tfoot class="bg-slate-50 sticky bottom-0">
+              <tr class="border-t border-slate-200 font-semibold text-slate-800">
+                <td class="py-1.5 px-3">Total</td>
+                <td id="cd-team-pack-total-cell" class="py-1.5 px-3 text-right tabular-nums">0</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div class="cd-card p-4">
@@ -521,9 +632,53 @@
         <div id="cd-race-offcanvas-title" class="cd-offcanvas-title">Customer Tickets</div>
         <div id="cd-race-offcanvas-subtitle" class="cd-offcanvas-sub"></div>
       </div>
-      <button id="cd-race-offcanvas-close" class="cd-modal-close" aria-label="Close">&times;</button>
+      <div class="flex items-center gap-2">
+        <button id="cd-wc-toggle-btn" onclick="toggleWordCloud()"
+          class="items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all duration-150
+                 bg-white text-slate-600 border-slate-300">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 18h6v-2H3v2zm0-5h12v-2H3v2zm0-7v2h18V6H3z"/>
+          </svg>
+          <span id="cd-wc-btn-label">Word Cloud</span>
+        </button>
+        <button id="cd-race-offcanvas-close" class="cd-modal-close" aria-label="Close">&times;</button>
+      </div>
     </div>
     <div class="cd-offcanvas-body">
+
+      <!-- Word Cloud panel (hidden by default) -->
+      <div id="cd-wc-panel" class="hidden mb-4 rounded-2xl border border-slate-200 bg-white overflow-hidden">
+        <div class="flex items-center justify-between px-4 py-2.5 border-b border-slate-200">
+          <span class="text-xs font-semibold text-slate-600 uppercase tracking-wide">Word Cloud — Ticket Themes</span>
+          <div class="flex items-center gap-2">
+            <span id="cd-wc-status" class="text-xs text-slate-400">Generated by Claude</span>
+            <span class="text-[10px] text-slate-300 hidden md:inline">Scroll to zoom · drag to pan</span>
+            <!-- Zoom controls -->
+            <div id="cd-wc-zoom-btns" style="display:none" class="flex items-center gap-1 ml-2">
+              <button onclick="wcZoom(-0.2)" class="w-6 h-6 rounded-md border border-slate-200 bg-white text-slate-500 hover:bg-slate-100 text-sm font-bold flex items-center justify-center leading-none" title="Zoom out">−</button>
+              <span id="cd-wc-zoom-label" class="text-xs text-slate-400 w-10 text-center tabular-nums">100%</span>
+              <button onclick="wcZoom(+0.2)" class="w-6 h-6 rounded-md border border-slate-200 bg-white text-slate-500 hover:bg-slate-100 text-sm font-bold flex items-center justify-center leading-none" title="Zoom in">+</button>
+              <button onclick="wcZoomReset()" class="px-2 h-6 rounded-md border border-slate-200 bg-white text-slate-400 hover:bg-slate-100 text-[10px] font-semibold" title="Reset view">Reset</button>
+            </div>
+          </div>
+        </div>
+        <!-- Loading state -->
+        <div id="cd-wc-loading" style="display:none" class="items-center justify-center gap-2 py-10 text-sm text-slate-400">
+          <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+          </svg>
+          Asking Claude for themes…
+        </div>
+        <!-- Pan/zoom viewport: fixed-height window, canvas transformed inside -->
+        <div id="cd-wc-viewport" style="display:none;position:relative;width:100%;height:520px;background:#f8fafc;overflow:hidden;cursor:grab;user-select:none;">
+          <canvas id="cd-wc-canvas"
+            style="display:block;position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform;"></canvas>
+        </div>
+        <!-- Error -->
+        <div id="cd-wc-error" style="display:none" class="px-4 py-6 text-sm text-red-500 text-center"></div>
+      </div>
+
       <div class="cd-insight-box">
         <h4 class="cd-magic-title">
           <span class="cd-magic-icon" aria-hidden="true">
@@ -782,6 +937,10 @@
     if (k === "none") return "hsla(220, 8%, 72%, 0.85)";
     if (k.includes("launch blocker")) return "hsla(0, 80%, 68%, 0.7)";
     if (k.includes("non-blocker")) return "hsla(210, 30%, 72%, 0.75)";
+    if (k === "open") return "hsla(217, 91%, 65%, 0.82)";        // blue
+    if (k === "in progress") return "hsla(38, 92%, 58%, 0.82)";  // amber
+    if (k === "on hold") return "hsla(0, 72%, 64%, 0.82)";       // red
+    if (k === "completed") return "hsla(142, 71%, 45%, 0.82)";   // green
     return randomColorFor(label);
   }
 
@@ -796,6 +955,18 @@
     for (let i = 0; i < s.length; i++) hash = ((hash << 5) - hash) + s.charCodeAt(i);
     return palette[Math.abs(hash) % palette.length];
   }
+
+  const TIMELINE_DONE_STATUSES = new Set([
+    "done",
+    "resolved",
+    "closed",
+    "ready for qa",
+    "deployed",
+    "ready for staging",
+    "ready for internal demo",
+    "not a bug",
+    "unable to reproduce",
+  ]);
 
   function renderLegend(legendId, items) {
     const legend = document.getElementById(legendId);
@@ -812,16 +983,19 @@
     `).join("");
   }
 
-  function renderLineChart(containerId, labels, values, color, tooltipMeta = []) {
+  function renderTimelineStackedBarChart(containerId, timelinePoints = []) {
     const container = document.getElementById(containerId);
     if (!container) return;
     container.innerHTML = "";
-    if (!labels.length) {
+    if (!timelinePoints.length) {
       container.innerHTML = `<div class="text-xs text-slate-400 h-full flex items-center justify-center">No data</div>`;
       return;
     }
     const tooltip = getOrCreateTooltip(container);
-    renderLegend("cd-timeline-legend", [{ label: "Tickets Created", color: "hsla(213, 72%, 62%, 0.6)" }]);
+    renderLegend("cd-timeline-legend", [
+      { label: "Other created tickets", color: "hsla(213, 72%, 62%, 0.72)" },
+      { label: "Done-status tickets", color: "hsla(145, 63%, 42%, 0.82)" },
+    ]);
     const width = container.clientWidth || 600;
     const height = container.clientHeight || 230;
     const margin = { top: 18, right: 16, bottom: 34, left: 36 };
@@ -833,9 +1007,16 @@
       .attr("preserveAspectRatio", "xMidYMid meet");
     const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
 
-    const points = labels.map((label, i) => ({ label, value: values[i] || 0 }));
-    const x = d3.scalePoint().domain(labels).range([0, w]);
-    const y = d3.scaleLinear().domain([0, d3.max(points, d => d.value) || 1]).nice().range([h, 0]);
+    const points = timelinePoints.map((point) => ({
+      label: point.label,
+      total: point.createdCount || point.count || 0,
+      doneLike: point.doneLikeCount || 0,
+      other: point.otherCount || 0,
+      customers: point.customers || [],
+      doneStatuses: point.doneStatuses || {},
+    }));
+    const x = d3.scaleBand().domain(points.map(d => d.label)).range([0, w]).padding(0.22);
+    const y = d3.scaleLinear().domain([0, d3.max(points, d => d.total) || 1]).nice().range([h, 0]);
 
     g.append("g").attr("transform", `translate(0,${h})`)
       .call(d3.axisBottom(x).tickSizeOuter(0))
@@ -849,28 +1030,40 @@
       .attr("y1", d => y(d)).attr("y2", d => y(d))
       .attr("stroke", "#e2e8f0");
 
-    const line = d3.line().x(d => x(d.label)).y(d => y(d.value)).curve(d3.curveMonotoneX);
-    g.append("path").datum(points).attr("fill", "none").attr("stroke", "hsla(213, 72%, 50%, 0.95)").attr("stroke-width", 2).attr("d", line);
-    g.selectAll("circle").data(points).enter().append("circle")
-      .attr("cx", d => x(d.label)).attr("cy", d => y(d.value)).attr("r", 3).attr("fill", "hsla(213, 72%, 60%, 0.75)");
-    g.selectAll("circle")
+    g.selectAll(".cd-timeline-other").data(points).enter().append("rect")
+      .attr("class", "cd-timeline-other")
+      .attr("x", d => x(d.label))
+      .attr("y", d => y(d.other))
+      .attr("width", x.bandwidth())
+      .attr("height", d => h - y(d.other))
+      .attr("fill", "hsla(213, 72%, 62%, 0.72)")
+      .attr("rx", 3);
+
+    g.selectAll(".cd-timeline-done").data(points).enter().append("rect")
+      .attr("class", "cd-timeline-done")
+      .attr("x", d => x(d.label))
+      .attr("y", d => y(d.total))
+      .attr("width", x.bandwidth())
+      .attr("height", d => Math.max(0, y(d.other) - y(d.total)))
+      .attr("fill", "hsla(145, 63%, 42%, 0.82)")
+      .attr("rx", 3);
+
+    g.selectAll(".cd-timeline-hitbox").data(points).enter().append("rect")
+      .attr("class", "cd-timeline-hitbox")
+      .attr("x", d => x(d.label))
+      .attr("y", 0)
+      .attr("width", x.bandwidth())
+      .attr("height", h)
+      .attr("fill", "transparent")
       .on("mousemove", function(event, d) {
-        const meta = tooltipMeta.find(m => m.label === d.label) || {};
-        const companies = (meta.customers || []).slice(0, 8);
-        const more = (meta.customers || []).length > 8 ? `<li>+${(meta.customers || []).length - 8} more</li>` : "";
-        const companyList = companies.length
-          ? companies.map(c => `<li>${escapeHtml(c)}</li>`).join("")
-          : `<li>N/A</li>`;
         showTooltip(
           container,
           tooltip,
           event,
           `<strong>${escapeHtml(d.label)}</strong>
            <ul class="cd-tooltip-list">
-             <li><strong>Tickets:</strong> ${d.value}</li>
-             <li><strong>Companies:</strong></li>
-             ${companyList}
-             ${more}
+             <li><strong>Created:</strong> ${d.total}</li>
+             <li><strong>Completed:</strong> ${d.doneLike}</li>
            </ul>`
         );
       })
@@ -1064,6 +1257,39 @@
     }
   }
 
+  function renderTeamPackTable(entries) {
+    const tbody  = document.getElementById("cd-team-pack-table");
+    const totEl  = document.getElementById("cd-team-pack-total");
+    const totCel = document.getElementById("cd-team-pack-total-cell");
+    if (!tbody) return;
+
+    const sorted = [...entries].sort((a, b) => b.value - a.value);
+    const total  = sorted.reduce((s, d) => s + d.value, 0);
+
+    if (!sorted.length) {
+      tbody.innerHTML = `<tr><td colspan="2" class="py-4 px-3 text-center text-slate-400">No data</td></tr>`;
+    } else {
+      tbody.innerHTML = sorted.map(d => {
+        const pct = total ? ((d.value / total) * 100).toFixed(1) : "0.0";
+        const color = colorForCategory(d.name);
+        return `
+          <tr class="border-t border-slate-100 hover:bg-slate-50">
+            <td class="py-1.5 px-3 truncate max-w-[170px]" title="${escapeHtml(d.name)}">
+              <span class="inline-block w-2 h-2 rounded-full mr-1.5 align-middle" style="background:${color}"></span>
+              <span class="align-middle text-slate-700">${escapeHtml(d.name)}</span>
+            </td>
+            <td class="py-1.5 px-3 text-right tabular-nums text-slate-700">
+              ${d.value}
+              <span class="text-slate-400 ml-1">${pct}%</span>
+            </td>
+          </tr>`;
+      }).join("");
+    }
+
+    if (totEl)  totEl.textContent  = total + (total === 1 ? " ticket" : " tickets");
+    if (totCel) totCel.textContent = total;
+  }
+
   function renderTeamPackChart(containerId, teamCounts) {
     const container = document.getElementById(containerId);
     if (!container) return;
@@ -1071,6 +1297,10 @@
     const entries = Object.entries(teamCounts || {}).map(([name, value]) => ({ name, value: Number(value) || 0 }))
       .filter(d => d.value > 0);
     renderLegend("cd-team-pack-legend", entries.slice(0, 12).map(d => ({ label: d.name, color: colorForCategory(d.name) })));
+
+    // Side table — counts per team + total
+    renderTeamPackTable(entries);
+
     if (!entries.length) {
       container.innerHTML = `<div class="text-xs text-slate-400 h-full flex items-center justify-center">No team data</div>`;
       return;
@@ -1534,6 +1764,7 @@
     title.textContent = `${customerName} tickets`;
     subtitle.textContent = `${rows.length} tickets up to ${frameLabel}`;
     renderRaceOffcanvasTickets(rows);
+    _wcResetState(rows, `${customerName}`);
     offcanvas.classList.add("open");
     offcanvas.setAttribute("aria-hidden", "false");
     await loadRaceSelectionInsights(rows, `${customerName} up to ${frameLabel}`);
@@ -1550,10 +1781,271 @@
     title.textContent = "Launch blocker tickets";
     subtitle.textContent = `${launchBlockerRows.length} tickets in ${selectedCustomer}`;
     renderRaceOffcanvasTickets(launchBlockerRows);
+    _wcResetState(launchBlockerRows, `Launch Blockers – ${selectedCustomer}`);
     offcanvas.classList.add("open");
     offcanvas.setAttribute("aria-hidden", "false");
     await loadRaceSelectionInsights(launchBlockerRows, `Launch blockers in ${selectedCustomer}`);
   }
+
+  // ─── Word Cloud ────────────────────────────────────────────────────────────
+  const _wc = {
+    tickets: [],          // current offcanvas ticket rows
+    context: "",          // company name label
+    words: null,          // cached [{text,weight}] from Claude (reset on new company)
+    visible: false,
+  };
+
+  function _wcResetState(tickets, context) {
+    _wc.tickets = tickets || [];
+    _wc.context = context || "";
+    _wc.words = null;
+    _wc.visible = false;
+    const panel = document.getElementById("cd-wc-panel");
+    if (panel) panel.classList.add("hidden");
+    const btn = document.getElementById("cd-wc-toggle-btn");
+    if (btn) {
+      btn.classList.add("flex");
+      btn.classList.remove("active");
+      const lbl = document.getElementById("cd-wc-btn-label");
+      if (lbl) lbl.textContent = "Word Cloud";
+    }
+  }
+
+  window.toggleWordCloud = async function () {
+    const panel = document.getElementById("cd-wc-panel");
+    const btnLabel = document.getElementById("cd-wc-btn-label");
+    const btn = document.getElementById("cd-wc-toggle-btn");
+    if (!panel) return;
+
+    if (_wc.visible) {
+      panel.classList.add("hidden");
+      _wc.visible = false;
+      if (btnLabel) btnLabel.textContent = "Word Cloud";
+      if (btn) btn.classList.remove("active");
+      return;
+    }
+
+    _wc.visible = true;
+    panel.classList.remove("hidden");
+    if (btnLabel) btnLabel.textContent = "Hide Cloud";
+    if (btn) btn.classList.add("active");
+
+    // if already have words, just redraw (handles panel being re-shown)
+    if (_wc.words && _wc.words.length) {
+      _wcDraw(_wc.words);
+      return;
+    }
+
+    // fetch from Claude
+    const loading = document.getElementById("cd-wc-loading");
+    const vp      = document.getElementById("cd-wc-viewport");
+    const errEl   = document.getElementById("cd-wc-error");
+    const status  = document.getElementById("cd-wc-status");
+    if (loading) loading.style.display = "flex";
+    if (vp) vp.style.display = "none";
+    if (errEl) errEl.style.display = "none";
+    if (status) status.textContent = "Asking Claude…";
+
+    try {
+      const res  = await fetch("/api/customer_dashboard/wordcloud", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tickets: _wc.tickets, context: _wc.context }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || "API error");
+      _wc.words = data.words || [];
+      if (loading) loading.style.display = "none";
+      if (status) status.textContent = "Generated by Claude";
+      _wcDraw(_wc.words);
+    } catch (e) {
+      if (loading) loading.style.display = "none";
+      if (errEl) { errEl.textContent = "Could not generate word cloud: " + (e.message || e); errEl.style.display = "block"; }
+      if (status) status.textContent = "Error";
+    }
+  };
+
+  // ─── Pan + Zoom state ──────────────────────────────────────────────────────
+  // Model: viewport is a fixed window; canvas is rendered at native size and
+  // moved/scaled inside the viewport with a 2D affine transform.
+  // transform: translate(panX, panY) scale(zoom)   (transform-origin: 0 0)
+  const _wcView = {
+    canvasW: 0,        // canvas pixel width (CSS px)
+    canvasH: 0,        // canvas pixel height (CSS px)
+    zoom: 1,           // current scale
+    panX: 0,           // top-left translate X
+    panY: 0,           // top-left translate Y
+    minZoom: 0.3,
+    maxZoom: 4,
+  };
+
+  function _wcUpdateTransform() {
+    const canvas = document.getElementById("cd-wc-canvas");
+    const label  = document.getElementById("cd-wc-zoom-label");
+    if (!canvas) return;
+    canvas.style.transform =
+      `translate(${_wcView.panX}px, ${_wcView.panY}px) scale(${_wcView.zoom})`;
+    if (label) label.textContent = Math.round(_wcView.zoom * 100) + "%";
+  }
+
+  function _wcCenter() {
+    const vp = document.getElementById("cd-wc-viewport");
+    if (!vp) return;
+    const vw = vp.clientWidth, vh = vp.clientHeight;
+    const cw = _wcView.canvasW * _wcView.zoom;
+    const ch = _wcView.canvasH * _wcView.zoom;
+    _wcView.panX = (vw - cw) / 2;
+    _wcView.panY = (vh - ch) / 2;
+    _wcUpdateTransform();
+  }
+
+  function _wcZoomAt(newZoom, viewportPx) {
+    newZoom = Math.min(_wcView.maxZoom, Math.max(_wcView.minZoom, newZoom));
+    if (newZoom === _wcView.zoom) return;
+    // Convert viewport-space cursor to canvas-space (in original canvas pixels)
+    const cx = (viewportPx.x - _wcView.panX) / _wcView.zoom;
+    const cy = (viewportPx.y - _wcView.panY) / _wcView.zoom;
+    _wcView.zoom = newZoom;
+    // Adjust pan so the same canvas point stays under the cursor
+    _wcView.panX = viewportPx.x - cx * _wcView.zoom;
+    _wcView.panY = viewportPx.y - cy * _wcView.zoom;
+    _wcUpdateTransform();
+  }
+
+  // Public buttons
+  window.wcZoom = function(delta) {
+    const vp = document.getElementById("cd-wc-viewport");
+    if (!vp) return;
+    _wcZoomAt(_wcView.zoom + delta, { x: vp.clientWidth/2, y: vp.clientHeight/2 });
+  };
+  window.wcZoomReset = function() {
+    _wcView.zoom = 1;
+    _wcCenter();
+  };
+
+  function _wcBindInteractions() {
+    const vp = document.getElementById("cd-wc-viewport");
+    if (!vp || vp.dataset.wcBound === "1") return;
+    vp.dataset.wcBound = "1";
+
+    // Mouse wheel → zoom at cursor
+    vp.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      const rect = vp.getBoundingClientRect();
+      const px = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      const factor = e.deltaY < 0 ? 1.15 : 1/1.15;
+      _wcZoomAt(_wcView.zoom * factor, px);
+    }, { passive: false });
+
+    // Click & drag → pan
+    let dragging = false, lastX = 0, lastY = 0;
+    vp.addEventListener("mousedown", (e) => {
+      dragging = true; lastX = e.clientX; lastY = e.clientY;
+      vp.style.cursor = "grabbing";
+    });
+    window.addEventListener("mousemove", (e) => {
+      if (!dragging) return;
+      _wcView.panX += e.clientX - lastX;
+      _wcView.panY += e.clientY - lastY;
+      lastX = e.clientX; lastY = e.clientY;
+      _wcUpdateTransform();
+    });
+    window.addEventListener("mouseup", () => {
+      if (dragging) { dragging = false; vp.style.cursor = "grab"; }
+    });
+
+    // Double-click → reset to 100% & centred
+    vp.addEventListener("dblclick", () => window.wcZoomReset());
+  }
+
+  function _wcDraw(words) {
+    const vp       = document.getElementById("cd-wc-viewport");
+    const canvas   = document.getElementById("cd-wc-canvas");
+    const zoomBtns = document.getElementById("cd-wc-zoom-btns");
+    if (!vp || !canvas) return;
+    vp.style.display = "block";
+    if (zoomBtns) zoomBtns.style.display = "flex";
+    _wcBindInteractions();
+
+    // Defer two frames so the viewport has its real width
+    requestAnimationFrame(() => requestAnimationFrame(() => _wcRender(words)));
+  }
+
+  function _wcRender(words) {
+    const vp     = document.getElementById("cd-wc-viewport");
+    const canvas = document.getElementById("cd-wc-canvas");
+    if (!vp || !canvas) return;
+
+    // Render canvas slightly larger than viewport so words have packing room
+    const vw = vp.clientWidth, vh = vp.clientHeight;
+    const W  = Math.max(600, vw);                 // logical canvas width
+    const H  = Math.max(380, Math.round(vh * 0.95));
+    const dpr = window.devicePixelRatio || 1;
+
+    _wcView.canvasW = W;
+    _wcView.canvasH = H;
+
+    canvas.width        = W * dpr;
+    canvas.height       = H * dpr;
+    canvas.style.width  = W + "px";
+    canvas.style.height = H + "px";
+
+    const palette = [
+      "#4f46e5","#7c3aed","#2563eb","#0891b2","#059669",
+      "#d97706","#dc2626","#db2777","#6366f1","#8b5cf6",
+    ];
+
+    const maxW = Math.max(...words.map(w => w.weight));
+    const minW = Math.min(...words.map(w => w.weight));
+    const rng  = maxW - minW || 1;
+
+    if (typeof WordCloud === "undefined") {
+      const ctx = canvas.getContext("2d");
+      ctx.scale(dpr, dpr);
+      ctx.fillStyle = "#f8fafc";
+      ctx.fillRect(0, 0, W, H);
+      ctx.textBaseline = "top";
+      let x = 8, y = 8, rowH = 0;
+      words.forEach((w, i) => {
+        const sz = 14 + ((w.weight - minW) / rng) * 28;
+        ctx.font = `700 ${sz}px Inter, sans-serif`;
+        const tw = ctx.measureText(w.text).width + 16;
+        if (x + tw > W - 8) { x = 8; y += rowH + 10; rowH = 0; }
+        ctx.fillStyle = palette[i % palette.length];
+        ctx.fillText(w.text, x, y + 4);
+        x += tw + 12; rowH = Math.max(rowH, sz + 8);
+      });
+      _wcView.zoom = 1; _wcCenter();
+      return;
+    }
+
+    const list = words.map(w => [
+      w.text, 1 + Math.round(((w.weight - minW) / rng) * 9),
+    ]);
+    const wf = (size) => Math.max(14, Math.round(size * 6));
+
+    let colorIdx = 0;
+    WordCloud(canvas, {
+      list,
+      weightFactor    : wf,
+      gridSize        : Math.max(8, Math.round(W / 55)),
+      fontFamily      : "Inter, sans-serif",
+      fontWeight      : "700",
+      color           : () => palette[colorIdx++ % palette.length],
+      rotateRatio     : 0,
+      backgroundColor : "#f8fafc",
+      drawOutOfBound  : false,
+      shrinkToFit     : true,
+      origin          : [Math.round(W / 2), Math.round(H / 2)],
+      minSize         : 10,
+    });
+
+    // After render, fit the canvas inside viewport (so it appears centred)
+    const fitZoom = Math.min(vw / W, vh / H, 1);
+    _wcView.zoom = fitZoom;
+    _wcCenter();
+  }
+  // ───────────────────────────────────────────────────────────────────────────
 
   function closeRaceOffcanvas() {
     const offcanvas = document.getElementById("cd-race-offcanvas");
@@ -1837,21 +2329,31 @@
       if (r.launch_blocker) launchBlockers += 1;
       const p = (r.priority || "").toLowerCase();
       if (["highest", "high", "critical", "blocker", "p0", "p1", "sev1", "sev-1"].some(tok => p.includes(tok))) high += 1;
+      const statusName = String(r.status || "Unknown").trim() || "Unknown";
+      const isDoneLike = TIMELINE_DONE_STATUSES.has(statusName.toLowerCase());
       const monthKey = /^\d{4}-\d{2}-\d{2}$/.test(r.created_date || "")
         ? (r.created_date || "").slice(0, 7)
         : "Unknown";
       const dayKey = /^\d{4}-\d{2}-\d{2}$/.test(r.created_date || "")
         ? (r.created_date || "")
         : "Unknown";
-      if (!timelineMap[monthKey]) timelineMap[monthKey] = { count: 0, customers: new Set() };
+      if (!timelineMap[monthKey]) timelineMap[monthKey] = { count: 0, doneLikeCount: 0, customers: new Set(), doneStatuses: {} };
       timelineMap[monthKey].count += 1;
       const rowCustomers = (r.customers || []).length ? r.customers : ["Unspecified"];
       rowCustomers.forEach(c => timelineMap[monthKey].customers.add(c));
-      if (!timelineDayMap[dayKey]) timelineDayMap[dayKey] = { count: 0, customers: new Set() };
+      if (isDoneLike) {
+        timelineMap[monthKey].doneLikeCount += 1;
+        timelineMap[monthKey].doneStatuses[statusName] = (timelineMap[monthKey].doneStatuses[statusName] || 0) + 1;
+      }
+      if (!timelineDayMap[dayKey]) timelineDayMap[dayKey] = { count: 0, doneLikeCount: 0, customers: new Set(), doneStatuses: {} };
       timelineDayMap[dayKey].count += 1;
       rowCustomers.forEach(c => timelineDayMap[dayKey].customers.add(c));
+      if (isDoneLike) {
+        timelineDayMap[dayKey].doneLikeCount += 1;
+        timelineDayMap[dayKey].doneStatuses[statusName] = (timelineDayMap[dayKey].doneStatuses[statusName] || 0) + 1;
+      }
       priorityCounts[r.priority || "Unspecified"] = (priorityCounts[r.priority || "Unspecified"] || 0) + 1;
-      statusCounts[r.status || "Unknown"] = (statusCounts[r.status || "Unknown"] || 0) + 1;
+      statusCounts[statusName] = (statusCounts[statusName] || 0) + 1;
       const customers = (r.customers || []).length ? r.customers : ["Unspecified"];
       for (const c of customers) {
         customerCounts[c] = (customerCounts[c] || 0) + 1;
@@ -1873,7 +2375,18 @@
           const dt = new Date(`${k}-01T00:00:00`);
           label = dt.toLocaleString([], { month: "short", year: "numeric" });
         }
-        return { key: k, label, count: timelineSource[k].count, customers: [...timelineSource[k].customers].sort() };
+        const createdCount = timelineSource[k].count || 0;
+        const doneLikeCount = timelineSource[k].doneLikeCount || 0;
+        return {
+          key: k,
+          label,
+          count: createdCount,
+          createdCount,
+          doneLikeCount,
+          otherCount: Math.max(0, createdCount - doneLikeCount),
+          customers: [...timelineSource[k].customers].sort(),
+          doneStatuses: timelineSource[k].doneStatuses || {},
+        };
       });
 
     return { timeline, priorityCounts, statusCounts, customerCounts, teamCounts, high, launchBlockers };
@@ -1925,17 +2438,22 @@
     document.getElementById("kpi-lb-bar").style.width = `${lbRatio}%`;
     document.getElementById("kpi-customer").textContent = selectedCustomer || "All Customers";
 
-    renderLineChart(
-      "cd-timeline",
-      stats.timeline.map(t => t.label),
-      stats.timeline.map(t => t.count),
-      "#2563eb",
-      stats.timeline.map(t => ({ label: t.label, customers: t.customers }))
-    );
+    renderTimelineStackedBarChart("cd-timeline", stats.timeline);
     const pri = Object.keys(stats.priorityCounts).sort((a, b) => stats.priorityCounts[b] - stats.priorityCounts[a]);
     renderBarChart("cd-priority", pri, pri.map(k => stats.priorityCounts[k]), "#7c3aed");
-    const st = Object.keys(stats.statusCounts).sort((a, b) => stats.statusCounts[b] - stats.statusCounts[a]);
-    renderBarChart("cd-status-chart", st, st.map(k => stats.statusCounts[k]), "#0ea5e9");
+    // Collapse all statuses into 4 buckets: Open, In Progress, On Hold, Completed
+    const STATUS_OPEN = new Set(['open','to do','new','reopened']);
+    const STATUS_HOLD = new Set(['on hold','blocked','waiting','pending','parked']);
+    const stBuckets = { 'Open': 0, 'In Progress': 0, 'On Hold': 0, 'Completed': 0 };
+    Object.entries(stats.statusCounts || {}).forEach(([s, cnt]) => {
+        const key = s.trim().toLowerCase();
+        if (TIMELINE_DONE_STATUSES.has(key))       stBuckets['Completed']   += cnt;
+        else if (STATUS_HOLD.has(key))             stBuckets['On Hold']     += cnt;
+        else if (STATUS_OPEN.has(key))             stBuckets['Open']        += cnt;
+        else                                       stBuckets['In Progress'] += cnt;
+    });
+    const stLabels = ['Open', 'In Progress', 'On Hold', 'Completed'];
+    renderBarChart("cd-status-chart", stLabels, stLabels.map(k => stBuckets[k]), "#0ea5e9");
     renderBarChart("cd-lb-split-chart", ["Launch Blocker", "Non-Blocker"], [stats.launchBlockers, Math.max(0, rows.length - stats.launchBlockers)], "#ef4444");
     const teamTrend = buildTeamTrend(rows);
     renderTeamTrendChart("cd-team-dist-chart", "cd-team-dist-legend", teamTrend);
@@ -2030,11 +2548,12 @@
     document.getElementById("cd-loader").classList.toggle("open", !!open);
   }
 
-  async function fetchByJql(jql, title = "") {
+  async function fetchByJql(jql, title = "", preferredSelectedId = "") {
     const status = document.getElementById("cd-status");
     const finalJql = (jql || "").trim();
     const finalTitle = (title || "").trim();
     const stored = getStoredSettings();
+    const selectionHintId = preferredSelectedId || state.editingJqlId || "";
     if (!finalJql) {
       status.textContent = "Please enter JQL first.";
       status.classList.add("text-red-400");
@@ -2047,14 +2566,16 @@
       return;
     }
     state.currentJql = finalJql;
-    const savedId = finalTitle ? upsertSavedJql(finalTitle, finalJql, state.editingJqlId || "") : (stored.selectedJqlId || "");
+    const savedId = finalTitle
+      ? upsertSavedJql(finalTitle, finalJql, selectionHintId)
+      : (selectionHintId || stored.selectedJqlId || "");
     state.editingJqlId = savedId || "";
     saveStoredSettings({
       jql: finalJql,
       jqlTitle: finalTitle || stored.jqlTitle || "",
       selectedJqlId: savedId || "",
     });
-    populateSavedJqlDropdown(savedId || stored.selectedJqlId || "");
+    populateSavedJqlDropdown(savedId || preferredSelectedId || stored.selectedJqlId || "");
     renderSavedJqlList(savedId || "");
     status.textContent = "Loading...";
     status.classList.remove("text-red-400");
@@ -2132,7 +2653,7 @@
       if (!selectedId) return;
       const selectedSaved = getSavedJqls().find(item => item.id === selectedId);
       if (!selectedSaved) return;
-      fetchByJql(selectedSaved.jql, selectedSaved.title);
+      fetchByJql(selectedSaved.jql, selectedSaved.title, selectedId);
     });
     document.getElementById("cd-toggle-ai").addEventListener("click", () => toggleAiPanel());
     document.getElementById("cd-open-settings").addEventListener("click", openSettingsDialog);
@@ -2162,7 +2683,7 @@
       if (action === "use") {
         saveStoredSettings({ selectedJqlId: id });
         populateSavedJqlDropdown(id);
-        fetchByJql(selectedSaved.jql, selectedSaved.title);
+        fetchByJql(selectedSaved.jql, selectedSaved.title, id);
         return;
       }
       if (action === "edit") {
@@ -2225,7 +2746,7 @@
     state.currentJql = stored.jql || `project = "{{ project }}" AND created >= -30d ORDER BY created DESC`;
     setDashboardReady(false);
     if (stored.jql && stored.email && stored.token) {
-      fetchByJql(stored.jql);
+      fetchByJql(stored.jql, stored.jqlTitle || "", stored.selectedJqlId || "");
     }
   }
 

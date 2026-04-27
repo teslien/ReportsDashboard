@@ -4,130 +4,168 @@
 
 {% block extra_head %}
 <style>
-  body.tp-page { background: #f8fafc !important; color: #0f172a !important; }
+  body.tp-page { background: #f1f5f9 !important; color: #0f172a !important; }
   body.tp-page #theme-toggle-btn { display: none !important; }
+
+  /* ── Nav ───────────────────────────────────────── */
   .lp-nav {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    z-index: 1000;
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(8px);
+    position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+    background: rgba(255,255,255,0.97); backdrop-filter: blur(8px);
     border-bottom: 1px solid #e2e8f0;
   }
   .lp-nav-wrap {
-    width: 100%;
-    height: 64px;
-    padding: 0 16px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
+    width: 100%; height: 58px; padding: 0 24px;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
   }
-  .lp-brand {
-    display: inline-flex;
-    align-items: center;
-    text-decoration: none;
-    line-height: 0;
-  }
-  .lp-brand-logo {
-    height: 30px;
-    width: auto;
-    display: block;
-  }
-  .lp-menu { display: flex; align-items: center; gap: 8px; }
+  .lp-brand { display: inline-flex; align-items: center; text-decoration: none; }
+  .lp-brand-logo { height: 28px; width: auto; display: block; }
+  .lp-menu { display: flex; align-items: stretch; gap: 0; height: 58px; }
   .lp-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    padding: 8px 12px;
-    border-radius: 999px;
-    border: 1px solid #cbd5e1;
-    background: #ffffff;
-    color: #475569;
-    text-decoration: none;
-    font-size: 13px;
-    font-weight: 700;
-    transition: all .15s;
+    position: relative;
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 0 16px;
+    color: #64748b; text-decoration: none;
+    font-size: 13px; font-weight: 600;
+    transition: color .18s; white-space: nowrap;
   }
-  .lp-link:hover { border-color: #93c5fd; color: #1e3a8a; background: #eff6ff; }
-  .lp-link.active {
-    border-color: #bfdbfe;
-    color: #1d4ed8;
-    background: #eff6ff;
+  .lp-link::after {
+    content: ''; position: absolute; bottom: 0; left: 0; right: 0;
+    height: 2px; background: #2563eb; border-radius: 2px 2px 0 0;
+    transform: scaleX(0); transform-origin: center;
+    transition: transform .22s cubic-bezier(.4,0,.2,1);
   }
+  .lp-link:hover { color: #1e40af; }
+  .lp-link:hover::after { transform: scaleX(1); }
+  .lp-link.active { color: #1d4ed8; font-weight: 700; }
+  .lp-link.active::after { transform: scaleX(1); }
+
+  /* ── Cards ─────────────────────────────────────── */
   .tp-card {
-    background: #ffffff;
-    border: 1px solid #e2e8f0;
-    border-radius: 12px;
-    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+    background: #ffffff; border: 1px solid #e2e8f0;
+    border-radius: 14px; box-shadow: 0 1px 3px rgba(15,23,42,.06);
   }
-  .tp-table-wrap { overflow-x: auto; max-height: 320px; overflow-y: auto; }
-  .tp-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  .tp-table th {
-    position: sticky; top: 0;
-    background: #f8fafc;
-    text-align: left; padding: 8px 10px;
-    color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
-    border-bottom: 1px solid #e2e8f0;
+
+  /* ── Filter bar ─────────────────────────────────── */
+  .tp-label { display: block; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 5px; }
+  .tp-input {
+    background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;
+    padding: 7px 11px; font-size: 13px; color: #0f172a; outline: none;
+    transition: border .15s;
   }
-  .tp-table td { padding: 8px 10px; border-bottom: 1px solid #eef2f7; color: #1f2937; }
-  .tp-table tr:hover td { background: rgba(59, 130, 246, 0.06); }
-  .tp-table tr.tp-row-overdue td { background: #fee2e2; }
-  .tp-table tr.tp-row-overdue:hover td { background: #fecaca; }
-  .tp-status-pill {
-    display: inline-flex;
-    align-items: center;
-    padding: 2px 8px;
-    border-radius: 999px;
-    font-size: 11px;
-    font-weight: 700;
-    border: 1px solid #cbd5e1;
-    background: #f8fafc;
-    color: #334155;
+  .tp-input:focus { border-color: #93c5fd; background: #fff; }
+  .tp-btn-primary {
+    display: inline-flex; align-items: center; gap: 7px;
+    background: #2563eb; color: #fff; border: none; border-radius: 8px;
+    padding: 8px 18px; font-size: 13px; font-weight: 700; cursor: pointer;
+    transition: background .15s;
   }
-  .tp-status-pill.done { border-color: #86efac; background: #dcfce7; color: #166534; }
-  .tp-status-pill.progress { border-color: #93c5fd; background: #dbeafe; color: #1d4ed8; }
-  .tp-status-pill.blocked { border-color: #fca5a5; background: #fee2e2; color: #b91c1c; }
-  .tp-status-pill.qa { border-color: #c4b5fd; background: #ede9fe; color: #6d28d9; }
-  .tp-status-pill.review { border-color: #fdba74; background: #ffedd5; color: #9a3412; }
-  .tp-key-cell { display: inline-flex; align-items: center; gap: 6px; }
-  .tp-type-icon { width: 14px; height: 14px; border-radius: 3px; flex: 0 0 auto; }
-  .tp-team-head { display: inline-flex; align-items: center; gap: 10px; }
-  .tp-team-avatar {
-    width: 30px;
-    height: 30px;
-    border-radius: 999px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 12px;
-    font-weight: 800;
-    border: 1px solid rgba(15, 23, 42, 0.1);
-    color: #0f172a;
-    user-select: none;
+  .tp-btn-primary:hover { background: #1d4ed8; }
+  .tp-btn-primary:disabled { opacity: .55; cursor: not-allowed; }
+  .tp-preset {
+    border: 1px solid #e2e8f0; background: #f8fafc; color: #475569;
+    border-radius: 7px; padding: 5px 12px; font-size: 12px; font-weight: 600;
+    cursor: pointer; transition: all .15s;
   }
-  .tp-preset { border: 1px solid #cbd5e1; background: #ffffff; color: #475569; border-radius: 8px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all .15s; }
-  .tp-preset:hover { border-color: #3b82f6; color: #1e293b; background: #eff6ff; }
+  .tp-preset:hover, .tp-preset.active { border-color: #93c5fd; color: #1e40af; background: #eff6ff; }
+  .tp-settings-btn {
+    display: inline-flex; align-items: center; gap: 7px;
+    border: 1px solid #e2e8f0; background: #fff; color: #334155;
+    border-radius: 8px; padding: 7px 13px; font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: all .15s;
+  }
+  .tp-settings-btn:hover { background: #f8fafc; border-color: #cbd5e1; }
+
+  /* ── KPI row ─────────────────────────────────────── */
+  .tp-kpi-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; }
+  @media(max-width:640px) { .tp-kpi-grid { grid-template-columns: 1fr; } }
+  .tp-kpi { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px 20px; }
+  .tp-kpi-label { font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .06em; }
+  .tp-kpi-value { font-size: 26px; font-weight: 800; color: #0f172a; line-height: 1.2; margin-top: 4px; }
+  .tp-kpi-value.accent { color: #2563eb; }
+
+  /* ── Team filter dropdown ──────────────────────── */
+  .tp-team-select-wrap { display: flex; align-items: center; gap: 10px; }
+  .tp-team-select {
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 8px;
+    padding: 7px 32px 7px 11px; font-size: 13px; font-weight: 600; color: #0f172a;
+    outline: none; appearance: none; cursor: pointer; min-width: 200px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 10px center;
+    transition: border .15s;
+  }
+  .tp-team-select:focus { border-color: #93c5fd; }
+
+  /* ── Loader ──────────────────────────────────────── */
   .tp-loader { display: none; align-items: center; gap: 8px; font-size: 13px; color: #64748b; }
   .tp-loader.open { display: inline-flex; }
   .tp-spin { width: 14px; height: 14px; border: 2px solid #cbd5e1; border-top-color: #3b82f6; border-radius: 50%; animation: tp-spin .7s linear infinite; }
-  .tp-settings-btn { display: inline-flex; align-items: center; gap: 8px; border: 1px solid #cbd5e1; background: #fff; color: #334155; border-radius: 10px; padding: 9px 14px; font-size: 13px; font-weight: 700; transition: all .15s; }
-  .tp-settings-btn:hover { background: #f8fafc; color: #0f172a; }
-  .tp-modal-backdrop { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); display: none; align-items: center; justify-content: center; z-index: 1100; padding: 16px; }
+
+  /* ── Team sections ───────────────────────────────── */
+  .tp-team-section { transition: opacity .15s; }
+  .tp-team-section.hidden { display: none; }
+  .tp-team-header {
+    display: flex; flex-wrap: wrap; align-items: center;
+    justify-content: space-between; gap: 10px;
+    padding: 14px 20px; border-bottom: 1px solid #f1f5f9;
+  }
+  .tp-team-head { display: inline-flex; align-items: center; gap: 10px; }
+  .tp-team-avatar {
+    width: 32px; height: 32px; border-radius: 10px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 800; color: #0f172a;
+  }
+  .tp-team-name { font-size: 16px; font-weight: 700; color: #0f172a; }
+  .tp-team-meta { font-size: 12px; color: #64748b; }
+  .tp-team-meta strong { color: #0f172a; font-weight: 700; }
+
+  /* ── Table ───────────────────────────────────────── */
+  .tp-table-wrap { overflow-x: auto; max-height: 340px; overflow-y: auto; }
+  .tp-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .tp-table th {
+    position: sticky; top: 0; z-index: 1;
+    background: #f8fafc; text-align: left; padding: 9px 12px;
+    color: #64748b; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .05em; font-size: 11px;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .tp-table td { padding: 9px 12px; border-bottom: 1px solid #f1f5f9; color: #1f2937; vertical-align: middle; }
+  .tp-table tr:last-child td { border-bottom: none; }
+  .tp-table tr:hover td { background: #f8fafc; }
+  .tp-table tr.tp-row-overdue td { background: #fef2f2; }
+  .tp-table tr.tp-row-overdue:hover td { background: #fee2e2; }
+
+  /* ── Status pills ────────────────────────────────── */
+  .tp-status-pill {
+    display: inline-flex; align-items: center;
+    padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 700;
+    border: 1px solid #e2e8f0; background: #f8fafc; color: #475569;
+    white-space: nowrap;
+  }
+  .tp-status-pill.done    { border-color: #86efac; background: #f0fdf4; color: #166534; }
+  .tp-status-pill.progress { border-color: #93c5fd; background: #eff6ff; color: #1d4ed8; }
+  .tp-status-pill.blocked { border-color: #fca5a5; background: #fef2f2; color: #b91c1c; }
+  .tp-status-pill.qa      { border-color: #c4b5fd; background: #f5f3ff; color: #6d28d9; }
+  .tp-status-pill.review  { border-color: #fcd34d; background: #fffbeb; color: #92400e; }
+
+  .tp-key-cell { display: inline-flex; align-items: center; gap: 5px; }
+  .tp-type-icon { width: 13px; height: 13px; border-radius: 3px; flex: 0 0 auto; }
+
+  /* ── Modal ───────────────────────────────────────── */
+  .tp-modal-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,.45); display: none; align-items: center; justify-content: center; z-index: 1100; padding: 16px; }
   .tp-modal-backdrop.open { display: flex; }
-  .tp-modal { width: min(960px, calc(100vw - 24px)); background: #fff; border: 1px solid #e2e8f0; border-radius: 18px; box-shadow: 0 12px 40px rgba(15, 23, 42, 0.24); overflow: hidden; }
-  .tp-modal-head, .tp-modal-actions { padding: 16px 20px; border-bottom: 1px solid #e2e8f0; }
-  .tp-modal-actions { border-bottom: none; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 10px; }
+  .tp-modal { width: min(520px, calc(100vw - 24px)); background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; box-shadow: 0 16px 48px rgba(15,23,42,.22); overflow: hidden; }
+  .tp-modal-head { padding: 16px 20px; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; }
+  .tp-modal-actions { padding: 14px 20px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 10px; }
   .tp-modal-body { padding: 18px 20px; }
-  .tp-modal-close { margin-left: auto; border: none; background: transparent; color: #64748b; font-size: 24px; line-height: 1; cursor: pointer; }
+  .tp-modal-close { border: none; background: transparent; color: #94a3b8; font-size: 22px; line-height: 1; cursor: pointer; }
   .tp-modal-close:hover { color: #0f172a; }
-  @media (max-width: 700px) {
-    .lp-nav-wrap { padding: 0 10px; }
+
+  @keyframes tp-spin { to { transform: rotate(360deg); } }
+  @media(max-width:700px) {
+    .lp-nav-wrap { padding: 0 12px; }
+    .lp-link { padding: 0 12px; }
     .lp-link span { display: none; }
   }
-  @keyframes tp-spin { to { transform: rotate(360deg); } }
 </style>
 {% endblock %}
 
@@ -138,104 +176,103 @@
       <img src="/static/lumber-logo.png" alt="LUMBER" class="lp-brand-logo" />
     </a>
     <div class="lp-menu">
-      <a href="/customer_dashboard" class="lp-link">
-        <i class="fas fa-users"></i><span>Dashboard</span>
-      </a>
-      <a href="/team_productivity" class="lp-link active">
-        <i class="fas fa-bolt"></i><span>Productivity</span>
-      </a>
-      <a href="/customer_closure" class="lp-link">
-        <i class="fas fa-circle-check"></i><span>Closure</span>
-      </a>
+      <a href="/customer_dashboard" class="lp-link"><i class="fas fa-users"></i><span>Dashboard</span></a>
+      <a href="/team_productivity" class="lp-link active"><i class="fas fa-bolt"></i><span>Productivity</span></a>
+      <a href="/customer_closure" class="lp-link"><i class="fas fa-circle-check"></i><span>Closure</span></a>
     </div>
   </div>
 </nav>
-<div class="max-w-7xl mx-auto space-y-8">
-  <div class="flex flex-wrap items-start justify-between gap-4">
+
+<div class="max-w-6xl mx-auto space-y-6">
+
+  <!-- Page header -->
+  <div class="flex flex-wrap items-center justify-between gap-3">
     <div>
-      <h1 class="text-3xl font-bold text-slate-900 tracking-tight">Team productivity</h1>
-      <p class="text-slate-600 mt-2 text-sm leading-relaxed max-w-3xl">
-        Average time from ticket <strong class="text-slate-800">created</strong> to first transition into
-        <strong class="text-slate-800">Resolved</strong>, <strong class="text-slate-800">Done</strong>, or
-        <strong class="text-slate-800">Ready for QA</strong> (from Jira history), for issues where
-        <strong class="text-slate-800">Reported By Customer</strong> is Yes and the issue was created in the selected range.
-        If your Jira uses a different field, set <code class="text-blue-600">JIRA_REPORTED_BY_CUSTOMER_JQL</code> in the environment.
-      </p>
+      <h1 class="text-2xl font-bold text-slate-900 tracking-tight">Team Productivity</h1>
+      <p class="text-slate-500 text-sm mt-1">Avg. time from ticket created → first resolution milestone, for customer-reported issues.</p>
     </div>
     <button type="button" id="tp-open-settings" class="tp-settings-btn">
-      <i class="fas fa-key"></i><span>Jira Credentials</span>
+      <i class="fas fa-key text-slate-400"></i>Jira Credentials
     </button>
   </div>
 
-  <div class="tp-card p-6 space-y-5">
-    <div class="flex flex-wrap items-end gap-4">
+  <!-- Filter card -->
+  <div class="tp-card p-5 space-y-4">
+    <div class="flex flex-wrap items-end gap-3">
       <div>
-        <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Start date</label>
-        <input type="date" id="tp-start" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-900 w-44" />
+        <label class="tp-label" for="tp-start">Start date</label>
+        <input type="date" id="tp-start" class="tp-input w-40" />
       </div>
       <div>
-        <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">End date</label>
-        <input type="date" id="tp-end" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-900 w-44" />
+        <label class="tp-label" for="tp-end">End date</label>
+        <input type="date" id="tp-end" class="tp-input w-40" />
       </div>
-      <button type="button" id="tp-run"
-        class="bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold px-5 py-2 rounded-lg transition">
-        Load data
+      <button type="button" id="tp-run" class="tp-btn-primary mt-auto">
+        <i class="fas fa-play text-xs"></i>Load data
       </button>
-      <div id="tp-loader" class="tp-loader"><span class="tp-spin"></span> Fetching from Jira…</div>
+      <div id="tp-loader" class="tp-loader mt-auto"><span class="tp-spin"></span> Fetching…</div>
     </div>
-    <div>
-      <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider mr-2">Quick range</span>
-      <div class="flex flex-wrap gap-2 mt-2">
-        <button type="button" class="tp-preset" data-days="7">1 week</button>
-        <button type="button" class="tp-preset" data-days="14">2 weeks</button>
-        <button type="button" class="tp-preset" data-days="30">1 month</button>
-        <button type="button" class="tp-preset" data-days="90">3 months</button>
-      </div>
-      <p class="text-xs text-slate-500 mt-2">End date is inclusive. JQL uses <code class="text-slate-700">created &lt; (end + 1 day)</code> at midnight UTC-style dates.</p>
+
+    <div class="flex flex-wrap items-center gap-2">
+      <span class="tp-label mb-0 mr-1">Quick range</span>
+      <button class="tp-preset" data-days="7">1 week</button>
+      <button class="tp-preset" data-days="14">2 weeks</button>
+      <button class="tp-preset" data-days="30">1 month</button>
+      <button class="tp-preset" data-days="90">3 months</button>
     </div>
-    <p id="tp-error" class="text-sm text-red-400 hidden"></p>
-    <p id="tp-jql" class="text-xs text-slate-500 font-mono break-all hidden"></p>
+
+    <p id="tp-jql" class="text-xs text-slate-400 font-mono break-all hidden"></p>
+    <p id="tp-error" class="text-sm text-red-500 hidden"></p>
   </div>
 
-  <div id="tp-summary" class="hidden tp-card p-5 grid grid-cols-1 sm:grid-cols-3 gap-4">
-    <div>
-      <div class="text-xs text-slate-500 uppercase font-semibold">Issues in range</div>
-      <div id="tp-count" class="text-2xl font-bold text-slate-900 mt-1">—</div>
+  <!-- KPI cards (hidden until data loads) -->
+  <div id="tp-summary" class="hidden tp-kpi-grid" style="grid-template-columns:repeat(2,1fr)">
+    <div class="tp-kpi">
+      <div class="tp-kpi-label">Tickets</div>
+      <div id="tp-count" class="tp-kpi-value">—</div>
     </div>
-    <div>
-      <div class="text-xs text-slate-500 uppercase font-semibold">Overall avg resolution</div>
-      <div id="tp-overall-avg" class="text-2xl font-bold text-blue-400 mt-1">—</div>
-    </div>
-    <div>
-      <div class="text-xs text-slate-500 uppercase font-semibold">Teams shown</div>
-      <div id="tp-team-count" class="text-2xl font-bold text-slate-900 mt-1">—</div>
+    <div class="tp-kpi">
+      <div class="tp-kpi-label">Avg resolution</div>
+      <div id="tp-overall-avg" class="tp-kpi-value accent">—</div>
     </div>
   </div>
 
-  <div id="tp-teams" class="space-y-6"></div>
+  <!-- Team filter (hidden until data loads) -->
+  <div id="tp-team-filter-row" class="hidden flex flex-wrap items-center justify-between gap-3">
+    <span class="text-sm font-semibold text-slate-700">Results</span>
+    <div class="tp-team-select-wrap">
+      <label class="tp-label mb-0 whitespace-nowrap" for="tp-team-select">Filter by team</label>
+      <select id="tp-team-select" class="tp-team-select">
+        <option value="__all__">All teams</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Team sections -->
+  <div id="tp-teams" class="space-y-4"></div>
 </div>
+
+<!-- Credentials modal -->
 <div id="tp-settings-modal" class="tp-modal-backdrop">
   <div class="tp-modal" role="dialog" aria-modal="true" aria-labelledby="tp-settings-title">
-    <div class="tp-modal-head flex items-center gap-3">
-      <span id="tp-settings-title" class="text-xl font-bold text-slate-900">Jira Credentials (Local)</span>
+    <div class="tp-modal-head">
+      <span id="tp-settings-title" class="text-base font-bold text-slate-900">Jira Credentials</span>
       <button id="tp-settings-close" class="tp-modal-close" aria-label="Close">&times;</button>
     </div>
-    <div class="tp-modal-body">
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label class="block text-sm font-semibold text-slate-700 mb-2">Jira Email</label>
-          <input id="tp-setting-email" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-900 w-full" type="email" placeholder="you@company.com" />
-        </div>
-        <div>
-          <label class="block text-sm font-semibold text-slate-700 mb-2">Jira API Token</label>
-          <input id="tp-setting-token" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-900 w-full" type="password" placeholder="ATATT..." />
-        </div>
+    <div class="tp-modal-body space-y-4">
+      <div>
+        <label class="tp-label" for="tp-setting-email">Jira email</label>
+        <input id="tp-setting-email" class="tp-input w-full" type="email" placeholder="you@company.com" />
       </div>
-      <p class="text-xs text-slate-500 mt-3">Stored in your browser local storage and reused after reload.</p>
+      <div>
+        <label class="tp-label" for="tp-setting-token">Jira API token</label>
+        <input id="tp-setting-token" class="tp-input w-full" type="password" placeholder="ATATT…" />
+      </div>
+      <p class="text-xs text-slate-400">Stored in browser local storage only — never sent to the server except as request headers to Jira.</p>
     </div>
     <div class="tp-modal-actions">
-      <button id="tp-settings-cancel" class="px-4 py-2 border border-slate-300 rounded-lg text-sm font-semibold text-slate-700 bg-white hover:bg-slate-50">Cancel</button>
-      <button id="tp-settings-save" class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold px-4 py-2 rounded-lg">Save Settings</button>
+      <button id="tp-settings-cancel" class="px-4 py-2 border border-slate-200 rounded-lg text-sm font-semibold text-slate-600 bg-white hover:bg-slate-50">Cancel</button>
+      <button id="tp-settings-save" class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold px-5 py-2 rounded-lg">Save</button>
     </div>
   </div>
 </div>
@@ -246,114 +283,113 @@
 (function () {
   const $ = (id) => document.getElementById(id);
   const jiraBase = {{ JIRA_DOMAIN | tojson }};
-  const LS_KEYS = {
-    email: 'customer_dashboard_jira_email',
-    token: 'customer_dashboard_jira_token',
-  };
+  const LS_KEYS = { email: 'customer_dashboard_jira_email', token: 'customer_dashboard_jira_token' };
 
+  /* ── credentials ── */
   function getStoredJiraSettings() {
-    return {
-      email: localStorage.getItem(LS_KEYS.email) || '',
-      token: localStorage.getItem(LS_KEYS.token) || '',
-    };
+    return { email: localStorage.getItem(LS_KEYS.email) || '', token: localStorage.getItem(LS_KEYS.token) || '' };
   }
-
   function saveStoredJiraSettings({ email, token }) {
     if (email !== undefined) localStorage.setItem(LS_KEYS.email, email || '');
     if (token !== undefined) localStorage.setItem(LS_KEYS.token, token || '');
   }
-
   function openSettingsDialog() {
-    const stored = getStoredJiraSettings();
-    $('tp-setting-email').value = stored.email;
-    $('tp-setting-token').value = stored.token;
+    const s = getStoredJiraSettings();
+    $('tp-setting-email').value = s.email;
+    $('tp-setting-token').value = s.token;
     $('tp-settings-modal').classList.add('open');
   }
-
-  function closeSettingsDialog() {
-    $('tp-settings-modal').classList.remove('open');
-  }
-
+  function closeSettingsDialog() { $('tp-settings-modal').classList.remove('open'); }
   function ensureLocalJiraSettings() {
-    const stored = getStoredJiraSettings();
-    if (stored.email && stored.token) return stored;
+    const s = getStoredJiraSettings();
+    if (s.email && s.token) return s;
     $('tp-error').textContent = 'Add your Jira email and API token in Jira Credentials first.';
     $('tp-error').classList.remove('hidden');
     openSettingsDialog();
     return null;
   }
 
+  /* ── dates ── */
   function toYMD(d) {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return y + '-' + m + '-' + day;
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
   }
-
-  function setInclusiveRangeDays(totalDays) {
-    const end = new Date();
-    const start = new Date();
+  function setRange(totalDays) {
+    const end = new Date(), start = new Date();
     start.setDate(end.getDate() - (totalDays - 1));
     $('tp-start').value = toYMD(start);
-    $('tp-end').value = toYMD(end);
+    $('tp-end').value   = toYMD(end);
+    document.querySelectorAll('.tp-preset').forEach(b => b.classList.toggle('active', +b.dataset.days === totalDays));
   }
+  setRange(7);
 
-  function defaultRange() {
-    setInclusiveRangeDays(7);
-  }
+  document.querySelectorAll('.tp-preset').forEach(btn =>
+    btn.addEventListener('click', () => setRange(parseInt(btn.dataset.days, 10)))
+  );
 
-  defaultRange();
-
-  document.querySelectorAll('.tp-preset').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const d = parseInt(btn.getAttribute('data-days'), 10);
-      if (d) setInclusiveRangeDays(d);
-    });
-  });
-
-  function issueUrl(key) {
-    if (!key) return '#';
-    const base = (jiraBase || '').replace(/\/$/, '');
-    return base + '/browse/' + encodeURIComponent(key);
-  }
-
-  function esc(s) {
-    if (s == null) return '';
-    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
-  }
-
-  function teamInitial(name) {
-    const n = (name || '').trim();
-    return n ? n.charAt(0).toUpperCase() : '?';
-  }
-
+  /* ── helpers ── */
+  function issueUrl(key) { return (jiraBase || '').replace(/\/$/, '') + '/browse/' + encodeURIComponent(key || ''); }
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
+  function teamInitial(n) { return (n || '').trim().charAt(0).toUpperCase() || '?'; }
   function teamAvatarColor(name) {
-    const palettes = [
-      '#fde68a', '#bfdbfe', '#c7d2fe', '#fecaca', '#bbf7d0',
-      '#a7f3d0', '#fbcfe8', '#ddd6fe', '#bae6fd', '#fed7aa'
-    ];
-    const n = String(name || '');
-    let hash = 0;
-    for (let i = 0; i < n.length; i += 1) hash = ((hash << 5) - hash + n.charCodeAt(i)) | 0;
-    const idx = Math.abs(hash) % palettes.length;
-    return palettes[idx];
+    const palette = ['#fde68a','#bfdbfe','#c7d2fe','#fecaca','#bbf7d0','#a7f3d0','#fbcfe8','#ddd6fe','#bae6fd','#fed7aa'];
+    let h = 0; for (const c of String(name||'')) h = ((h<<5)-h+c.charCodeAt(0))|0;
+    return palette[Math.abs(h) % palette.length];
   }
-
-  function statusClass(status) {
-    const s = String(status || '').trim().toLowerCase();
-    if (!s) return '';
-    if (s === 'open') return '';
-    if (s.includes('done') || s.includes('resolved') || s.includes('closed') || s.includes('deployed')) return 'done';
-    if (s.includes('qa')) return 'qa';
-    if (s.includes('review') || s.includes('staging') || s.includes('demo')) return 'review';
-    if (s.includes('block') || s.includes('unable') || s.includes("won't")) return 'blocked';
-    if (s.includes('progress') || s.includes('todo') || s.includes('selected')) return 'progress';
+  function statusClass(s) {
+    const k = String(s||'').toLowerCase();
+    if (k.includes('done')||k.includes('resolved')||k.includes('closed')||k.includes('deployed')) return 'done';
+    if (k.includes('qa')) return 'qa';
+    if (k.includes('review')||k.includes('staging')||k.includes('demo')) return 'review';
+    if (k.includes('block')||k.includes('unable')) return 'blocked';
+    if (k.includes('progress')||k.includes('selected')||k.includes('todo')) return 'progress';
     return '';
   }
 
+  /* ── KPI update ── */
+  let _allTeams = [];
+  let _overallCount = 0;
+  let _overallAvg = '—';
+
+  function updateKpis(val) {
+    if (val === '__all__') {
+      $('tp-count').textContent = _overallCount;
+      $('tp-overall-avg').textContent = _overallAvg;
+    } else {
+      const t = _allTeams[+val];
+      if (!t) return;
+      $('tp-count').textContent = t.total_in_range ?? '—';
+      $('tp-overall-avg').textContent = t.avg_resolution_display || '—';
+    }
+  }
+
+  /* ── team filter dropdown ── */
+  function populateTeamDropdown(teams) {
+    const sel = $('tp-team-select');
+    sel.innerHTML = '<option value="__all__">All teams</option>';
+    (teams || []).forEach((t, i) => {
+      const opt = document.createElement('option');
+      opt.value = i;
+      opt.textContent = t.team_name || ('Team ' + (i+1));
+      sel.appendChild(opt);
+    });
+    // default to first team if available
+    if (teams && teams.length) sel.value = '0';
+    filterTeams();
+  }
+
+  function filterTeams() {
+    const sel = $('tp-team-select');
+    const val = sel ? sel.value : '__all__';
+    document.querySelectorAll('.tp-team-section').forEach((sec, i) => {
+      const show = val === '__all__' || +val === i;
+      sec.classList.toggle('hidden', !show);
+    });
+    updateKpis(val);
+  }
+
+  /* ── main fetch ── */
   async function run() {
-    const ds = $('tp-start').value;
-    const de = $('tp-end').value;
+    const ds = $('tp-start').value, de = $('tp-end').value;
     const stored = ensureLocalJiraSettings();
     if (!stored) return;
     $('tp-error').classList.add('hidden');
@@ -362,11 +398,7 @@
     try {
       const res = await fetch('/api/team_productivity/data', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Jira-Email': stored.email,
-          'X-Jira-Token': stored.token,
-        },
+        headers: { 'Content-Type': 'application/json', 'X-Jira-Email': stored.email, 'X-Jira-Token': stored.token },
         credentials: 'same-origin',
         body: JSON.stringify({ date_start: ds, date_end: de }),
       });
@@ -375,69 +407,75 @@
         $('tp-error').textContent = data.error || ('HTTP ' + res.status);
         $('tp-error').classList.remove('hidden');
         $('tp-summary').classList.add('hidden');
+        $('tp-team-filter-row').classList.add('hidden');
         $('tp-teams').innerHTML = '';
         return;
       }
+
       $('tp-jql').textContent = 'JQL: ' + (data.jql || '');
       $('tp-jql').classList.remove('hidden');
       $('tp-summary').classList.remove('hidden');
-      $('tp-count').textContent = data.issue_count != null ? data.issue_count : '—';
-      $('tp-overall-avg').textContent = data.overall_avg_resolution_display || '—';
-      $('tp-team-count').textContent = (data.teams && data.teams.length) ? data.teams.length : '0';
-
       const teams = data.teams || [];
+      _allTeams = teams;
+      _overallCount = data.issue_count ?? '—';
+      _overallAvg   = data.overall_avg_resolution_display || '—';
+      $('tp-count').textContent = _overallCount;
+      $('tp-overall-avg').textContent = _overallAvg;
+
       if (!teams.length) {
-        $('tp-teams').innerHTML = '<div class="text-slate-500 text-sm tp-card p-6">No issues matched for this range.</div>';
+        $('tp-teams').innerHTML = '<div class="tp-card p-6 text-sm text-slate-400 text-center">No issues matched for this range.</div>';
+        $('tp-team-filter-row').classList.add('hidden');
         return;
       }
 
-      const parts = [];
-      for (const t of teams) {
-        const rows = (t.tickets || []).map((r) => {
-          let elapsedDisplay = '—';
-          if (r.resolution_hours != null) {
-            const elapsedHours = Number(r.resolution_hours);
-            elapsedDisplay = elapsedHours > 24
-              ? (elapsedHours / 24).toFixed(2) + ' d'
-              : elapsedHours + ' h';
-          }
-          const ra = r.resolved_at ? r.resolved_at.replace('T', ' ').slice(0, 19) : '—';
-          const isOverdue = r.resolution_hours != null && Number(r.resolution_hours) > 168;
-          const iconHtml = r.issue_type_icon
-            ? '<img src="' + esc(r.issue_type_icon) + '" alt="' + esc(r.issue_type || 'Type') + '" class="tp-type-icon" />'
-            : '';
-          const sClass = statusClass(r.status);
-          return '<tr' + (isOverdue ? ' class="tp-row-overdue"' : '') + '>'
-            + '<td><span class="tp-key-cell">' + iconHtml + '<a class="text-blue-600 hover:underline font-mono text-xs" href="' + esc(issueUrl(r.issue_key)) + '" target="_blank" rel="noopener">' + esc(r.issue_key) + '</a></span></td>'
-            + '<td>' + esc(r.summary || '') + '</td>'
-            + '<td><span class="tp-status-pill ' + esc(sClass) + '">' + esc(r.status || '') + '</span></td>'
-            + '<td class="whitespace-nowrap">' + esc(elapsedDisplay) + '</td>'
-            + '<td class="text-slate-500 whitespace-nowrap text-xs">' + esc(ra) + '</td>'
-            + '</tr>';
+      $('tp-teams').innerHTML = teams.map((t, idx) => {
+        const rows = (t.tickets || []).map(r => {
+          const elapsed = r.resolution_hours != null
+            ? (+r.resolution_hours > 24 ? (+r.resolution_hours/24).toFixed(2)+' d' : r.resolution_hours+' h')
+            : '—';
+          const ra = r.resolved_at ? r.resolved_at.replace('T',' ').slice(0,19) : '—';
+          const overdue = r.resolution_hours != null && +r.resolution_hours > 168;
+          const icon = r.issue_type_icon ? `<img src="${esc(r.issue_type_icon)}" alt="${esc(r.issue_type)}" class="tp-type-icon"/>` : '';
+          const sc = statusClass(r.status);
+          return `<tr${overdue?' class="tp-row-overdue"':''}>
+            <td><span class="tp-key-cell">${icon}<a class="text-blue-600 hover:underline font-mono text-xs font-bold" href="${esc(issueUrl(r.issue_key))}" target="_blank" rel="noopener">${esc(r.issue_key)}</a></span></td>
+            <td class="max-w-xs truncate">${esc(r.summary||'')}</td>
+            <td><span class="tp-status-pill ${esc(sc)}">${esc(r.status||'')}</span></td>
+            <td class="whitespace-nowrap font-semibold text-slate-700">${esc(elapsed)}</td>
+            <td class="text-slate-400 whitespace-nowrap text-xs">${esc(ra)}</td>
+          </tr>`;
         }).join('');
 
-        parts.push(
-          '<section class="tp-card overflow-hidden">'
-            + '<div class="px-5 py-4 border-b border-slate-200 flex flex-wrap items-baseline justify-between gap-3">'
-            + '<h2 class="text-lg font-bold text-slate-900 tp-team-head">'
-            + '<span class="tp-team-avatar" style="background:' + esc(teamAvatarColor(t.team_name)) + ';">' + esc(teamInitial(t.team_name)) + '</span>'
-            + '<span>' + esc(t.team_name) + '</span>'
-            + '</h2>'
-            + '<div class="text-sm text-slate-500">'
-            + '<span class="text-slate-700 font-semibold">' + (t.total_in_range || 0) + '</span> tickets'
-            + ' · '
-            + '<span class="text-slate-700 font-semibold">' + esc(t.avg_resolution_display) + '</span>'
-            + ' avg across <span class="text-slate-700">' + t.resolved_count + '</span> resolved'
-            + (t.unresolved_count ? ' · <span class="text-amber-400/90">' + t.unresolved_count + ' not yet at milestone</span>' : '')
-            + '</div></div>'
-            + '<div class="tp-table-wrap">'
-            + '<table class="tp-table"><thead><tr>'
-            + '<th>Key</th><th>Summary</th><th>Status</th><th>Elapsed</th><th>First milestone</th>'
-            + '</tr></thead><tbody>' + rows + '</tbody></table></div>'
-            + '</section>'
-        );
-      }
-      $('tp-teams').innerHTML = parts.join('');
+        const unresNote = t.unresolved_count
+          ? `<span class="text-amber-500 font-semibold">${t.unresolved_count} unresolved</span>`
+          : '';
+
+        return `<section class="tp-card overflow-hidden tp-team-section" data-idx="${idx}">
+          <div class="tp-team-header">
+            <div class="tp-team-head">
+              <span class="tp-team-avatar" style="background:${esc(teamAvatarColor(t.team_name))}">${esc(teamInitial(t.team_name))}</span>
+              <span class="tp-team-name">${esc(t.team_name)}</span>
+            </div>
+            <div class="tp-team-meta">
+              <strong>${t.total_in_range||0}</strong> tickets &nbsp;·&nbsp;
+              <strong>${esc(t.avg_resolution_display)}</strong> avg &nbsp;·&nbsp;
+              <strong>${t.resolved_count}</strong> resolved
+              ${unresNote ? '&nbsp;·&nbsp;' + unresNote : ''}
+            </div>
+          </div>
+          <div class="tp-table-wrap">
+            <table class="tp-table">
+              <thead><tr><th>Key</th><th>Summary</th><th>Status</th><th>Elapsed</th><th>First milestone</th></tr></thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+        </section>`;
+      }).join('');
+
+      // Show team filter row and populate dropdown
+      $('tp-team-filter-row').classList.remove('hidden');
+      populateTeamDropdown(teams);
+
     } finally {
       $('tp-loader').classList.remove('open');
       $('tp-run').disabled = false;
@@ -445,18 +483,20 @@
   }
 
   $('tp-run').addEventListener('click', run);
+  $('tp-team-select') && $('tp-team-select').addEventListener('change', filterTeams);
+
   $('tp-open-settings').addEventListener('click', openSettingsDialog);
-  $('tp-settings-cancel').addEventListener('click', closeSettingsDialog);
   $('tp-settings-close').addEventListener('click', closeSettingsDialog);
+  $('tp-settings-cancel').addEventListener('click', closeSettingsDialog);
   $('tp-settings-save').addEventListener('click', () => {
     const email = ($('tp-setting-email').value || '').trim();
     const token = ($('tp-setting-token').value || '').trim();
     saveStoredJiraSettings({ email, token });
     closeSettingsDialog();
-    $('tp-error').textContent = 'Jira credentials saved locally.';
-    $('tp-error').classList.remove('hidden');
-    $('tp-error').classList.remove('text-red-400');
   });
+
+  // wire team-select (rendered before data, listener needs to fire after DOM paint)
+  document.addEventListener('change', e => { if (e.target && e.target.id === 'tp-team-select') filterTeams(); });
 })();
 </script>
 {% endblock %}

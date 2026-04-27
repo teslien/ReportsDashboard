@@ -10,6 +10,9 @@
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
@@ -214,6 +217,93 @@
             30% { box-shadow: 10014px 0 0 2px; }
             60%, 100% { box-shadow: 10014px 0 0 -5px; }
         }
+
+        /* ── KPI Cards ── */
+        .aw-kpi-card {
+            position: relative;
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.07);
+            border-radius: 1.25rem;
+            padding: 1.1rem 1.2rem 1rem;
+            overflow: hidden;
+            transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+        }
+        .aw-kpi-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 32px rgba(0,0,0,0.35);
+            border-color: rgba(255,255,255,0.14);
+        }
+        .aw-kpi-card::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: inherit;
+            opacity: 0.07;
+            pointer-events: none;
+        }
+        .aw-kpi-icon {
+            font-size: 1.25rem;
+            line-height: 1;
+            margin-bottom: 0.55rem;
+            display: block;
+        }
+        .aw-kpi-label {
+            font-size: 0.6rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            color: #64748b;
+        }
+        .aw-kpi-value {
+            font-size: 2rem;
+            font-weight: 800;
+            color: #f1f5f9;
+            line-height: 1.1;
+            margin-top: 0.15rem;
+            letter-spacing: -0.02em;
+        }
+        .aw-kpi-sub {
+            font-size: 0.67rem;
+            color: #475569;
+            margin-top: 0.25rem;
+        }
+
+        /* ── Pie/Donut chart ── */
+        .aw-chart-wrap { position: relative; }
+        .aw-chart-wrap svg { display: block; }
+        .aw-donut-center {
+            pointer-events: none;
+            user-select: none;
+        }
+        .aw-pie-tooltip {
+            position: absolute;
+            pointer-events: none;
+            background: rgba(2, 8, 23, 0.92);
+            color: #e2e8f0;
+            font-size: 12px;
+            line-height: 1.4;
+            padding: 8px 11px;
+            border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.12);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+            z-index: 10;
+            opacity: 0;
+            transition: opacity 0.1s;
+            max-width: 200px;
+            white-space: nowrap;
+        }
+        .aw-legend-bar-bg {
+            height: 3px;
+            border-radius: 99px;
+            background: rgba(255,255,255,0.06);
+            margin-top: 3px;
+            overflow: hidden;
+        }
+        .aw-legend-bar-fill {
+            height: 100%;
+            border-radius: 99px;
+            transition: width 0.6s cubic-bezier(.22,1,.36,1);
+        }
     </style>
     <link rel="stylesheet" href="/static/theme.css">
     <script src="/static/theme.js"></script>
@@ -294,6 +384,10 @@
                             class="inline-flex items-center gap-2 bg-emerald-600/70 hover:bg-emerald-500 text-white font-semibold px-5 py-3 rounded-2xl transition disabled:opacity-40 disabled:cursor-not-allowed">
                             Export CSV
                         </button>
+                        <button type="button" onclick="generatePdfReport()" id="reportPdfBtn" disabled
+                            class="inline-flex items-center gap-2 bg-amber-600/80 hover:bg-amber-500 text-white font-semibold px-5 py-3 rounded-2xl transition disabled:opacity-40 disabled:cursor-not-allowed">
+                            Generate Report PDF
+                        </button>
                         <button type="button" onclick="showTreeView()" id="treeViewBtn" disabled
                             class="inline-flex items-center gap-2 bg-indigo-600/80 hover:bg-indigo-500 text-white font-semibold px-5 py-3 rounded-2xl transition disabled:opacity-40 disabled:cursor-not-allowed">
                             Sprint Tree View
@@ -301,6 +395,85 @@
                         <div class="ml-auto text-xs text-gray-500" id="jqlDebug"></div>
                     </div>
                 </form>
+            </div>
+
+            <!-- Summary: KPIs + sprint donut (shown when results load) -->
+            <div id="statsPanel" class="mt-8 hidden">
+                <div class="flex items-center gap-3 mb-5">
+                    <h2 class="text-lg font-bold text-white">Summary</h2>
+                    <div class="h-px flex-1 bg-white/5"></div>
+                </div>
+
+                <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4 mb-6">
+                    <!-- Total -->
+                    <div class="aw-kpi-card border-l-[3px] border-l-blue-500">
+                        <span class="aw-kpi-icon">🎫</span>
+                        <div class="aw-kpi-label">Total tickets</div>
+                        <div class="flex items-end gap-1 mt-0.5">
+                            <span class="aw-kpi-value text-blue-300 leading-none" id="aw-kpi-total-done">0</span>
+                            <span class="text-gray-600 font-bold text-lg leading-none mb-0.5">/</span>
+                            <span class="text-gray-400 font-bold text-lg leading-none mb-0.5" id="aw-kpi-total">0</span>
+                        </div>
+                        <div class="aw-kpi-sub">completed / total</div>
+                    </div>
+                    <!-- Stories / Tasks -->
+                    <div class="aw-kpi-card border-l-[3px] border-l-cyan-400">
+                        <span class="aw-kpi-icon">📋</span>
+                        <div class="aw-kpi-label">Stories / Tasks / Sub-tasks</div>
+                        <div class="flex items-end gap-1 mt-0.5">
+                            <span class="aw-kpi-value text-cyan-300 leading-none" id="aw-kpi-work-done">0</span>
+                            <span class="text-gray-600 font-bold text-lg leading-none mb-0.5">/</span>
+                            <span class="text-gray-400 font-bold text-lg leading-none mb-0.5" id="aw-kpi-work">0</span>
+                        </div>
+                        <div class="aw-kpi-sub">completed / total</div>
+                    </div>
+                    <!-- Bugs -->
+                    <div class="aw-kpi-card border-l-[3px] border-l-rose-500">
+                        <span class="aw-kpi-icon">🐛</span>
+                        <div class="aw-kpi-label">Bugs</div>
+                        <div class="flex items-end gap-1 mt-0.5">
+                            <span class="aw-kpi-value text-rose-300 leading-none" id="aw-kpi-bugs-done">0</span>
+                            <span class="text-gray-600 font-bold text-lg leading-none mb-0.5">/</span>
+                            <span class="text-gray-400 font-bold text-lg leading-none mb-0.5" id="aw-kpi-bugs">0</span>
+                        </div>
+                        <div class="aw-kpi-sub">resolved / total</div>
+                    </div>
+                    <!-- Production -->
+                    <div class="aw-kpi-card border-l-[3px] border-l-amber-400">
+                        <span class="aw-kpi-icon">🚀</span>
+                        <div class="aw-kpi-label">Production tickets</div>
+                        <div class="flex items-end gap-1 mt-0.5">
+                            <span class="aw-kpi-value text-amber-300 leading-none" id="aw-kpi-prod-done">0</span>
+                            <span class="text-gray-600 font-bold text-lg leading-none mb-0.5">/</span>
+                            <span class="text-gray-400 font-bold text-lg leading-none mb-0.5" id="aw-kpi-prod">0</span>
+                        </div>
+                        <div class="aw-kpi-sub">completed / total</div>
+                    </div>
+                    <!-- Sprints -->
+                    <div class="aw-kpi-card border-l-[3px] border-l-violet-400 col-span-2 sm:col-span-1">
+                        <span class="aw-kpi-icon">🏃</span>
+                        <div class="aw-kpi-label">Distinct sprints</div>
+                        <div class="aw-kpi-value text-violet-300" id="aw-kpi-sprint-count">0</div>
+                        <div class="aw-kpi-sub">across all tickets</div>
+                    </div>
+                </div>
+
+                <!-- Donut chart + legend -->
+                <div class="bg-gray-800/40 backdrop-blur-xl border border-gray-700/50 rounded-2xl p-5 sm:p-7 shadow-2xl">
+                    <div class="flex items-start justify-between flex-wrap gap-2 mb-1">
+                        <div>
+                            <h3 class="text-sm font-bold text-white">Tickets by sprint</h3>
+                            <p class="text-xs text-gray-500 mt-0.5">First sprint per ticket · &ldquo;No sprint&rdquo; if none · top 12 shown</p>
+                        </div>
+                    </div>
+                    <div class="mt-4 flex flex-col lg:flex-row gap-6 items-center lg:items-start">
+                        <div class="aw-chart-wrap relative w-full max-w-xs mx-auto lg:mx-0 lg:shrink-0" id="aw-sprint-pie" style="min-height:300px;">
+                            <div class="aw-pie-tooltip" id="aw-sprint-pie-tooltip"></div>
+                        </div>
+                        <ul id="aw-sprint-legend" class="flex-1 w-full text-sm space-y-2 max-h-80 overflow-y-auto pr-1 self-start">
+                        </ul>
+                    </div>
+                </div>
             </div>
 
             <!-- Results -->
@@ -367,10 +540,149 @@
         </div>
     </main>
 
+    <!-- Sprint-picker + AI Summary modal (shown before PDF generation) -->
+    <div id="awSprintModal" class="hidden fixed inset-0 z-[9999] flex items-center justify-center p-4"
+         style="background:rgba(0,0,0,0.72);backdrop-filter:blur(6px);">
+        <div class="bg-gray-900 border border-gray-700/60 rounded-3xl shadow-2xl w-full max-w-md p-7" style="min-width:340px;">
+            <!-- Header -->
+            <div class="flex items-center gap-3 mb-5">
+                <span class="text-3xl select-none">🤖</span>
+                <div>
+                    <h2 class="text-lg font-bold text-white">Generate Report</h2>
+                    <p class="text-xs text-gray-400 mt-0.5">AI will summarise your sprint before building the PDF</p>
+                </div>
+            </div>
+
+            <!-- Report title -->
+            <label class="block text-xs font-semibold text-gray-400 mb-1 uppercase tracking-wide">Report title</label>
+            <input id="awReportTitle" type="text" value="Assignee Work Report"
+                   class="w-full bg-gray-800 border border-gray-600/60 rounded-xl px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-500 mb-4" />
+
+            <!-- Sprint select -->
+            <label class="block text-xs font-semibold text-gray-400 mb-1 uppercase tracking-wide">Sprint to analyse</label>
+            <select id="awSprintPick"
+                    class="w-full bg-gray-800 border border-gray-600/60 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500 mb-6">
+            </select>
+
+            <!-- Generating state (hidden by default) -->
+            <div id="awModalGenerating" class="hidden text-center py-4">
+                <div class="inline-flex items-center gap-2 text-amber-400 text-sm font-semibold">
+                    <svg class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                    </svg>
+                    <span id="awModalStatus">Asking AI for sprint insights…</span>
+                </div>
+            </div>
+
+            <!-- Buttons -->
+            <div id="awModalActions" class="flex gap-3 justify-end">
+                <button type="button" onclick="closeSprintModal()"
+                        class="px-5 py-2 text-sm font-semibold text-gray-300 bg-gray-800 hover:bg-gray-700 rounded-xl transition">
+                    Cancel
+                </button>
+                <button type="button" onclick="confirmSprintModal()"
+                        class="px-6 py-2 text-sm font-semibold text-white bg-amber-600 hover:bg-amber-500 rounded-xl transition">
+                    Generate PDF
+                </button>
+            </div>
+        </div>
+    </div>
+
     <script>
         const projectKey = "{{ project }}";
         const jiraDomain = "{{ JIRA_DOMAIN }}";
         let latestResults = [];
+
+        /* Pre-load Lumber logo as base64 so it's ready for PDF generation */
+        let _lumberLogoDataUrl = null;
+        (function () {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = function () {
+                try {
+                    const c = document.createElement('canvas');
+                    c.width = img.naturalWidth;
+                    c.height = img.naturalHeight;
+                    c.getContext('2d').drawImage(img, 0, 0);
+                    _lumberLogoDataUrl = c.toDataURL('image/png');
+                } catch (e) { /* tainted canvas – won't embed */ }
+            };
+            img.src = '/static/lumber-logo.png';
+        })();
+
+        /* Pre-render AI-assistant bot icon → PNG data URL for PDF embedding.
+           Clean minimal style: rounded-square head, arc visor, dot eyes,
+           cute smile, antenna — all white so it reads on any coloured bar. */
+        let _robotIconDataUrl = null;
+        (function () {
+            const SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 90">
+  <defs>
+    <filter id="s" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-color="rgba(0,0,0,.25)"/>
+    </filter>
+  </defs>
+
+  <!-- antenna stem -->
+  <line x1="40" y1="5" x2="40" y2="17"
+        stroke="white" stroke-width="2.8" stroke-linecap="round"/>
+  <!-- antenna ball -->
+  <circle cx="40" cy="4" r="4.5"
+          fill="rgba(255,255,255,0.35)" stroke="white" stroke-width="2.2"/>
+
+  <!-- head shell -->
+  <rect x="8" y="17" width="64" height="52" rx="20"
+        fill="rgba(255,255,255,0.18)" stroke="white" stroke-width="3" filter="url(#s)"/>
+
+  <!-- inner visor -->
+  <rect x="16" y="25" width="48" height="36" rx="13"
+        fill="rgba(255,255,255,0.22)" stroke="white" stroke-width="2"/>
+
+  <!-- left eye -->
+  <circle cx="29" cy="41" r="7.5" fill="rgba(255,255,255,0.15)" stroke="white" stroke-width="2.5"/>
+  <circle cx="29" cy="41" r="3.5" fill="white"/>
+  <circle cx="31" cy="39" r="1.2" fill="rgba(0,0,0,0.25)"/>
+
+  <!-- right eye -->
+  <circle cx="51" cy="41" r="7.5" fill="rgba(255,255,255,0.15)" stroke="white" stroke-width="2.5"/>
+  <circle cx="51" cy="41" r="3.5" fill="white"/>
+  <circle cx="53" cy="39" r="1.2" fill="rgba(0,0,0,0.25)"/>
+
+  <!-- smile -->
+  <path d="M27 53 Q40 64 53 53"
+        stroke="white" stroke-width="2.8" fill="none" stroke-linecap="round"/>
+
+  <!-- left ear nub -->
+  <rect x="2" y="33" width="6" height="14" rx="3"
+        fill="rgba(255,255,255,0.55)" stroke="white" stroke-width="1.8"/>
+  <!-- right ear nub -->
+  <rect x="72" y="33" width="6" height="14" rx="3"
+        fill="rgba(255,255,255,0.55)" stroke="white" stroke-width="1.8"/>
+
+  <!-- neck / body tab -->
+  <rect x="28" y="69" width="24" height="10" rx="5"
+        fill="rgba(255,255,255,0.45)" stroke="white" stroke-width="1.8"/>
+
+  <!-- chest dot -->
+  <circle cx="40" cy="80" r="3.5" fill="white" opacity="0.85"/>
+</svg>`;
+            const blob = new Blob([SVG], { type: 'image/svg+xml' });
+            const url  = URL.createObjectURL(blob);
+            const img  = new Image();
+            img.onload = () => {
+                try {
+                    const DPR = 4, W = 200, H = 225; // proportional to 80×90 viewBox
+                    const c = document.createElement('canvas');
+                    c.width = W * DPR; c.height = H * DPR;
+                    const ctx = c.getContext('2d');
+                    ctx.scale(DPR, DPR);
+                    ctx.drawImage(img, 0, 0, W, H);
+                    _robotIconDataUrl = c.toDataURL('image/png');
+                } catch (e) { /* ignore */ }
+                URL.revokeObjectURL(url);
+            };
+            img.src = url;
+        })();
 
         function projectHeader(xhr) {
             const pk = (localStorage.getItem("project_key") || projectKey || "").trim().toUpperCase();
@@ -457,12 +769,17 @@
             $('#sprintSelect').val(null).trigger('change');
             latestResults = [];
             $('#exportCsvBtn').prop('disabled', true);
+            $('#reportPdfBtn').prop('disabled', true);
             $('#treeViewBtn').prop('disabled', true);
             $('#resultsWrap').addClass('hidden');
             $('#treeWrap').addClass('hidden');
             $('#emptyState').addClass('hidden');
             $('#errorState').addClass('hidden');
             $('#jqlDebug').text('');
+            $('#statsPanel').addClass('hidden');
+            if (typeof d3 !== 'undefined') d3.select('#aw-sprint-pie').selectAll('svg').remove();
+            const leg = document.getElementById('aw-sprint-legend');
+            if (leg) leg.innerHTML = '';
         }
 
         function statusColor(status) {
@@ -501,6 +818,228 @@
                     month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit'
                 });
             } catch (e) { return d; }
+        }
+
+        function primarySprintName(issue) {
+            if (Array.isArray(issue.sprints) && issue.sprints.length) return String(issue.sprints[0]);
+            return 'No sprint';
+        }
+
+        function sprintRowsForPie(issues) {
+            const map = new Map();
+            for (const i of issues) {
+                const name = primarySprintName(i);
+                map.set(name, (map.get(name) || 0) + 1);
+            }
+            return Array.from(map, ([label, value]) => ({ label, value }))
+                .sort((a, b) => b.value - a.value);
+        }
+
+        function capSprintRows(rows, maxSeg) {
+            if (rows.length <= maxSeg) return rows;
+            const top = rows.slice(0, maxSeg - 1);
+            const rest = rows.slice(maxSeg - 1);
+            const n = rest.reduce((s, r) => s + r.value, 0);
+            if (n > 0) top.push({ label: `Other (${rest.length} sprints)`, value: n });
+            return top;
+        }
+
+        function normalizeType(issue) {
+            return String(issue?.type || '').trim().toLowerCase();
+        }
+
+        const DONE_STATUSES = new Set([
+            'done','resolved','closed','ready for qa','deployed',
+            'ready for staging','ready for internal demo','not a bug','unable to reproduce',
+            'staged','qa in progress'
+        ]);
+
+        function isDone(issue) {
+            return DONE_STATUSES.has(String(issue?.status || '').trim().toLowerCase());
+        }
+
+        function isEpic(issue) {
+            return normalizeType(issue) === 'epic';
+        }
+
+        function isWorkItem(issue) {
+            const t = normalizeType(issue);
+            return t === 'story' || t === 'task' || t === 'sub-task' || t === 'subtask';
+        }
+
+        function isBug(issue) {
+            return normalizeType(issue) === 'bug';
+        }
+
+        /** Jira: "platform[checkboxes]" includes PRODUCTION (set by /api/assignee_work from Jira). */
+        function isProductionPlatform(issue) {
+            return issue?.platform_production === true;
+        }
+
+        const AW_DONUT_COLORS = [
+            '#3b82f6','#06b6d4','#a855f7','#f59e0b','#10b981',
+            '#f43f5e','#8b5cf6','#ec4899','#14b8a6','#f97316',
+            '#6366f1','#84cc16','#0ea5e9','#d946ef'
+        ];
+
+        function updateAssigneeWorkStats(issues) {
+            if (!issues || !issues.length) {
+                document.getElementById('statsPanel').classList.add('hidden');
+                return;
+            }
+            const nonEpics    = issues.filter(i => !isEpic(i));
+            const workArr     = nonEpics.filter(isWorkItem);
+            const bugsArr     = nonEpics.filter(isBug);
+            const prodArr     = nonEpics.filter(isProductionPlatform);
+            const distinct    = new Set(nonEpics.map(primarySprintName)).size;
+
+            const totalDone   = nonEpics.filter(isDone).length;
+            const workDone    = workArr.filter(isDone).length;
+            const bugsDone    = bugsArr.filter(isDone).length;
+            const prodDone    = prodArr.filter(isDone).length;
+
+            document.getElementById('aw-kpi-total').textContent      = nonEpics.length.toLocaleString();
+            document.getElementById('aw-kpi-total-done').textContent  = totalDone.toLocaleString();
+            document.getElementById('aw-kpi-work').textContent        = workArr.length.toLocaleString();
+            document.getElementById('aw-kpi-work-done').textContent   = workDone.toLocaleString();
+            document.getElementById('aw-kpi-bugs').textContent        = bugsArr.length.toLocaleString();
+            document.getElementById('aw-kpi-bugs-done').textContent   = bugsDone.toLocaleString();
+            document.getElementById('aw-kpi-prod').textContent        = prodArr.length.toLocaleString();
+            document.getElementById('aw-kpi-prod-done').textContent   = prodDone.toLocaleString();
+            document.getElementById('aw-kpi-sprint-count').textContent = distinct.toLocaleString();
+            document.getElementById('statsPanel').classList.remove('hidden');
+            renderSprintDonutChart(nonEpics);
+        }
+
+        function renderSprintDonutChart(issues) {
+            const container = document.getElementById('aw-sprint-pie');
+            const tooltip = document.getElementById('aw-sprint-pie-tooltip');
+            const legendEl = document.getElementById('aw-sprint-legend');
+            if (!container || !legendEl) return;
+            if (typeof d3 === 'undefined') {
+                legendEl.innerHTML = '<li class="text-gray-500">Chart library not loaded.</li>';
+                return;
+            }
+            const rows = capSprintRows(sprintRowsForPie(issues), 12);
+            const total = d3.sum(rows, d => d.value) || 1;
+            d3.select(container).selectAll('svg').remove();
+            tooltip.style.opacity = 0;
+
+            const size = 300;
+            const cx = size / 2, cy = size / 2;
+            const outerR = size / 2 - 8;
+            const innerR = outerR * 0.56;       // donut hole
+
+            const color = d3.scaleOrdinal()
+                .domain(rows.map(d => d.label))
+                .range(AW_DONUT_COLORS);
+
+            const pie = d3.pie().value(d => d.value).sort(null).padAngle(0.022);
+            const arc = d3.arc().innerRadius(innerR).outerRadius(outerR).cornerRadius(3);
+            const arcHover = d3.arc().innerRadius(innerR - 2).outerRadius(outerR + 6).cornerRadius(3);
+            const labelArc = d3.arc().innerRadius((innerR + outerR) / 2).outerRadius((innerR + outerR) / 2);
+
+            const svg = d3.select(container)
+                .append('svg')
+                .attr('viewBox', `0 0 ${size} ${size}`)
+                .style('width', '100%')
+                .style('max-width', `${size}px`)
+                .style('height', 'auto');
+
+            const g = svg.append('g').attr('transform', `translate(${cx},${cy})`);
+
+            // Donut center label
+            g.append('text')
+                .attr('class', 'aw-donut-center')
+                .attr('text-anchor', 'middle').attr('dy', '-0.3em')
+                .attr('fill', '#f1f5f9').attr('font-size', '26').attr('font-weight', '800')
+                .attr('font-family', 'Inter, sans-serif')
+                .text(total.toLocaleString());
+            g.append('text')
+                .attr('class', 'aw-donut-center')
+                .attr('text-anchor', 'middle').attr('dy', '1.1em')
+                .attr('fill', '#64748b').attr('font-size', '9.5').attr('font-weight', '600')
+                .attr('letter-spacing', '0.08em')
+                .attr('font-family', 'Inter, sans-serif')
+                .text('TICKETS');
+
+            const showTip = (ev, d) => {
+                const pct = ((d.data.value / total) * 100).toFixed(1);
+                tooltip.innerHTML = `<strong>${escapeHtml(d.data.label)}</strong><br>${d.data.value} tickets &nbsp;·&nbsp; ${pct}%`;
+                const rect = container.getBoundingClientRect();
+                const ex = ev.clientX - rect.left;
+                const ey = ev.clientY - rect.top;
+                tooltip.style.left = Math.min(ex + 14, rect.width - 160) + 'px';
+                tooltip.style.top = Math.max(ey - 38, 4) + 'px';
+                tooltip.style.opacity = 1;
+            };
+            const hideTip = () => { tooltip.style.opacity = 0; };
+
+            const arcs = g.selectAll('path')
+                .data(pie(rows))
+                .join('path')
+                .attr('fill', d => color(d.data.label))
+                .attr('opacity', 0)
+                .attr('d', arc)
+                .on('mouseenter', function (ev, d) {
+                    d3.select(this).transition().duration(120).attr('d', arcHover);
+                    showTip(ev, d);
+                })
+                .on('mousemove', showTip)
+                .on('mouseleave', function (ev, d) {
+                    d3.select(this).transition().duration(120).attr('d', arc);
+                    hideTip();
+                });
+
+            // Staggered fade-in
+            arcs.transition()
+                .delay((d, i) => i * 40)
+                .duration(380)
+                .ease(d3.easeCubicOut)
+                .attr('opacity', 1);
+
+            // Percent labels on large slices
+            g.selectAll('text.pct-label')
+                .data(pie(rows).filter(d => (d.data.value / total) > 0.07))
+                .join('text')
+                .attr('class', 'pct-label')
+                .attr('transform', d => `translate(${labelArc.centroid(d)})`)
+                .attr('text-anchor', 'middle')
+                .attr('dy', '0.35em')
+                .attr('fill', 'white')
+                .attr('font-size', '9')
+                .attr('font-weight', '700')
+                .attr('font-family', 'Inter, sans-serif')
+                .attr('pointer-events', 'none')
+                .attr('opacity', 0)
+                .text(d => ((d.data.value / total) * 100).toFixed(0) + '%')
+                .transition().delay(rows.length * 40 + 100).duration(260)
+                .attr('opacity', 1);
+
+            // Legend with mini progress bars
+            legendEl.innerHTML = rows.map((row, i) => {
+                const pct = ((row.value / total) * 100).toFixed(1);
+                const col = color(row.label);
+                return `
+                <li class="group cursor-default">
+                    <div class="flex items-center gap-2">
+                        <span class="w-2.5 h-2.5 rounded-sm flex-shrink-0 ring-1 ring-white/10" style="background:${col}"></span>
+                        <span class="text-gray-300 flex-1 text-xs truncate" title="${escapeHtml(row.label)}">${escapeHtml(row.label)}</span>
+                        <span class="text-gray-400 tabular-nums text-xs font-semibold ml-2">${row.value}</span>
+                        <span class="text-gray-600 tabular-nums text-[10px] w-9 text-right">${pct}%</span>
+                    </div>
+                    <div class="aw-legend-bar-bg ml-[18px]">
+                        <div class="aw-legend-bar-fill" style="width:0%;background:${col}" data-pct="${pct}"></div>
+                    </div>
+                </li>`;
+            }).join('');
+
+            // Animate bars after render
+            requestAnimationFrame(() => {
+                legendEl.querySelectorAll('.aw-legend-bar-fill').forEach(el => {
+                    el.style.width = el.dataset.pct + '%';
+                });
+            });
         }
 
         async function runSearch() {
@@ -563,12 +1102,14 @@
             body.innerHTML = '';
             latestResults = issues || [];
             $('#exportCsvBtn').prop('disabled', !latestResults.length);
+            $('#reportPdfBtn').prop('disabled', !latestResults.length);
             $('#treeViewBtn').prop('disabled', !latestResults.length);
             $('#treeWrap').addClass('hidden');
 
             if (!issues.length) {
                 $('#emptyState').removeClass('hidden');
                 $('#resultsWrap').addClass('hidden');
+                $('#statsPanel').addClass('hidden');
                 return;
             }
 
@@ -576,6 +1117,7 @@
             $('#resultsCount').text(
                 `${issues.length} shown${total && total !== issues.length ? ' · ' + total + ' total' : ''}`
             );
+            updateAssigneeWorkStats(issues);
 
             for (const i of issues) {
                 const tr = document.createElement('tr');
@@ -730,6 +1272,922 @@
             link.click();
             document.body.removeChild(link);
             URL.revokeObjectURL(url);
+        }
+
+        function toReportRows(items) {
+            return items.map(i => ([
+                i.key || '',
+                i.type || '',
+                i.summary || '',
+                i.status || '',
+                i.assignee || 'Unassigned',
+                i.priority || '',
+                Array.isArray(i.sprints) ? i.sprints.join(' | ') : '',
+                Array.isArray(i.labels) ? i.labels.join(' | ') : ''
+            ]));
+        }
+
+        // One accent color per table section
+        const _SECTION_COLORS = {
+            'all':        [30,  64, 175],   // blue-800
+            'stories':    [6,  148, 162],   // cyan-600
+            'bugs':       [185,  28,  28],  // red-700
+            'production': [180, 120,  10],  // amber-700
+        };
+
+        function renderReportTable(doc, title, rows, startY, accentRgb) {
+            const pageW = doc.internal.pageSize.getWidth();
+            const [r, g, b] = accentRgb || [55, 65, 81];
+            let tableStartY = startY;
+
+            if (title) {
+                // Section heading bar in accent color (legacy: used when no _sectionBanner precedes)
+                doc.setFillColor(r, g, b);
+                doc.rect(14, startY - 1, pageW - 28, 8.5, 'F');
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(8);
+                doc.setTextColor(255, 255, 255);
+                doc.text(title.toUpperCase(), 18, startY + 5);
+                doc.setTextColor(0, 0, 0);
+                tableStartY = startY + 10;
+            }
+
+            // Soft tinted alternate row color from accent
+            const altFill = [Math.min(r + 210, 245), Math.min(g + 220, 250), Math.min(b + 220, 255)];
+
+            const tableRows = rows.length ? rows : [['—', '—', 'No tickets in this section', '—', '—', '—', '—', '—']];
+            doc.autoTable({
+                startY: tableStartY,
+                head: [['Key', 'Type', 'Summary', 'Status', 'Assignee', 'Priority', 'Sprint', 'Labels']],
+                body: tableRows,
+                theme: 'grid',
+                styles: { fontSize: 7.5, cellPadding: 2.5, overflow: 'linebreak', font: 'helvetica', textColor: [20, 20, 20] },
+                headStyles: { fillColor: [r, g, b], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 7.5, cellPadding: 3 },
+                alternateRowStyles: { fillColor: altFill },
+                columnStyles: {
+                    0: { cellWidth: 20, fontStyle: 'bold', textColor: [r, g, b] },
+                    1: { cellWidth: 16 },
+                    2: { cellWidth: 64 },
+                    3: { cellWidth: 22 },
+                    4: { cellWidth: 26 },
+                    5: { cellWidth: 18 },
+                    6: { cellWidth: 26 },
+                    7: { cellWidth: 28 }
+                },
+                margin: { left: 14, right: 14 }
+            });
+            return doc.lastAutoTable.finalY + 8;
+        }
+
+        /**
+         * Full-width summary cards — white bg, colored top bar + label + number per type.
+         */
+        function drawPdfSummaryCards(doc, startY, m) {
+            const pageW = doc.internal.pageSize.getWidth();
+            const margin = 14, gap = 3, n = 4;
+            const cardW = (pageW - margin * 2 - gap * (n - 1)) / n;
+            const cardH = 32;
+            const cards = [
+                { label: 'TOTAL TICKETS',              done: m.totalDone,      total: m.total,      subLabel: 'completed / total', accent: [30, 64, 175],   bg: [239, 246, 255] },
+                { label: 'STORIES / TASKS / SUB-TASKS',done: m.workDone,       total: m.work,       subLabel: 'completed / total', accent: [6, 148, 162],   bg: [236, 254, 255] },
+                { label: 'BUGS',                       done: m.bugsDone,       total: m.bugs,       subLabel: 'resolved / total',  accent: [185, 28, 28],   bg: [254, 242, 242] },
+                { label: 'PRODUCTION TICKETS',         done: m.productionDone, total: m.production, subLabel: 'completed / total', accent: [180, 120, 10],  bg: [255, 251, 235] }
+            ];
+            let x = margin;
+            for (const c of cards) {
+                const [ar, ag, ab] = c.accent;
+                const [br, bg_, bb] = c.bg;
+                // Card bg
+                doc.setFillColor(br, bg_, bb);
+                doc.setDrawColor(ar, ag, ab);
+                doc.setLineWidth(0.3);
+                doc.rect(x, startY, cardW, cardH, 'FD');
+                // Top accent bar
+                doc.setFillColor(ar, ag, ab);
+                doc.rect(x, startY, cardW, 2.5, 'F');
+
+                const tx = x + 5;
+                // Label
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(6);
+                doc.setTextColor(ar, ag, ab);
+                doc.text(c.label, tx, startY + 9.5);
+                // Rule
+                doc.setDrawColor(ar, ag, ab);
+                doc.setLineWidth(0.15);
+                doc.line(tx, startY + 11.5, x + cardW - 5, startY + 11.5);
+
+                // "done / total" — done in accent, separator + total in dark
+                const doneStr  = String(c.done);
+                const sepStr   = ' / ';
+                const totalStr = String(c.total);
+                const valY = startY + cardH - 7;
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(18);
+                // measure each segment
+                doc.setTextColor(ar, ag, ab);
+                const doneW = doc.getTextWidth(doneStr);
+                doc.text(doneStr, tx, valY);
+
+                doc.setFontSize(14);
+                doc.setTextColor(140, 140, 140);
+                const sepW = doc.getTextWidth(sepStr);
+                doc.text(sepStr, tx + doneW, valY);
+
+                doc.setFontSize(14);
+                doc.setTextColor(60, 60, 60);
+                doc.text(totalStr, tx + doneW + sepW, valY);
+
+                // Sub-label
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(5.5);
+                doc.setTextColor(130, 130, 130);
+                doc.text(c.subLabel, tx, startY + cardH - 1.5);
+
+                x += cardW + gap;
+            }
+            doc.setTextColor(0, 0, 0);
+            doc.setDrawColor(0, 0, 0);
+            return startY + cardH + 5;
+        }
+
+        // Vivid palette matching on-screen AW_DONUT_COLORS
+        const _PDF_PIE_PALETTE = [
+            '#3b82f6','#06b6d4','#a855f7','#f59e0b','#10b981',
+            '#f43f5e','#8b5cf6','#ec4899','#14b8a6','#f97316'
+        ];
+
+        /**
+         * Sprint COMPLETION chart (used when a single sprint is selected).
+         * Left: donut (Done vs In-Progress), Right: status breakdown bars.
+         * Fixed 560×200 px logical canvas, 3× DPR.
+         */
+        function canvasCompletionChartToDataUrl(tickets) {
+            if (!tickets || !tickets.length) return null;
+
+            const DPR = 3;
+            const W = 500, H = 156;          // compact: narrower + shorter
+            const canvas = document.createElement('canvas');
+            canvas.width = W * DPR; canvas.height = H * DPR;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return null;
+            ctx.scale(DPR, DPR);
+
+            // White background + light border
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, W, H);
+
+            // ── Data ──
+            const total = tickets.length;
+            const doneCount = tickets.filter(isDone).length;
+            const todoCount = total - doneCount;
+
+            // Two-row summary: Done vs Open
+            const statusRows = [
+                { label: 'Done / Completed', count: doneCount,  color: '#10b981', done: true  },
+                { label: 'Open / In Progress', count: todoCount, color: '#93c5fd', done: false }
+            ];
+
+            // ── Donut (left column) ──
+            const CX = 82, CY = 72, R = 56, IR = 32;
+            const slices = [
+                { count: doneCount, color: '#10b981', label: 'Completed' },
+                { count: todoCount, color: '#e2e8f0', label: 'In Progress / Open' }
+            ];
+            let angle = -Math.PI / 2;
+            slices.forEach(s => {
+                if (!s.count) return;
+                const sweep = (s.count / total) * 2 * Math.PI;
+                ctx.beginPath();
+                ctx.moveTo(CX, CY);
+                ctx.arc(CX, CY, R, angle, angle + sweep);
+                ctx.closePath();
+                ctx.fillStyle = s.color;
+                ctx.fill();
+                angle += sweep;
+            });
+            // White hole
+            ctx.beginPath();
+            ctx.arc(CX, CY, IR, 0, 2 * Math.PI);
+            ctx.fillStyle = '#ffffff';
+            ctx.fill();
+            // Center %
+            const pct = total ? Math.round(doneCount / total * 100) : 0;
+            ctx.fillStyle = '#10b981';
+            ctx.font = 'bold 18px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(`${pct}%`, CX, CY + 6);
+            ctx.fillStyle = '#6b7280';
+            ctx.font = '9px sans-serif';
+            ctx.fillText('done', CX, CY + 18);
+
+            // Donut legend (below donut, side by side)
+            const LEG_Y = CY + R + 10;
+            slices.forEach((s, i) => {
+                const lx = i === 0 ? 10 : CX + 2;
+                ctx.fillStyle = s.color;
+                ctx.fillRect(lx, LEG_Y, 8, 8);
+                ctx.fillStyle = '#374151';
+                ctx.font = '8.5px sans-serif';
+                ctx.textAlign = 'left';
+                ctx.fillText(`${s.label}: ${s.count}`, lx + 11, LEG_Y + 7.5);
+            });
+
+            // ── Status breakdown bars (right column) ──
+            const BAR_X = 178, BAR_AVAIL = W - BAR_X - 16;
+            const ROW_H = 52;   // tall rows since only 2
+            const maxVal = Math.max(doneCount, todoCount) || 1;
+
+            ctx.fillStyle = '#111827';
+            ctx.font = 'bold 10px sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillText('Completion', BAR_X, 16);
+
+            statusRows.forEach((row, i) => {
+                const ry = 26 + i * ROW_H;
+                const LABEL_W = 108;
+                const TRACK_W = BAR_AVAIL - LABEL_W - 8;
+                const barLen  = Math.max(4, (row.count / maxVal) * TRACK_W);
+
+                // Label
+                ctx.fillStyle = '#374151';
+                ctx.font = '9px sans-serif';
+                ctx.textAlign = 'left';
+                ctx.fillText(row.label, BAR_X, ry + 10);
+
+                // Track
+                const TRACK_X = BAR_X + LABEL_W;
+                ctx.fillStyle = '#f1f5f9';
+                ctx.beginPath();
+                ctx.roundRect(TRACK_X, ry + 2, TRACK_W, 12, 5);
+                ctx.fill();
+
+                // Fill
+                ctx.fillStyle = row.color;
+                ctx.beginPath();
+                ctx.roundRect(TRACK_X, ry + 2, barLen, 12, 5);
+                ctx.fill();
+
+                // Count
+                ctx.fillStyle = '#111827';
+                ctx.font = 'bold 9px sans-serif';
+                ctx.fillText(row.count, TRACK_X + barLen + 5, ry + 12);
+            });
+
+            // Divider between donut and bars
+            ctx.strokeStyle = '#e5e7eb';
+            ctx.lineWidth = 0.8;
+            ctx.beginPath();
+            ctx.moveTo(170, 10); ctx.lineTo(170, H - 10);
+            ctx.stroke();
+
+            // Outer border
+            ctx.strokeStyle = '#e5e7eb';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(0.5, 0.5, W - 1, H - 1);
+
+            return canvas.toDataURL('image/png');
+        }
+
+        /**
+         * Compact colorful donut + legend. Fixed 2.86:1 aspect (560×196 px logical)
+         * so the full chart always fits on page 1 alongside the summary cards.
+         */
+        function canvasSprintPieToDataUrl(issues) {
+            const rows = capSprintRows(sprintRowsForPie(issues), 10);
+            if (!rows.length) return null;
+
+            const DPR = 3;
+            const W = 560, H = 196;
+            const CHART_CX = 98, CHART_CY = H / 2, CHART_R = 80, CHART_INNER = 44;
+            const LEG_X = 208, LEG_W = W - LEG_X - 8;
+            const ROW_H = Math.max(14, Math.floor((H - 16) / rows.length));
+
+            const canvas = document.createElement('canvas');
+            canvas.width = W * DPR; canvas.height = H * DPR;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return null;
+            ctx.scale(DPR, DPR);
+
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, W, H);
+
+            const total = rows.reduce((s, r) => s + r.value, 0) || 1;
+
+            // Donut slices — vivid colors
+            let a0 = -Math.PI / 2;
+            for (let i = 0; i < rows.length; i++) {
+                const slice = (Math.PI * 2 * rows[i].value) / total;
+                const a1 = a0 + slice - (rows.length > 1 ? 0.025 : 0);
+                ctx.beginPath();
+                ctx.moveTo(CHART_CX + Math.cos(a0) * CHART_INNER, CHART_CY + Math.sin(a0) * CHART_INNER);
+                ctx.arc(CHART_CX, CHART_CY, CHART_R, a0, a1);
+                ctx.arc(CHART_CX, CHART_CY, CHART_INNER, a1, a0, true);
+                ctx.closePath();
+                ctx.fillStyle = _PDF_PIE_PALETTE[i % _PDF_PIE_PALETTE.length];
+                ctx.fill();
+                a0 += slice;
+            }
+
+            // White center hole + total
+            ctx.beginPath();
+            ctx.arc(CHART_CX, CHART_CY, CHART_INNER - 2, 0, Math.PI * 2);
+            ctx.fillStyle = '#ffffff';
+            ctx.fill();
+            ctx.fillStyle = '#111111';
+            ctx.font = `bold 17px Helvetica, sans-serif`;
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText(String(total), CHART_CX, CHART_CY - 3);
+            ctx.fillStyle = '#888888';
+            ctx.font = `bold 7px Helvetica, sans-serif`;
+            ctx.fillText('TICKETS', CHART_CX, CHART_CY + 10);
+
+            // % labels on larger slices (white text)
+            a0 = -Math.PI / 2;
+            for (let i = 0; i < rows.length; i++) {
+                const slice = (Math.PI * 2 * rows[i].value) / total;
+                const pct = rows[i].value / total;
+                if (pct > 0.09) {
+                    const mid = a0 + slice / 2;
+                    const lr = (CHART_INNER + CHART_R) / 2;
+                    ctx.fillStyle = '#ffffff';
+                    ctx.font = `bold 8px Helvetica, sans-serif`;
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText((pct * 100).toFixed(0) + '%', CHART_CX + Math.cos(mid) * lr, CHART_CY + Math.sin(mid) * lr);
+                }
+                a0 += slice;
+            }
+
+            // Legend — colored swatch, name, count, progress bar
+            const BAR_W = 60, BAR_H = 4;
+            let ly = Math.max(8, (H - rows.length * ROW_H) / 2);
+            ctx.textAlign = 'left';
+            for (let i = 0; i < rows.length; i++) {
+                const row = rows[i];
+                const pct = row.value / total;
+                const col = _PDF_PIE_PALETTE[i % _PDF_PIE_PALETTE.length];
+                const rowY = ly + i * ROW_H;
+
+                // Rounded swatch
+                ctx.fillStyle = col;
+                _roundRect(ctx, LEG_X, rowY + 2, 9, 9, 2);
+
+                // Name
+                ctx.fillStyle = '#111111';
+                ctx.font = `500 9.5px Helvetica, sans-serif`;
+                ctx.textBaseline = 'middle';
+                let lbl = String(row.label);
+                if (lbl.length > 32) lbl = lbl.slice(0, 30) + '…';
+                ctx.fillText(lbl, LEG_X + 13, rowY + 6.5);
+
+                // Count + pct
+                ctx.fillStyle = '#555555';
+                ctx.font = `600 8.5px Helvetica, sans-serif`;
+                ctx.fillText(`${row.value}  (${(pct * 100).toFixed(1)}%)`, LEG_X + 13, rowY + ROW_H - 3);
+
+                // Progress bar
+                const barX = LEG_X + LEG_W - BAR_W - 2;
+                ctx.fillStyle = '#eeeeee';
+                ctx.fillRect(barX, rowY + ROW_H - 6, BAR_W, BAR_H);
+                ctx.fillStyle = col;
+                ctx.fillRect(barX, rowY + ROW_H - 6, Math.max(BAR_W * pct, 3), BAR_H);
+            }
+
+            // Light outer border
+            ctx.strokeStyle = '#e5e7eb';
+            ctx.lineWidth = 0.5;
+            ctx.strokeRect(0.5, 0.5, W - 1, H - 1);
+
+            try {
+                return canvas.toDataURL('image/png', 1.0);
+            } catch (e) { return null; }
+        }
+
+        function _roundRect(ctx, x, y, w, h, r) {
+            ctx.beginPath();
+            ctx.moveTo(x + r, y);
+            ctx.lineTo(x + w - r, y);
+            ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+            ctx.lineTo(x + w, y + h - r);
+            ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+            ctx.lineTo(x + r, y + h);
+            ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+            ctx.lineTo(x, y + r);
+            ctx.quadraticCurveTo(x, y, x + r, y);
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        function ensurePdfY(doc, y, needMm) {
+            const pageH = doc.internal.pageSize.getHeight();
+            const pageW = doc.internal.pageSize.getWidth();
+            if (y + needMm > pageH - 14) {
+                doc.addPage();
+                // Repeat slim white header on continuation pages
+                doc.setFillColor(255, 255, 255);
+                doc.rect(0, 0, pageW, 10, 'F');
+                doc.setDrawColor(180, 180, 180);
+                doc.setLineWidth(0.3);
+                doc.line(0, 10, pageW, 10);
+                if (_lumberLogoDataUrl) {
+                    try { doc.addImage(_lumberLogoDataUrl, 'PNG', 8, 1.5, 26, 7); } catch (e) {}
+                }
+                return 16;
+            }
+            return y;
+        }
+
+        function _addPdfFooter(doc) {
+            const pageCount = doc.internal.getNumberOfPages();
+            const pageW = doc.internal.pageSize.getWidth();
+            const pageH = doc.internal.pageSize.getHeight();
+            for (let i = 1; i <= pageCount; i++) {
+                doc.setPage(i);
+                doc.setDrawColor(200, 200, 200);
+                doc.setLineWidth(0.25);
+                doc.line(14, pageH - 8, pageW - 14, pageH - 8);
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(7);
+                doc.setTextColor(140, 140, 140);
+                doc.text('Lumber · Assignee Work Report', 14, pageH - 4);
+                doc.text(`Page ${i} of ${pageCount}`, pageW - 14, pageH - 4, { align: 'right' });
+            }
+        }
+
+        /* ── Sprint-picker modal helpers ── */
+        function generatePdfReport() {
+            if (!latestResults.length) return;
+
+            // Populate sprint dropdown from loaded tickets
+            const nonEpicsSel = latestResults.filter(i => !isEpic(i));
+            const allSprints = [...new Set(nonEpicsSel.flatMap(i => (i.sprints || [])))].sort();
+            const pick = document.getElementById('awSprintPick');
+            pick.innerHTML = '';
+            const optAll = document.createElement('option');
+            optAll.value = '__all__'; optAll.textContent = 'All sprints (no sprint-level AI)';
+            pick.appendChild(optAll);
+            allSprints.forEach(s => {
+                const o = document.createElement('option');
+                o.value = s; o.textContent = s;
+                pick.appendChild(o);
+            });
+            // pre-select last sprint if available
+            if (allSprints.length) pick.value = allSprints[allSprints.length - 1];
+
+            // Reset modal state
+            document.getElementById('awModalGenerating').classList.add('hidden');
+            document.getElementById('awModalActions').classList.remove('hidden');
+            document.getElementById('awSprintModal').classList.remove('hidden');
+        }
+
+        function closeSprintModal() {
+            document.getElementById('awSprintModal').classList.add('hidden');
+        }
+
+        async function confirmSprintModal() {
+            const reportTitle = String(document.getElementById('awReportTitle').value || '').trim() || 'Assignee Work Report';
+            const sprintVal   = document.getElementById('awSprintPick').value || '__all__';
+
+            document.getElementById('awModalActions').classList.add('hidden');
+            document.getElementById('awModalGenerating').classList.remove('hidden');
+            const statusEl = document.getElementById('awModalStatus');
+
+            let aiSummary       = null;
+            let allSprintIssues = null;   // full JQL fetch for selected sprint
+
+            if (sprintVal !== '__all__') {
+                const sprintTickets = latestResults.filter(i =>
+                    Array.isArray(i.sprints) && i.sprints.includes(sprintVal)
+                );
+
+                // 1) AI summary
+                try {
+                    statusEl.textContent = 'Asking AI for sprint insights…';
+                    const aiRes = await fetch('/api/assignee_work_ai_summary', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ sprint: sprintVal, tickets: sprintTickets })
+                    });
+                    if (aiRes.ok) aiSummary = await aiRes.json();
+                } catch (e) { console.warn('AI summary failed:', e); }
+
+                // 2) Full sprint JQL fetch (all tickets regardless of date range)
+                try {
+                    statusEl.textContent = 'Fetching all sprint tickets from Jira…';
+                    const jqlRes = await fetch('/api/assignee_work_by_sprint', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ sprint_name: sprintVal })
+                    });
+                    if (jqlRes.ok) {
+                        const jqlData = await jqlRes.json();
+                        allSprintIssues = jqlData.issues || null;
+                    }
+                } catch (e) { console.warn('Sprint fetch failed:', e); }
+            }
+
+            statusEl.textContent = 'Building PDF…';
+            await new Promise(r => setTimeout(r, 60));
+
+            closeSprintModal();
+            _buildPdf(reportTitle, sprintVal === '__all__' ? null : sprintVal, aiSummary, allSprintIssues);
+        }
+
+        /* ── Core PDF builder ── */
+        function _buildPdf(reportTitle, sprintName, aiSummary, allSprintIssues) {
+            const fromDate = $('#fromDate').val() || '';
+            const toDate   = $('#toDate').val() || '';
+
+            // Format ISO date string as "12 Jan 2026"
+            const fmtDate = iso => {
+                if (!iso) return 'N/A';
+                const d = new Date(iso + 'T00:00:00');
+                return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+            };
+            const fromLabel = fmtDate(fromDate);
+            const toLabel   = fmtDate(toDate);
+            const genLabel  = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+            // All non-epic tickets (full date range, all sprints)
+            const allNonEpics  = latestResults.filter(i => !isEpic(i));
+            const allWork      = allNonEpics.filter(isWorkItem);
+            const allBugs      = allNonEpics.filter(isBug);
+            const allProd      = allNonEpics.filter(isProductionPlatform);
+
+            // Sprint-specific slice (only used when a sprint is chosen)
+            const sprintTickets = sprintName
+                ? allNonEpics.filter(i => Array.isArray(i.sprints) && i.sprints.includes(sprintName))
+                : allNonEpics;
+            const spWork = sprintTickets.filter(isWorkItem);
+            const spBugs = sprintTickets.filter(isBug);
+            const spProd = sprintTickets.filter(isProductionPlatform);
+
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+            const pageW = doc.internal.pageSize.getWidth();
+            const pageH = doc.internal.pageSize.getHeight();
+            const MARGIN = 14;
+
+            /* ── Helper: draw the branded page header ── */
+            const _drawPageHeader = (titleRight) => {
+                const H = 18;
+                doc.setFillColor(255, 255, 255);
+                doc.rect(0, 0, pageW, H, 'F');
+                const LOGO_H = 10, LOGO_W = LOGO_H * 3.7;
+                if (_lumberLogoDataUrl) {
+                    try { doc.addImage(_lumberLogoDataUrl, 'PNG', 10, 4, LOGO_W, LOGO_H); } catch (e) {
+                        doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
+                        doc.setTextColor(20, 20, 20); doc.text('LUMBER', 10, 12);
+                    }
+                } else {
+                    doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
+                    doc.setTextColor(20, 20, 20); doc.text('LUMBER', 10, 12);
+                }
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(11);
+                doc.setTextColor(30, 30, 30);
+                doc.text(titleRight, pageW - 10, H / 2 + 4, { align: 'right' });
+                doc.setDrawColor(180, 180, 180);
+                doc.setLineWidth(0.4);
+                doc.line(0, H, pageW, H);
+                return H;
+            };
+
+            /* ── Helper: section break banner ── */
+            const _sectionBanner = (label, accent, y) => {
+                y = ensurePdfY(doc, y, 14);
+                const [r, g, b] = accent;
+                doc.setFillColor(r, g, b);
+                doc.rect(MARGIN, y - 1, pageW - MARGIN * 2, 9, 'F');
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(9);
+                doc.setTextColor(255, 255, 255);
+                doc.text(label, MARGIN + 4, y + 5.5);
+                doc.setTextColor(0, 0, 0);
+                return y + 13;
+            };
+
+            /* ── Helper: draw AI two-column box ── */
+            const _drawAiBox = (overall, production, startY) => {
+                const COL_W = (pageW - MARGIN * 2 - 5) / 2;
+                const LEFT_X = MARGIN, RIGHT_X = MARGIN + COL_W + 5;
+
+                const _col = (title, bullets, x, sy, accent) => {
+                    const [ar, ag, ab] = accent;
+                    // Light tinted bg for the whole column
+                    doc.setFillColor(ar + (255 - ar) * 0.88, ag + (255 - ag) * 0.88, ab + (255 - ab) * 0.88);
+                    // Draw bg later — measure height first
+                    let cy = sy + 11;
+                    const allLines = [];
+                    (bullets || []).forEach(b => {
+                        doc.splitTextToSize(`• ${b}`, COL_W - 7).forEach(ln => allLines.push(ln));
+                        allLines.push(''); // spacing
+                    });
+                    const BAR_H = 9; // header bar height in mm
+                    const textH = allLines.length * 4;
+                    const colH  = BAR_H + textH + 6;
+                    // bg rect
+                    doc.setFillColor(ar + (255 - ar) * 0.9 | 0, ag + (255 - ag) * 0.9 | 0, ab + (255 - ab) * 0.9 | 0);
+                    doc.setDrawColor(ar, ag, ab);
+                    doc.setLineWidth(0.25);
+                    doc.rect(x, sy, COL_W, colH, 'FD');
+                    // Header bar
+                    doc.setFillColor(ar, ag, ab);
+                    doc.rect(x, sy, COL_W, BAR_H, 'F');
+                    // Robot icon — full-color SVG pre-rendered (jsPDF can't render emoji)
+                    const ICON_H = 7;                       // mm tall (viewBox 80×90)
+                    const ICON_W = ICON_H * (80 / 90);      // keep aspect ratio
+                    const iconX = x + 2;
+                    const iconY = sy + (BAR_H - ICON_H) / 2;
+                    if (_robotIconDataUrl) {
+                        try { doc.addImage(_robotIconDataUrl, 'PNG', iconX, iconY, ICON_W, ICON_H); } catch (_) {}
+                    }
+                    doc.setFont('helvetica', 'bold');
+                    doc.setFontSize(8);
+                    doc.setTextColor(255, 255, 255);
+                    doc.text(title, x + ICON_W + 4, sy + BAR_H / 2 + 3);
+                    // Bullets
+                    doc.setFont('helvetica', 'normal');
+                    doc.setFontSize(6.8);
+                    doc.setTextColor(25, 25, 25);
+                    cy = sy + BAR_H + 4;
+                    allLines.forEach(ln => {
+                        if (ln && cy < sy + colH - 2) { doc.text(ln, x + 4, cy); }
+                        cy += 4;
+                    });
+                    return sy + colH;
+                };
+
+                const y1 = _col('Sprint Summary — What we shipped', overall, LEFT_X, startY, [30, 64, 175]);
+                const y2 = _col('Production Fixes this Sprint', production, RIGHT_X, startY, [185, 28, 28]);
+                return Math.max(y1, y2) + 5;
+            };
+
+            /* ═══════════════════════════════════════════════════
+               PAGE 1 — Sprint Focus (if sprint selected) OR Overview
+               ═══════════════════════════════════════════════════ */
+            let y = _drawPageHeader(reportTitle) + 6;
+
+            // Meta row
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(7.5);
+            doc.setTextColor(110, 110, 110);
+            // "Date range:" label in gray, dates in bold dark
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(7.5);
+            doc.setTextColor(130, 130, 130);
+            doc.text('Date range:', MARGIN, y);
+            const labelW = doc.getTextWidth('Date range:');
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(30, 30, 30);
+            doc.text(` ${fromLabel}  to  ${toLabel}`, MARGIN + labelW, y);
+
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(7.5);
+            doc.setTextColor(130, 130, 130);
+            doc.text('Generated:', pageW - 10 - doc.getTextWidth(genLabel) - doc.getTextWidth('Generated: '), y);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(30, 30, 30);
+            doc.text(genLabel, pageW - 10, y, { align: 'right' });
+            y += 3;
+            doc.setDrawColor(220, 220, 220);
+            doc.setLineWidth(0.2);
+            doc.line(MARGIN, y, pageW - MARGIN, y);
+            y += 5;
+
+            if (sprintName) {
+                /* ── Sprint badge ── */
+                doc.setFillColor(245, 245, 255);
+                doc.setDrawColor(109, 40, 217);
+                doc.setLineWidth(0.3);
+                doc.roundedRect(MARGIN, y - 1, pageW - MARGIN * 2, 7, 2, 2, 'FD');
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(8);
+                doc.setTextColor(109, 40, 217);
+                doc.text(`Sprint: ${sprintName}`, pageW / 2, y + 4, { align: 'center' });
+                y += 11;
+
+                /* ── AI summaries ── */
+                if (aiSummary) {
+                    y = _drawAiBox(aiSummary.overall_bullets, aiSummary.production_bullets, y);
+                    doc.setDrawColor(220, 220, 220);
+                    doc.setLineWidth(0.2);
+                    doc.line(MARGIN, y - 2, pageW - MARGIN, y - 2);
+                    y += 3;
+                }
+
+                /* ── Use full JQL sprint fetch for ALL sprint-specific numbers ── */
+                // allSprintIssues = dedicated /api/assignee_work_by_sprint fetch (no date filter)
+                // Falls back to date-filtered sprintTickets if fetch failed
+                const nonEpicSprintIssues = allSprintIssues
+                    ? allSprintIssues.filter(i => !isEpic(i))
+                    : sprintTickets;
+                const nspWork = nonEpicSprintIssues.filter(isWorkItem);
+                const nspBugs = nonEpicSprintIssues.filter(isBug);
+                const nspProd = nonEpicSprintIssues.filter(isProductionPlatform);
+
+                /* ── Sprint summary cards ── */
+                y = _sectionBanner('SPRINT SNAPSHOT — ' + sprintName.toUpperCase(), [109, 40, 217], y);
+                y = drawPdfSummaryCards(doc, y, {
+                    total: nonEpicSprintIssues.length, totalDone: nonEpicSprintIssues.filter(isDone).length,
+                    work:  nspWork.length,              workDone:  nspWork.filter(isDone).length,
+                    bugs:  nspBugs.length,               bugsDone:  nspBugs.filter(isDone).length,
+                    production: nspProd.length,          productionDone: nspProd.filter(isDone).length,
+                });
+
+                y = ensurePdfY(doc, y, 8);
+                const compW = pageW - MARGIN * 2;
+                const compH = compW / (500 / 156);   // fixed 500×156 aspect
+                const compUrl = canvasCompletionChartToDataUrl(nonEpicSprintIssues);
+                if (compUrl) {
+                    y = ensurePdfY(doc, y, compH);
+                    try { doc.addImage(compUrl, 'PNG', MARGIN, y, compW, compH); } catch (e) {}
+                    y += compH + 5;
+                }
+
+                /* ── All tickets in sprint (done first, green rows) ── */
+                if (nonEpicSprintIssues && nonEpicSprintIssues.length) {
+                    y = ensurePdfY(doc, y, 14);
+                    y = _sectionBanner(
+                        `${sprintName}  —  ALL TICKETS (${nonEpicSprintIssues.length} total · completed rows highlighted)`,
+                        [15, 23, 42], y
+                    );
+
+                    const sortedSprint = [...nonEpicSprintIssues].sort((a, b) => {
+                        const aDone = isDone(a) ? 0 : 1;
+                        const bDone = isDone(b) ? 0 : 1;
+                        if (aDone !== bDone) return aDone - bDone;
+                        return (a.status || '').localeCompare(b.status || '');
+                    });
+
+                    const sprintTableRows = sortedSprint.map(i => [
+                        i.key || '',
+                        i.type || '',
+                        (i.summary || '').slice(0, 100),
+                        i.status || '',
+                        i.priority || '',
+                    ]);
+
+                    doc.autoTable({
+                        startY: y,
+                        head: [['Key', 'Type', 'Summary', 'Status', 'Priority']],
+                        body: sprintTableRows,
+                        theme: 'grid',
+                        styles: {
+                            fontSize: 7, cellPadding: 2.2,
+                            overflow: 'linebreak', font: 'helvetica',
+                            textColor: [20, 20, 20]
+                        },
+                        headStyles: {
+                            fillColor: [15, 23, 42], textColor: [255, 255, 255],
+                            fontStyle: 'bold', fontSize: 7.5, cellPadding: 2.8
+                        },
+                        columnStyles: {
+                            0: { cellWidth: 22, fontStyle: 'bold', textColor: [30, 64, 175] },
+                            1: { cellWidth: 20 },
+                            2: { cellWidth: 118 },
+                            3: { cellWidth: 34 },
+                            4: { cellWidth: 22 }
+                        },
+                        margin: { left: MARGIN, right: MARGIN },
+                        didParseCell: (data) => {
+                            if (data.section === 'body') {
+                                const issue = sortedSprint[data.row.index];
+                                if (issue && isDone(issue)) {
+                                    data.cell.styles.fillColor = [220, 252, 231]; // light green
+                                }
+                            }
+                        }
+                    });
+                    y = doc.lastAutoTable.finalY + 8;
+                }
+
+                /* ── Sprint ticket type breakdown tables (full JQL data) ── */
+                const SC = _SECTION_COLORS;
+                y = ensurePdfY(doc, y, 14);
+                y = _sectionBanner('STORIES · TASKS · SUB-TASKS', SC.stories, y);
+                y = renderReportTable(doc, '', toReportRows(nspWork), y, SC.stories);
+                y = ensurePdfY(doc, y, 14);
+                y = _sectionBanner('BUGS', SC.bugs, y);
+                y = renderReportTable(doc, '', toReportRows(nspBugs), y, SC.bugs);
+                if (nspProd.length) {
+                    y = ensurePdfY(doc, y, 14);
+                    y = _sectionBanner('PRODUCTION TICKETS', SC.production, y);
+                    y = renderReportTable(doc, '', toReportRows(nspProd), y, SC.production);
+                }
+
+                /* ═══════════════════════════════════════════════════
+                   NEW PAGE — Full report across all sprints
+                   ═══════════════════════════════════════════════════ */
+                doc.addPage();
+                y = _drawPageHeader(reportTitle + ' — All Sprints') + 6;
+
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(7.5);
+                doc.setTextColor(110, 110, 110);
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(7.5);
+                doc.setTextColor(130, 130, 130);
+                doc.text('Full date range:', MARGIN, y);
+                const flw = doc.getTextWidth('Full date range:');
+                doc.setFont('helvetica', 'bold');
+                doc.setTextColor(30, 30, 30);
+                doc.text(` ${fromLabel}  to  ${toLabel}`, MARGIN + flw, y);
+                doc.setFont('helvetica', 'normal');
+                doc.setTextColor(130, 130, 130);
+                doc.text('  · All sprints combined', MARGIN + flw + doc.getTextWidth(` ${fromLabel}  to  ${toLabel}`), y);
+                y += 6;
+
+                /* ── Overall summary cards ── */
+                y = _sectionBanner('OVERALL SUMMARY — ALL SPRINTS', [15, 23, 42], y);
+                y = drawPdfSummaryCards(doc, y, {
+                    total: allNonEpics.length, totalDone: allNonEpics.filter(isDone).length,
+                    work:  allWork.length,      workDone:  allWork.filter(isDone).length,
+                    bugs:  allBugs.length,       bugsDone:  allBugs.filter(isDone).length,
+                    production: allProd.length,  productionDone: allProd.filter(isDone).length,
+                });
+
+                /* ── All-sprints pie chart ── */
+                y = ensurePdfY(doc, y, 8);
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(6.8);
+                doc.setTextColor(130, 130, 130);
+                doc.text('All sprints · top 10 shown', MARGIN, y);
+                y += 4;
+                const allPieW = pageW - MARGIN * 2;
+                const allPieH = allPieW / (560 / 196);
+                const allPieUrl = canvasSprintPieToDataUrl(allNonEpics);
+                if (allPieUrl) {
+                    y = ensurePdfY(doc, y, allPieH);
+                    try { doc.addImage(allPieUrl, 'PNG', MARGIN, y, allPieW, allPieH); } catch (e) {}
+                    y += allPieH + 5;
+                }
+
+                /* ── All-sprints tables ── */
+                y = ensurePdfY(doc, y, 14);
+                y = _sectionBanner('ALL TICKETS — ALL SPRINTS (excl. epics)', SC.all, y);
+                y = renderReportTable(doc, '', toReportRows(allNonEpics), y, SC.all);
+                y = ensurePdfY(doc, y, 14);
+                y = _sectionBanner('STORIES · TASKS · SUB-TASKS — ALL SPRINTS', SC.stories, y);
+                y = renderReportTable(doc, '', toReportRows(allWork), y, SC.stories);
+                y = ensurePdfY(doc, y, 14);
+                y = _sectionBanner('BUGS — ALL SPRINTS', SC.bugs, y);
+                y = renderReportTable(doc, '', toReportRows(allBugs), y, SC.bugs);
+                if (allProd.length) {
+                    y = ensurePdfY(doc, y, 14);
+                    y = _sectionBanner('PRODUCTION TICKETS — ALL SPRINTS', SC.production, y);
+                    y = renderReportTable(doc, '', toReportRows(allProd), y, SC.production);
+                }
+
+            } else {
+                /* ── No sprint filter: single comprehensive report ── */
+                const SC = _SECTION_COLORS;
+
+                /* Summary cards */
+                y = _sectionBanner('OVERALL SUMMARY', [15, 23, 42], y);
+                y = drawPdfSummaryCards(doc, y, {
+                    total: allNonEpics.length, totalDone: allNonEpics.filter(isDone).length,
+                    work:  allWork.length,      workDone:  allWork.filter(isDone).length,
+                    bugs:  allBugs.length,       bugsDone:  allBugs.filter(isDone).length,
+                    production: allProd.length,  productionDone: allProd.filter(isDone).length,
+                });
+
+                /* Sprint pie */
+                y = ensurePdfY(doc, y, 8);
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(6.8);
+                doc.setTextColor(130, 130, 130);
+                doc.text('Tickets by sprint · top 10 shown', MARGIN, y);
+                y += 4;
+                const pieW2 = pageW - MARGIN * 2;
+                const pieH2 = pieW2 / (560 / 196);
+                const pieUrl2 = canvasSprintPieToDataUrl(allNonEpics);
+                if (pieUrl2) {
+                    y = ensurePdfY(doc, y, pieH2);
+                    try { doc.addImage(pieUrl2, 'PNG', MARGIN, y, pieW2, pieH2); } catch (e) {}
+                    y += pieH2 + 5;
+                }
+
+                y = ensurePdfY(doc, y, 14);
+                y = _sectionBanner('ALL TICKETS (excl. epics)', SC.all, y);
+                y = renderReportTable(doc, '', toReportRows(allNonEpics), y, SC.all);
+                y = ensurePdfY(doc, y, 14);
+                y = _sectionBanner('STORIES · TASKS · SUB-TASKS', SC.stories, y);
+                y = renderReportTable(doc, '', toReportRows(allWork), y, SC.stories);
+                y = ensurePdfY(doc, y, 14);
+                y = _sectionBanner('BUGS', SC.bugs, y);
+                y = renderReportTable(doc, '', toReportRows(allBugs), y, SC.bugs);
+                if (allProd.length) {
+                    y = ensurePdfY(doc, y, 14);
+                    y = _sectionBanner('PRODUCTION TICKETS', SC.production, y);
+                    y = renderReportTable(doc, '', toReportRows(allProd), y, SC.production);
+                }
+            }
+
+            _addPdfFooter(doc);
+            const safeTitle = reportTitle.replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/g, '').toLowerCase() || 'assignee_work_report';
+            const stamp = new Date().toISOString().slice(0, 10);
+            doc.save(`${safeTitle}_${stamp}.pdf`);
         }
     </script>
 </body>

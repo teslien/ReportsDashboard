@@ -1,148 +1,176 @@
 {% extends 'base.html' %}
 {% block title %}Customer Closure{% endblock %}
 {% block body_class %}cc-page{% endblock %}
-{% block main_class %}pt-24 pb-10 px-4 w-full max-w-none{% endblock %}
 
 {% block extra_head %}
 <style>
-  body.cc-page { background: #f8fafc !important; color: #0f172a !important; }
+  body.cc-page { background: #f1f5f9 !important; color: #0f172a !important; }
   body.cc-page #theme-toggle-btn { display: none !important; }
+
+  /* ── Nav ───────────────────────────────────────── */
   .lp-nav {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    z-index: 1000;
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(8px);
+    position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+    background: rgba(255,255,255,0.97); backdrop-filter: blur(8px);
     border-bottom: 1px solid #e2e8f0;
   }
   .lp-nav-wrap {
-    width: 100%;
-    height: 64px;
-    padding: 0 16px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
+    width: 100%; height: 58px; padding: 0 24px;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
   }
-  .lp-brand { display: inline-flex; align-items: center; text-decoration: none; line-height: 0; }
-  .lp-brand-logo { height: 30px; width: auto; display: block; }
-  .lp-menu { display: flex; align-items: center; gap: 8px; }
+  .lp-brand { display: inline-flex; align-items: center; text-decoration: none; }
+  .lp-brand-logo { height: 28px; width: auto; display: block; }
+  .lp-menu { display: flex; align-items: stretch; gap: 0; height: 58px; }
   .lp-link {
-    display: inline-flex; align-items: center; gap: 7px; padding: 8px 12px; border-radius: 999px;
-    border: 1px solid #cbd5e1; background: #ffffff; color: #475569; text-decoration: none;
-    font-size: 13px; font-weight: 700; transition: all .15s;
+    position: relative;
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 0 16px;
+    color: #64748b; text-decoration: none;
+    font-size: 13px; font-weight: 600;
+    transition: color .18s; white-space: nowrap;
   }
-  .lp-link:hover { border-color: #93c5fd; color: #1e3a8a; background: #eff6ff; }
-  .lp-link.active { border-color: #bfdbfe; color: #1d4ed8; background: #eff6ff; }
+  .lp-link::after {
+    content: ''; position: absolute; bottom: 0; left: 0; right: 0;
+    height: 2px; background: #2563eb; border-radius: 2px 2px 0 0;
+    transform: scaleX(0); transform-origin: center;
+    transition: transform .22s cubic-bezier(.4,0,.2,1);
+  }
+  .lp-link:hover { color: #1e40af; }
+  .lp-link:hover::after { transform: scaleX(1); }
+  .lp-link.active { color: #1d4ed8; font-weight: 700; }
+  .lp-link.active::after { transform: scaleX(1); }
 
+  /* ── Cards ─────────────────────────────────────── */
   .cc-card {
-    background: #ffffff;
-    border: 1px solid #e2e8f0;
-    border-radius: 12px;
-    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+    background: #ffffff; border: 1px solid #e2e8f0;
+    border-radius: 14px; box-shadow: 0 1px 3px rgba(15,23,42,.06);
   }
-  .cc-input, .cc-select, .cc-textarea {
-    width: 100%;
-    background: #ffffff;
-    border: 1px solid #cbd5e1;
-    color: #0f172a;
-    border-radius: 8px;
-    padding: 9px 10px;
-    font-size: 13px;
+
+  /* ── Form controls ──────────────────────────────── */
+  .cc-label { display: block; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 5px; }
+  .cc-input, .cc-select {
+    background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;
+    padding: 7px 11px; font-size: 13px; color: #0f172a; outline: none;
+    transition: border .15s; width: 100%;
   }
-  .cc-textarea { min-height: 88px; resize: vertical; }
-  .cc-label {
-    font-size: 12px;
-    color: #475569;
-    margin-bottom: 6px;
-    display: block;
-    font-weight: 600;
+  .cc-select {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 10px center; padding-right: 30px;
   }
-  .cc-btn {
-    border: 1px solid #cbd5e1;
-    background: #ffffff;
-    color: #334155;
-    border-radius: 8px;
-    padding: 9px 12px;
-    font-size: 12px;
-    font-weight: 700;
-    transition: all .15s;
+  .cc-input:focus, .cc-select:focus { border-color: #93c5fd; background: #fff; }
+  .cc-textarea {
+    background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;
+    padding: 8px 11px; font-size: 12.5px; color: #0f172a; outline: none;
+    width: 100%; min-height: 76px; resize: vertical; font-family: inherit;
+    transition: border .15s;
   }
-  .cc-btn:hover { background: #f8fafc; }
-  .cc-btn.primary { background: #2563eb; border-color: #2563eb; color: #ffffff; }
-  .cc-btn.primary:hover { background: #1d4ed8; }
-  .cc-preset-btn {
-    border: 1px solid #cbd5e1;
-    background: #ffffff;
-    color: #475569;
-    border-radius: 999px;
-    padding: 7px 12px;
-    font-size: 12px;
-    font-weight: 700;
-    transition: all .15s;
+  .cc-textarea:focus { border-color: #93c5fd; background: #fff; }
+
+  /* ── Buttons ────────────────────────────────────── */
+  .cc-btn-primary {
+    display: inline-flex; align-items: center; gap: 7px;
+    background: #2563eb; color: #fff; border: none; border-radius: 8px;
+    padding: 8px 18px; font-size: 13px; font-weight: 700; cursor: pointer;
+    transition: background .15s; white-space: nowrap;
   }
-  .cc-preset-btn:hover { border-color: #93c5fd; color: #1e3a8a; background: #eff6ff; }
-  .cc-preset-btn.active { border-color: #bfdbfe; color: #1d4ed8; background: #eff6ff; }
-  .cc-kpi-title { font-size: 12px; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
-  .cc-kpi-value { font-size: 28px; font-weight: 800; color: #0f172a; margin-top: 4px; }
-  .cc-kpi-sub { font-size: 12px; color: #64748b; margin-top: 2px; }
-  .cc-muted { color: #64748b; font-size: 12px; }
-  .cc-jql-preview {
-    background: #0f172a;
-    color: #e2e8f0;
-    border-radius: 12px;
-    padding: 12px 14px;
-    font-size: 12px;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-    white-space: pre-wrap;
-    overflow: auto;
+  .cc-btn-primary:hover { background: #1d4ed8; }
+  .cc-btn-secondary {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: #fff; color: #475569; border: 1px solid #e2e8f0;
+    border-radius: 8px; padding: 7px 13px; font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: all .15s; white-space: nowrap;
   }
-  .cc-status-pill {
-    display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px;
-    font-size: 11px; font-weight: 700; border: 1px solid #cbd5e1; background: #f8fafc; color: #334155;
-  }
-  .cc-status-pill.done { border-color: #86efac; background: #dcfce7; color: #166534; }
-  .cc-key-cell { display: inline-flex; align-items: center; gap: 6px; }
-  .cc-type-icon { width: 14px; height: 14px; border-radius: 3px; flex: 0 0 auto; }
-  .cc-table-wrap { overflow: auto; max-height: 70vh; }
-  .cc-table { width: 100%; border-collapse: collapse; }
-  .cc-table th {
-    position: sticky; top: 0; background: #f8fafc; font-size: 11px; color: #64748b;
-    text-transform: uppercase; letter-spacing: .03em; font-weight: 700; text-align: left;
-    padding: 10px; border-bottom: 1px solid #e2e8f0;
-  }
-  .cc-table td { font-size: 13px; color: #1f2937; padding: 10px; border-bottom: 1px solid #eef2f7; vertical-align: top; }
-  .cc-table tr.cc-closed-row { background: #f0fdf4; }
-  .cc-empty { border: 1px dashed #cbd5e1; border-radius: 12px; padding: 22px; background: #ffffff; text-align: center; color: #64748b; }
-  .cc-feedback.err { color: #b91c1c; }
-  .cc-feedback.ok { color: #0f766e; }
+  .cc-btn-secondary:hover { background: #f8fafc; border-color: #cbd5e1; }
   .cc-settings-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    border: 1px solid #cbd5e1;
-    background: #ffffff;
-    color: #334155;
-    border-radius: 10px;
-    padding: 9px 14px;
-    font-size: 13px;
-    font-weight: 700;
-    transition: all .15s;
+    display: inline-flex; align-items: center; gap: 7px;
+    border: 1px solid #e2e8f0; background: #fff; color: #334155;
+    border-radius: 8px; padding: 7px 13px; font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: all .15s;
   }
-  .cc-settings-btn:hover { background: #f8fafc; color: #0f172a; }
-  .cc-modal-backdrop { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); display: none; align-items: center; justify-content: center; z-index: 1100; padding: 16px; }
+  .cc-settings-btn:hover { background: #f8fafc; }
+  .cc-preset {
+    border: 1px solid #e2e8f0; background: #f8fafc; color: #475569;
+    border-radius: 7px; padding: 5px 12px; font-size: 12px; font-weight: 600;
+    cursor: pointer; transition: all .15s;
+  }
+  .cc-preset:hover, .cc-preset.active { border-color: #93c5fd; color: #1e40af; background: #eff6ff; }
+  .cc-link-btn {
+    background: none; border: none; color: #64748b; font-size: 12px; font-weight: 600;
+    cursor: pointer; display: inline-flex; align-items: center; gap: 4px; padding: 0;
+    transition: color .15s;
+  }
+  .cc-link-btn:hover { color: #2563eb; }
+
+  /* ── KPI cards ──────────────────────────────────── */
+  .cc-kpi-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; }
+  @media(max-width:768px) { .cc-kpi-grid { grid-template-columns: repeat(2,1fr); } }
+  @media(max-width:480px) { .cc-kpi-grid { grid-template-columns: 1fr; } }
+  .cc-kpi { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px 20px; }
+  .cc-kpi-label { font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .06em; }
+  .cc-kpi-value { font-size: 28px; font-weight: 800; color: #0f172a; line-height: 1.2; margin-top: 4px; }
+  .cc-kpi-sub { font-size: 11px; color: #94a3b8; margin-top: 3px; }
+  .cc-kpi-value.green { color: #16a34a; }
+  .cc-kpi-value.blue  { color: #2563eb; }
+
+  /* ── Loader ──────────────────────────────────────── */
+  .cc-loader { display: none; align-items: center; gap: 8px; font-size: 13px; color: #64748b; }
+  .cc-loader.open { display: inline-flex; }
+  .cc-spin { width: 14px; height: 14px; border: 2px solid #cbd5e1; border-top-color: #3b82f6; border-radius: 50%; animation: cc-spin .7s linear infinite; }
+
+  /* ── Table ───────────────────────────────────────── */
+  .cc-table-wrap { overflow: auto; max-height: 68vh; }
+  .cc-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .cc-table th {
+    position: sticky; top: 0; z-index: 1; background: #f8fafc;
+    font-size: 11px; color: #64748b; text-transform: uppercase;
+    letter-spacing: .05em; font-weight: 700; text-align: left;
+    padding: 9px 12px; border-bottom: 1px solid #e2e8f0;
+  }
+  .cc-table td { padding: 9px 12px; border-bottom: 1px solid #f1f5f9; color: #1f2937; vertical-align: middle; }
+  .cc-table tr:last-child td { border-bottom: none; }
+  .cc-table tr:hover td { background: #f8fafc; }
+  .cc-table tr.cc-closed-row td { background: #f0fdf4; }
+  .cc-table tr.cc-closed-row:hover td { background: #dcfce7; }
+  .cc-status-pill {
+    display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 6px;
+    font-size: 11px; font-weight: 700; border: 1px solid #e2e8f0;
+    background: #f8fafc; color: #475569; white-space: nowrap;
+  }
+  .cc-status-pill.done { border-color: #86efac; background: #f0fdf4; color: #166534; }
+  .cc-key-cell { display: inline-flex; align-items: center; gap: 5px; }
+  .cc-type-icon { width: 13px; height: 13px; border-radius: 3px; flex: 0 0 auto; }
+
+  /* ── JQL preview ─────────────────────────────────── */
+  .cc-jql-box {
+    background: #0f172a; color: #94a3b8; border-radius: 8px;
+    padding: 10px 13px; font-size: 11.5px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    white-space: pre-wrap; overflow: auto; line-height: 1.6;
+  }
+
+  /* ── Advanced toggle ─────────────────────────────── */
+  #cc-advanced-body { display: none; }
+  #cc-advanced-body.open { display: block; }
+
+  /* ── Feedback ────────────────────────────────────── */
+  .cc-feedback { font-size: 12.5px; color: #64748b; }
+  .cc-feedback.err { color: #dc2626; }
+  .cc-feedback.ok  { color: #059669; }
+
+  /* ── Modal ───────────────────────────────────────── */
+  .cc-modal-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,.45); display: none; align-items: center; justify-content: center; z-index: 1100; padding: 16px; }
   .cc-modal-backdrop.open { display: flex; }
-  .cc-modal { width: min(960px, calc(100vw - 24px)); background: #fff; border: 1px solid #e2e8f0; border-radius: 18px; box-shadow: 0 12px 40px rgba(15, 23, 42, 0.24); overflow: hidden; }
-  .cc-modal-head, .cc-modal-actions { padding: 16px 20px; border-bottom: 1px solid #e2e8f0; }
-  .cc-modal-actions { border-bottom: none; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 10px; }
+  .cc-modal { width: min(520px, calc(100vw - 24px)); background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; box-shadow: 0 16px 48px rgba(15,23,42,.22); overflow: hidden; }
+  .cc-modal-head { padding: 16px 20px; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; }
+  .cc-modal-actions { padding: 14px 20px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 10px; }
   .cc-modal-body { padding: 18px 20px; }
-  .cc-modal-close { margin-left: auto; border: none; background: transparent; color: #64748b; font-size: 24px; line-height: 1; cursor: pointer; }
+  .cc-modal-close { border: none; background: transparent; color: #94a3b8; font-size: 22px; line-height: 1; cursor: pointer; }
   .cc-modal-close:hover { color: #0f172a; }
 
-  @media (max-width: 700px) {
-    .lp-nav-wrap { padding: 0 10px; }
+  @keyframes cc-spin { to { transform: rotate(360deg); } }
+  @media(max-width:700px) {
+    .lp-nav-wrap { padding: 0 12px; }
+    .lp-link { padding: 0 12px; }
     .lp-link span { display: none; }
   }
 </style>
@@ -155,112 +183,118 @@
       <img src="/static/lumber-logo.png" alt="LUMBER" class="lp-brand-logo" />
     </a>
     <div class="lp-menu">
-      <a href="/customer_dashboard" class="lp-link">
-        <i class="fas fa-users"></i><span>Dashboard</span>
-      </a>
-      <a href="/team_productivity" class="lp-link">
-        <i class="fas fa-bolt"></i><span>Productivity</span>
-      </a>
-      <a href="/customer_closure" class="lp-link active">
-        <i class="fas fa-circle-check"></i><span>Closure</span>
-      </a>
+      <a href="/customer_dashboard" class="lp-link"><i class="fas fa-users"></i><span>Dashboard</span></a>
+      <a href="/team_productivity" class="lp-link"><i class="fas fa-bolt"></i><span>Productivity</span></a>
+      <a href="/customer_closure" class="lp-link active"><i class="fas fa-circle-check"></i><span>Closure</span></a>
     </div>
   </div>
 </nav>
 
-<div class="max-w-7xl mx-auto space-y-6">
-  <div class="flex flex-wrap items-start justify-between gap-4">
+<div class="max-w-6xl mx-auto space-y-6">
+
+  <!-- Page header -->
+  <div class="flex flex-wrap items-center justify-between gap-3">
     <div>
-      <h1 class="text-3xl font-bold text-slate-900 tracking-tight">Customer Closure</h1>
-      <p class="text-sm text-slate-500 mt-1">Count how many customer-reported tickets are closed for a selected week-back range or custom dates.</p>
+      <h1 class="text-2xl font-bold text-slate-900 tracking-tight">Customer Closure</h1>
+      <p class="text-slate-500 text-sm mt-1">Track how many customer-reported tickets are closed for a given date range.</p>
     </div>
     <button type="button" id="cc-open-settings" class="cc-settings-btn">
-      <i class="fas fa-key"></i><span>Jira Credentials</span>
+      <i class="fas fa-key text-slate-400"></i>Jira Credentials
     </button>
   </div>
 
-  <div class="cc-card p-5 space-y-5">
-    <div>
-      <div class="cc-label">Quick range</div>
-      <div class="flex flex-wrap gap-2">
-        <button type="button" class="cc-preset-btn" data-week-back="1">1 Week Back</button>
-        <button type="button" class="cc-preset-btn" data-week-back="2">2 Weeks Back</button>
-        <button type="button" class="cc-preset-btn" data-week-back="3">3 Weeks Back</button>
-        <button type="button" class="cc-preset-btn" data-week-back="4">4 Weeks Back</button>
-      </div>
-      <p class="cc-muted mt-2">Default matches: <code>"Reported By Customer" = Yes AND created &gt;= startOfWeek(-1) AND created &lt; startOfWeek()</code></p>
+  <!-- Filter card -->
+  <div class="cc-card p-5 space-y-4">
+
+    <!-- Quick range -->
+    <div class="flex flex-wrap items-center gap-2">
+      <span class="cc-label mb-0 mr-1">Quick range</span>
+      <button type="button" class="cc-preset" data-week-back="1">1 Week Back</button>
+      <button type="button" class="cc-preset" data-week-back="2">2 Weeks Back</button>
+      <button type="button" class="cc-preset" data-week-back="3">3 Weeks Back</button>
+      <button type="button" class="cc-preset" data-week-back="4">4 Weeks Back</button>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
+    <!-- Dates + team + actions -->
+    <div class="flex flex-wrap items-end gap-3">
       <div>
         <label class="cc-label" for="cc-start">Start date</label>
-        <input id="cc-start" type="date" class="cc-input" />
+        <input id="cc-start" type="date" class="cc-input" style="width:160px" />
       </div>
       <div>
         <label class="cc-label" for="cc-end">End date</label>
-        <input id="cc-end" type="date" class="cc-input" />
+        <input id="cc-end" type="date" class="cc-input" style="width:160px" />
       </div>
       <div>
-        <label class="cc-label" for="cc-team">Team filter</label>
-        <select id="cc-team" class="cc-select">
+        <label class="cc-label" for="cc-team">Team</label>
+        <select id="cc-team" class="cc-select" style="width:180px">
           <option value="">All Teams</option>
         </select>
       </div>
-      <div class="flex items-end gap-2">
-        <button id="cc-refresh-teams" type="button" class="cc-btn">Refresh Teams</button>
-        <button id="cc-run" type="button" class="cc-btn primary">Load Results</button>
-      </div>
+      <button id="cc-run" type="button" class="cc-btn-primary mt-auto">
+        <i class="fas fa-play text-xs"></i>Load Results
+      </button>
+      <div id="cc-loader" class="cc-loader mt-auto"><span class="cc-spin"></span> Fetching…</div>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      <div>
-        <label class="cc-label" for="cc-done-statuses">Done status setting</label>
-        <textarea id="cc-done-statuses" class="cc-textarea" placeholder="Done, Resolved, Closed, Ready for QA, Deployed, Ready for Staging, Ready for Internal Demo, Not a Bug, Unable to Reproduce"></textarea>
-        <div class="flex items-center justify-between gap-3 mt-2">
-          <p class="cc-muted">Comma or newline separated. Tickets in these statuses count as closed.</p>
-          <button id="cc-reset-statuses" type="button" class="cc-btn">Reset Defaults</button>
+    <!-- Advanced toggle -->
+    <div>
+      <button type="button" id="cc-advanced-toggle" class="cc-link-btn">
+        <i class="fas fa-chevron-right text-[10px] transition-transform" id="cc-adv-chevron"></i>
+        Advanced settings
+      </button>
+      <div id="cc-advanced-body" class="mt-3 grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div>
+          <label class="cc-label" for="cc-done-statuses">Done statuses</label>
+          <textarea id="cc-done-statuses" class="cc-textarea" placeholder="Done, Resolved, Closed…"></textarea>
+          <div class="flex items-center justify-between gap-2 mt-1.5">
+            <p class="text-xs text-slate-400">Comma or newline separated. Tickets in these statuses count as closed.</p>
+            <button id="cc-reset-statuses" type="button" class="cc-link-btn">Reset defaults</button>
+          </div>
+        </div>
+        <div>
+          <label class="cc-label">JQL preview</label>
+          <div id="cc-jql-preview" class="cc-jql-box"></div>
         </div>
       </div>
-      <div>
-        <label class="cc-label">JQL used by default</label>
-        <div id="cc-jql-preview" class="cc-jql-preview"></div>
-      </div>
     </div>
 
-    <p id="cc-feedback" class="cc-feedback cc-muted"></p>
+    <p id="cc-feedback" class="cc-feedback"></p>
   </div>
 
-  <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-    <div class="cc-card p-4">
-      <div class="cc-kpi-title">Matched Tickets</div>
+  <!-- KPI cards -->
+  <div class="cc-kpi-grid">
+    <div class="cc-kpi">
+      <div class="cc-kpi-label">Matched tickets</div>
       <div id="cc-kpi-total" class="cc-kpi-value">0</div>
-      <div class="cc-kpi-sub">Based on created date range</div>
+      <div class="cc-kpi-sub">Based on date range</div>
     </div>
-    <div class="cc-card p-4">
-      <div class="cc-kpi-title">Closed Tickets</div>
-      <div id="cc-kpi-closed" class="cc-kpi-value text-emerald-600">0</div>
-      <div class="cc-kpi-sub">Using your done-status setting</div>
+    <div class="cc-kpi">
+      <div class="cc-kpi-label">Closed tickets</div>
+      <div id="cc-kpi-closed" class="cc-kpi-value green">0</div>
+      <div class="cc-kpi-sub">Matching done statuses</div>
     </div>
-    <div class="cc-card p-4">
-      <div class="cc-kpi-title">Open Tickets</div>
-      <div id="cc-kpi-open" class="cc-kpi-value text-slate-900">0</div>
+    <div class="cc-kpi">
+      <div class="cc-kpi-label">Open tickets</div>
+      <div id="cc-kpi-open" class="cc-kpi-value">0</div>
       <div class="cc-kpi-sub">Not in done statuses</div>
     </div>
-    <div class="cc-card p-4">
-      <div class="cc-kpi-title">Closure Rate</div>
-      <div id="cc-kpi-rate" class="cc-kpi-value text-blue-600">0%</div>
+    <div class="cc-kpi">
+      <div class="cc-kpi-label">Closure rate</div>
+      <div id="cc-kpi-rate" class="cc-kpi-value blue">0%</div>
       <div class="cc-kpi-sub">Closed / matched</div>
     </div>
   </div>
 
+  <!-- Ticket table -->
   <div class="cc-card overflow-hidden">
-    <div class="px-5 py-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
+    <div class="px-5 py-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
       <div>
-        <h2 class="text-lg font-bold text-slate-900">Ticket List</h2>
-        <p id="cc-table-meta" class="cc-muted mt-1">Load a range to see results.</p>
+        <h2 class="text-sm font-bold text-slate-800">Ticket List</h2>
+        <p id="cc-table-meta" class="text-xs text-slate-400 mt-0.5">Load a range to see results.</p>
       </div>
     </div>
-    <div id="cc-empty" class="cc-empty">No results loaded yet.</div>
+    <div id="cc-empty" class="px-5 py-10 text-center text-sm text-slate-400">No results loaded yet.</div>
     <div id="cc-table-wrap" class="cc-table-wrap hidden">
       <table class="cc-table">
         <thead>
@@ -270,7 +304,7 @@
             <th>Team</th>
             <th>Status</th>
             <th>Created</th>
-            <th>Resolution Date</th>
+            <th>Resolution date</th>
           </tr>
         </thead>
         <tbody id="cc-table-body"></tbody>
@@ -278,28 +312,28 @@
     </div>
   </div>
 </div>
+
+<!-- Credentials modal -->
 <div id="cc-settings-modal" class="cc-modal-backdrop">
   <div class="cc-modal" role="dialog" aria-modal="true" aria-labelledby="cc-settings-title">
-    <div class="cc-modal-head flex items-center gap-3">
-      <span id="cc-settings-title" class="text-xl font-bold text-slate-900">Jira Credentials (Local)</span>
+    <div class="cc-modal-head">
+      <span id="cc-settings-title" class="text-base font-bold text-slate-900">Jira Credentials</span>
       <button id="cc-settings-close" class="cc-modal-close" aria-label="Close">&times;</button>
     </div>
-    <div class="cc-modal-body">
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label class="block text-sm font-semibold text-slate-700 mb-2">Jira Email</label>
-          <input id="cc-setting-email" class="cc-input" type="email" placeholder="you@company.com" />
-        </div>
-        <div>
-          <label class="block text-sm font-semibold text-slate-700 mb-2">Jira API Token</label>
-          <input id="cc-setting-token" class="cc-input" type="password" placeholder="ATATT..." />
-        </div>
+    <div class="cc-modal-body space-y-4">
+      <div>
+        <label class="cc-label" for="cc-setting-email">Jira email</label>
+        <input id="cc-setting-email" class="cc-input" type="email" placeholder="you@company.com" />
       </div>
-      <p class="text-xs text-slate-500 mt-3">Stored in your browser local storage and reused after reload.</p>
+      <div>
+        <label class="cc-label" for="cc-setting-token">Jira API token</label>
+        <input id="cc-setting-token" class="cc-input" type="password" placeholder="ATATT…" />
+      </div>
+      <p class="text-xs text-slate-400">Stored in browser local storage only.</p>
     </div>
     <div class="cc-modal-actions">
-      <button id="cc-settings-cancel" class="cc-btn">Cancel</button>
-      <button id="cc-settings-save" class="cc-btn primary">Save Settings</button>
+      <button id="cc-settings-cancel" class="cc-btn-secondary">Cancel</button>
+      <button id="cc-settings-save" class="cc-btn-primary">Save</button>
     </div>
   </div>
 </div>
@@ -308,276 +342,202 @@
 {% block extra_scripts %}
 <script>
 (() => {
-  const LS_KEYS = {
-    email: "customer_dashboard_jira_email",
-    token: "customer_dashboard_jira_token",
-  };
+  const LS_KEYS = { email: "customer_dashboard_jira_email", token: "customer_dashboard_jira_token" };
   const DEFAULT_DONE_STATUSES = [
-    "Done",
-    "Resolved",
-    "Closed",
-    "Ready for QA",
-    "Deployed",
-    "Ready for Staging",
-    "Ready for Internal Demo",
-    "Not a Bug",
-    "Unable to Reproduce",
+    "Done","Resolved","Closed","Ready for QA","Deployed",
+    "Ready for Staging","Ready for Internal Demo","Not a Bug","Unable to Reproduce",
   ];
   const LS_DONE = "customer_closure_done_statuses";
   const LS_TEAM = "customer_closure_team";
   const LS_WEEK = "customer_closure_week_back";
-
   const $ = (id) => document.getElementById(id);
 
+  /* ── credentials ── */
   function getStoredJiraSettings() {
-    return {
-      email: localStorage.getItem(LS_KEYS.email) || "",
-      token: localStorage.getItem(LS_KEYS.token) || "",
-    };
+    return { email: localStorage.getItem(LS_KEYS.email) || "", token: localStorage.getItem(LS_KEYS.token) || "" };
   }
-
   function saveStoredJiraSettings({ email, token }) {
     if (email !== undefined) localStorage.setItem(LS_KEYS.email, email || "");
     if (token !== undefined) localStorage.setItem(LS_KEYS.token, token || "");
   }
-
   function openSettingsDialog() {
-    const stored = getStoredJiraSettings();
-    $("cc-setting-email").value = stored.email;
-    $("cc-setting-token").value = stored.token;
+    const s = getStoredJiraSettings();
+    $("cc-setting-email").value = s.email;
+    $("cc-setting-token").value = s.token;
     $("cc-settings-modal").classList.add("open");
   }
-
-  function closeSettingsDialog() {
-    $("cc-settings-modal").classList.remove("open");
-  }
-
+  function closeSettingsDialog() { $("cc-settings-modal").classList.remove("open"); }
   function ensureLocalJiraSettings() {
-    const stored = getStoredJiraSettings();
-    if (stored.email && stored.token) return stored;
-    $("cc-feedback").textContent = "Add your Jira email and API token in Jira Credentials first.";
-    $("cc-feedback").className = "cc-feedback cc-muted err";
+    const s = getStoredJiraSettings();
+    if (s.email && s.token) return s;
+    setFeedback("Add your Jira email and API token in Jira Credentials first.", "err");
     openSettingsDialog();
     return null;
   }
 
-  function toYMD(d) {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return `${y}-${m}-${day}`;
+  /* ── feedback ── */
+  function setFeedback(msg, type) {
+    const el = $("cc-feedback");
+    el.textContent = msg;
+    el.className = "cc-feedback" + (type ? " " + type : "");
   }
 
+  /* ── dates ── */
+  function toYMD(d) {
+    return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+  }
   function startOfWeek(d) {
-    const x = new Date(d);
-    const day = x.getDay();
-    const diff = day === 0 ? -6 : 1 - day;
-    x.setHours(0, 0, 0, 0);
-    x.setDate(x.getDate() + diff);
+    const x = new Date(d); const day = x.getDay();
+    x.setHours(0,0,0,0); x.setDate(x.getDate() + (day === 0 ? -6 : 1 - day));
     return x;
   }
-
-  function applyWeekBackPreset(weeksBack) {
-    const now = new Date();
-    const currentWeekStart = startOfWeek(now);
-    const start = new Date(currentWeekStart);
-    start.setDate(start.getDate() - (weeksBack * 7));
-    const end = new Date(currentWeekStart);
-    end.setDate(end.getDate() - ((weeksBack - 1) * 7) - 1);
+  function applyWeekBackPreset(n) {
+    const now = new Date(), ws = startOfWeek(now);
+    const start = new Date(ws); start.setDate(start.getDate() - n * 7);
+    const end   = new Date(ws); end.setDate(end.getDate() - (n-1)*7 - 1);
     $("cc-start").value = toYMD(start);
-    $("cc-end").value = toYMD(end);
-    localStorage.setItem(LS_WEEK, String(weeksBack));
-    document.querySelectorAll("[data-week-back]").forEach((btn) => {
-      btn.classList.toggle("active", btn.getAttribute("data-week-back") === String(weeksBack));
-    });
+    $("cc-end").value   = toYMD(end);
+    localStorage.setItem(LS_WEEK, String(n));
+    document.querySelectorAll("[data-week-back]").forEach(b =>
+      b.classList.toggle("active", b.getAttribute("data-week-back") === String(n))
+    );
     updateJqlPreview();
   }
 
-  function normalizeDoneStatusesText() {
-    return $("cc-done-statuses").value
-      .split(/[\n,]+/)
-      .map((v) => v.trim())
-      .filter(Boolean);
-  }
-
+  /* ── JQL preview ── */
   function updateJqlPreview() {
     const start = $("cc-start").value || "YYYY-MM-DD";
-    const end = $("cc-end").value || "YYYY-MM-DD";
-    const endExclusive = $("cc-end").value ? (() => {
+    let endExcl = "YYYY-MM-DD";
+    if ($("cc-end").value) {
       const d = new Date($("cc-end").value + "T00:00:00");
       d.setDate(d.getDate() + 1);
-      return toYMD(d);
-    })() : "YYYY-MM-DD";
+      endExcl = toYMD(d);
+    }
     $("cc-jql-preview").textContent =
 `"Reported By Customer" = Yes
 AND created >= "${start}"
-AND created < "${endExclusive}"
+AND created < "${endExcl}"
 ORDER BY created DESC`;
   }
 
+  /* ── advanced toggle ── */
+  $("cc-advanced-toggle").addEventListener("click", () => {
+    const body = $("cc-advanced-body");
+    const chevron = $("cc-adv-chevron");
+    const open = body.classList.toggle("open");
+    chevron.style.transform = open ? "rotate(90deg)" : "";
+  });
+
+  /* ── load teams ── */
   async function loadTeams() {
-    const start = $("cc-start").value;
-    const end = $("cc-end").value;
+    const start = $("cc-start").value, end = $("cc-end").value;
     if (!start || !end) return;
     const stored = ensureLocalJiraSettings();
     if (!stored) return;
     const previous = $("cc-team").value || localStorage.getItem(LS_TEAM) || "";
     const res = await fetch("/api/customer_closure/teams", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Jira-Email": stored.email,
-        "X-Jira-Token": stored.token,
-      },
+      headers: { "Content-Type": "application/json", "X-Jira-Email": stored.email, "X-Jira-Token": stored.token },
       credentials: "same-origin",
       body: JSON.stringify({ date_start: start, date_end: end }),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      $("cc-feedback").textContent = data.error || `Failed to load teams (${res.status})`;
-      $("cc-feedback").className = "cc-feedback cc-muted err";
-      return;
-    }
+    if (!res.ok) { setFeedback(data.error || "Failed to load teams.", "err"); return; }
     const select = $("cc-team");
     select.innerHTML = '<option value="">All Teams</option>';
-    (data.teams || []).forEach((team) => {
+    (data.teams || []).forEach(team => {
       const opt = document.createElement("option");
-      opt.value = team;
-      opt.textContent = team;
+      opt.value = opt.textContent = team;
       select.appendChild(opt);
     });
-    if (previous && Array.from(select.options).some((o) => o.value === previous)) {
-      select.value = previous;
-    }
+    if (previous && Array.from(select.options).some(o => o.value === previous)) select.value = previous;
   }
 
-  function statusPill(status, isClosed) {
-    return `<span class="cc-status-pill ${isClosed ? "done" : ""}">${escapeHtml(status || "")}</span>`;
-  }
+  /* ── helpers ── */
+  function esc(s) { return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quot;"); }
+  function issueUrl(key) { return ("{{ JIRA_DOMAIN }}" || "").replace(/\/+$/,"") + "/browse/" + encodeURIComponent(key||""); }
+  function normDone() { return $("cc-done-statuses").value.split(/[\n,]+/).map(v=>v.trim()).filter(Boolean); }
+  function statusClass(isClosed) { return isClosed ? "done" : ""; }
 
-  function escapeHtml(s) {
-    return String(s == null ? "" : s)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/"/g, "&quot;");
-  }
-
-  function issueUrl(key) {
-    const base = ("{{ JIRA_DOMAIN }}" || "").replace(/\/+$/, "");
-    return `${base}/browse/${encodeURIComponent(key || "")}`;
-  }
-
+  /* ── load data ── */
   async function loadData() {
-    const start = $("cc-start").value;
-    const end = $("cc-end").value;
-    const team = $("cc-team").value || "";
-    const doneStatuses = normalizeDoneStatusesText();
+    const start = $("cc-start").value, end = $("cc-end").value, team = $("cc-team").value || "";
     const stored = ensureLocalJiraSettings();
     if (!stored) return;
-    if (!start || !end) {
-      $("cc-feedback").textContent = "Select a valid start and end date.";
-      $("cc-feedback").className = "cc-feedback cc-muted err";
-      return;
-    }
-
+    if (!start || !end) { setFeedback("Select a valid start and end date.", "err"); return; }
     localStorage.setItem(LS_DONE, $("cc-done-statuses").value);
     localStorage.setItem(LS_TEAM, team);
-    $("cc-feedback").textContent = "Loading customer closure data...";
-    $("cc-feedback").className = "cc-feedback cc-muted";
+    setFeedback("Loading…");
+    $("cc-loader").classList.add("open");
+    $("cc-run").disabled = true;
 
-    const res = await fetch("/api/customer_closure/data", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Jira-Email": stored.email,
-        "X-Jira-Token": stored.token,
-      },
-      credentials: "same-origin",
-      body: JSON.stringify({
-        date_start: start,
-        date_end: end,
-        team_name: team,
-        done_statuses: doneStatuses,
-      }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      $("cc-feedback").textContent = data.error || `Failed to load data (${res.status})`;
-      $("cc-feedback").className = "cc-feedback cc-muted err";
-      return;
+    try {
+      const res = await fetch("/api/customer_closure/data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Jira-Email": stored.email, "X-Jira-Token": stored.token },
+        credentials: "same-origin",
+        body: JSON.stringify({ date_start: start, date_end: end, team_name: team, done_statuses: normDone() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setFeedback(data.error || `Failed (${res.status})`, "err"); return; }
+
+      $("cc-kpi-total").textContent  = data.total_count  || 0;
+      $("cc-kpi-closed").textContent = data.closed_count || 0;
+      $("cc-kpi-open").textContent   = data.open_count   || 0;
+      $("cc-kpi-rate").textContent   = Number(data.closure_rate || 0).toFixed(1) + "%";
+      $("cc-table-meta").textContent = `${data.team_name||"All Teams"} · ${data.total_count||0} matched · ${data.closed_count||0} closed`;
+      setFeedback(`Loaded ${data.total_count||0} tickets.`, "ok");
+
+      const rows = data.rows || [];
+      if (!rows.length) {
+        $("cc-empty").classList.remove("hidden"); $("cc-empty").textContent = "No tickets matched this range / filter.";
+        $("cc-table-wrap").classList.add("hidden"); $("cc-table-body").innerHTML = "";
+        return;
+      }
+      $("cc-empty").classList.add("hidden");
+      $("cc-table-wrap").classList.remove("hidden");
+      $("cc-table-body").innerHTML = rows.map(row => {
+        const icon = row.issue_type_icon ? `<img src="${esc(row.issue_type_icon)}" alt="${esc(row.issue_type||"")}" class="cc-type-icon"/>` : "";
+        const created  = row.created        ? String(row.created).replace("T"," ").slice(0,19) : "—";
+        const resolved = row.resolution_date? String(row.resolution_date).replace("T"," ").slice(0,19) : "—";
+        return `<tr class="${row.is_closed?"cc-closed-row":""}">
+          <td><span class="cc-key-cell">${icon}<a class="text-blue-600 hover:underline font-mono text-xs font-bold" href="${esc(issueUrl(row.issue_key))}" target="_blank" rel="noopener">${esc(row.issue_key)}</a></span></td>
+          <td class="max-w-xs truncate">${esc(row.summary||"")}</td>
+          <td class="text-slate-500 text-xs">${esc(row.team_name||"Unspecified")}</td>
+          <td><span class="cc-status-pill ${statusClass(row.is_closed)}">${esc(row.status||"")}</span></td>
+          <td class="whitespace-nowrap text-slate-400 text-xs">${esc(created)}</td>
+          <td class="whitespace-nowrap text-slate-400 text-xs">${esc(resolved)}</td>
+        </tr>`;
+      }).join("");
+    } finally {
+      $("cc-loader").classList.remove("open");
+      $("cc-run").disabled = false;
     }
-
-    $("cc-feedback").textContent = `Loaded ${data.total_count || 0} tickets.`;
-    $("cc-feedback").className = "cc-feedback cc-muted ok";
-    $("cc-kpi-total").textContent = data.total_count || 0;
-    $("cc-kpi-closed").textContent = data.closed_count || 0;
-    $("cc-kpi-open").textContent = data.open_count || 0;
-    $("cc-kpi-rate").textContent = `${Number(data.closure_rate || 0).toFixed(2)}%`;
-    $("cc-table-meta").textContent = `${data.team_name || "All Teams"} · ${data.total_count || 0} matched tickets · ${data.closed_count || 0} closed`;
-
-    const rows = data.rows || [];
-    if (!rows.length) {
-      $("cc-empty").classList.remove("hidden");
-      $("cc-empty").textContent = "No tickets matched this range/filter.";
-      $("cc-table-wrap").classList.add("hidden");
-      $("cc-table-body").innerHTML = "";
-      return;
-    }
-
-    $("cc-empty").classList.add("hidden");
-    $("cc-table-wrap").classList.remove("hidden");
-    $("cc-table-body").innerHTML = rows.map((row) => {
-      const iconHtml = row.issue_type_icon
-        ? `<img src="${escapeHtml(row.issue_type_icon)}" alt="${escapeHtml(row.issue_type || "Type")}" class="cc-type-icon" />`
-        : "";
-      const created = row.created ? String(row.created).replace("T", " ").slice(0, 19) : "—";
-      const resolved = row.resolution_date ? String(row.resolution_date).replace("T", " ").slice(0, 19) : "—";
-      return `
-        <tr class="${row.is_closed ? "cc-closed-row" : ""}">
-          <td>
-            <span class="cc-key-cell">
-              ${iconHtml}
-              <a class="text-blue-600 hover:underline font-mono text-xs" href="${escapeHtml(issueUrl(row.issue_key))}" target="_blank" rel="noopener">${escapeHtml(row.issue_key)}</a>
-            </span>
-          </td>
-          <td>${escapeHtml(row.summary || "")}</td>
-          <td>${escapeHtml(row.team_name || "Unspecified")}</td>
-          <td>${statusPill(row.status, row.is_closed)}</td>
-          <td class="whitespace-nowrap text-slate-500 text-xs">${escapeHtml(created)}</td>
-          <td class="whitespace-nowrap text-slate-500 text-xs">${escapeHtml(resolved)}</td>
-        </tr>
-      `;
-    }).join("");
   }
 
-  async function init() {
+  /* ── init ── */
+  function init() {
     const storedStatuses = localStorage.getItem(LS_DONE);
     $("cc-done-statuses").value = storedStatuses || DEFAULT_DONE_STATUSES.join(", ");
-    const weekBack = parseInt(localStorage.getItem(LS_WEEK) || "1", 10);
-    applyWeekBackPreset([1,2,3,4].includes(weekBack) ? weekBack : 1);
-    $("cc-feedback").textContent = "Choose filters, then click Load Results.";
-    $("cc-feedback").className = "cc-feedback cc-muted";
+    const n = parseInt(localStorage.getItem(LS_WEEK) || "1", 10);
+    applyWeekBackPreset([1,2,3,4].includes(n) ? n : 1);
+    setFeedback("Choose filters, then click Load Results.");
+    loadTeams(); // auto-populate teams on load
   }
 
-  document.querySelectorAll("[data-week-back]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      applyWeekBackPreset(parseInt(btn.getAttribute("data-week-back"), 10) || 1);
-    });
-  });
-  $("cc-start").addEventListener("change", updateJqlPreview);
-  $("cc-end").addEventListener("change", updateJqlPreview);
-  $("cc-refresh-teams").addEventListener("click", loadTeams);
+  document.querySelectorAll("[data-week-back]").forEach(btn =>
+    btn.addEventListener("click", () => applyWeekBackPreset(parseInt(btn.getAttribute("data-week-back"),10)||1))
+  );
+  $("cc-start").addEventListener("change", () => { updateJqlPreview(); loadTeams(); });
+  $("cc-end").addEventListener("change",   () => { updateJqlPreview(); loadTeams(); });
   $("cc-run").addEventListener("click", loadData);
   $("cc-open-settings").addEventListener("click", openSettingsDialog);
   $("cc-settings-cancel").addEventListener("click", closeSettingsDialog);
   $("cc-settings-close").addEventListener("click", closeSettingsDialog);
   $("cc-settings-save").addEventListener("click", () => {
-    const email = ($("cc-setting-email").value || "").trim();
-    const token = ($("cc-setting-token").value || "").trim();
-    saveStoredJiraSettings({ email, token });
+    saveStoredJiraSettings({ email: ($("cc-setting-email").value||"").trim(), token: ($("cc-setting-token").value||"").trim() });
     closeSettingsDialog();
-    $("cc-feedback").textContent = "Jira credentials saved locally.";
-    $("cc-feedback").className = "cc-feedback cc-muted ok";
+    setFeedback("Jira credentials saved.", "ok");
   });
   $("cc-reset-statuses").addEventListener("click", () => {
     $("cc-done-statuses").value = DEFAULT_DONE_STATUSES.join(", ");
