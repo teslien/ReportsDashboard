@@ -1115,7 +1115,8 @@ PAGE_PERMISSIONS = [
     {"key": "query_builder", "label": "Query Builder"},
     {"key": "bulk_update", "label": "Bulk Update"},
     {"key": "merge_pdf", "label": "Merge PDF"},
-    {"key": "sprint_tracker", "label": "Sprint Tracker"}
+    {"key": "sprint_tracker", "label": "Sprint Tracker"},
+    {"key": "team_diagram", "label": "Team Diagram Report"}
 ]
 
 @app.route("/admin/roles")
@@ -8025,6 +8026,255 @@ def sprint_tracker_create_sprint_from_generated():
         return jsonify({"error": str(e)}), 400
     finally:
         conn.close()
+
+
+
+# ---------------------------------------------------------------------------
+# Team Diagram Report
+# ---------------------------------------------------------------------------
+
+@app.route("/team_diagram")
+@admin_required
+def team_diagram_page():
+    return render_template("team_diagram.html")
+
+
+@app.route("/api/team_diagram/fetch", methods=["POST"])
+@admin_required
+def team_diagram_fetch():
+    """Fetch aggregated Jira metrics for each sub-team JQL."""
+    payload = request.get_json(silent=True) or {}
+    main_team = str(payload.get("main_team") or "").strip()
+    sub_teams = payload.get("sub_teams") or []
+
+    if not main_team:
+        return jsonify({"error": "Main team name is required"}), 400
+    if not sub_teams:
+        return jsonify({"error": "At least one sub-team is required"}), 400
+
+    headers_dict = dict(HEADERS)
+    if "Authorization" not in headers_dict:
+        return jsonify({"error": "Jira credentials not configured. Please set them in Settings."}), 401
+
+    jira_domain = str(JIRA_DOMAIN)
+    _plat_cf = _get_platform_checkboxes_field_id()
+    fields = "summary,status,issuetype"
+    if _plat_cf:
+        fields += f",{_plat_cf}"
+
+    _done_statuses = {"done", "closed", "resolved", "fixed", "complete", "completed", "released", "won't fix", "wont fix"}
+
+    results = []
+    for st in sub_teams:
+        name = str(st.get("name") or "").strip()
+        jql = str(st.get("jql") or "").strip()
+        if not name or not jql:
+            continue
+
+        all_issues = []
+        seen_keys = set()
+        start_at = 0
+        next_page_token = None
+        page_safety = 0
+        error_msg = None
+
+        while page_safety < 80:
+            page_safety += 1
+            params = {"jql": jql, "maxResults": 100, "fields": fields}
+            if next_page_token:
+                params["nextPageToken"] = next_page_token
+            else:
+                params["startAt"] = start_at
+            try:
+                jira_res = requests.get(
+                    f"{jira_domain}/rest/api/3/search/jql",
+                    headers=headers_dict,
+                    params=params,
+                    timeout=30,
+                )
+            except Exception as e:
+                error_msg = str(e)
+                break
+
+            if jira_res.status_code != 200:
+                error_msg = f"Jira API error ({jira_res.status_code}): {jira_res.text[:200]}"
+                break
+
+            data = jira_res.json()
+            issues = data.get("issues", [])
+            if not issues:
+                break
+            new_count = 0
+            for issue in issues:
+                key = issue.get("key")
+                if not key or key in seen_keys:
+                    continue
+                seen_keys.add(key)
+                all_issues.append(issue)
+                new_count += 1
+            if new_count == 0:
+                break
+            next_page_token = data.get("nextPageToken")
+            if next_page_token:
+                continue
+            if len(issues) < 100:
+                break
+            start_at += 100
+
+        total_stories = done_stories = total_bugs = done_bugs = prod_issues = 0
+        for issue in all_issues:
+            f = issue.get("fields") or {}
+            itype = ((f.get("issuetype") or {}).get("name") or "").strip().lower()
+            status = ((f.get("status") or {}).get("name") or "").strip().lower()
+            is_done = status in _done_statuses
+            _plat_raw = f.get(_plat_cf) if _plat_cf else None
+            is_prod = _jira_platform_includes_production(_plat_raw)
+
+            if itype == "story":
+                total_stories += 1
+                if is_done:
+                    done_stories += 1
+            elif itype == "bug":
+                total_bugs += 1
+                if is_done:
+                    done_bugs += 1
+            if is_prod:
+                prod_issues += 1
+
+        results.append({
+            "name": name,
+            "jql": jql,
+            "total": len(all_issues),
+            "total_stories": total_stories,
+            "done_stories": done_stories,
+            "total_bugs": total_bugs,
+            "done_bugs": done_bugs,
+            "prod_issues": prod_issues,
+            "error": error_msg,
+        })
+
+    return jsonify({"main_team": main_team, "sub_teams": results})
+
+
+@app.route("/api/team_diagram/pdf", methods=["POST"])
+@admin_required
+def team_diagram_pdf():
+    """Generate a PDF report for the team diagram data."""
+    payload = request.get_json(silent=True) or {}
+    main_team = str(payload.get("main_team") or "").strip()
+    sub_teams = payload.get("sub_teams") or []
+
+    if not main_team:
+        return jsonify({"error": "main_team is required"}), 400
+
+    generated_at = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+    # Build sub-team rows HTML
+    sub_rows_html = ""
+    for st in sub_teams:
+        name = (st.get("name") or "").replace("<", "&lt;").replace(">", "&gt;")
+        total = st.get("total", 0)
+        ts = st.get("total_stories", 0)
+        ds = st.get("done_stories", 0)
+        tb = st.get("total_bugs", 0)
+        db_ = st.get("done_bugs", 0)
+        pi = st.get("prod_issues", 0)
+        stories_pct = round(ds / ts * 100) if ts else 0
+        bugs_pct = round(db_ / tb * 100) if tb else 0
+        err = (st.get("error") or "").replace("<", "&lt;").replace(">", "&gt;")
+        err_html = f'<span style="color:#e53e3e;font-size:10px;">{err}</span>' if err else ""
+        sub_rows_html += f"""
+        <tr>
+          <td style="font-weight:600">{name}</td>
+          <td style="text-align:center">{total}</td>
+          <td style="text-align:center">{ds}/{ts} <span style="color:#64748b;font-size:10px;">({stories_pct}%)</span></td>
+          <td style="text-align:center">{db_}/{tb} <span style="color:#64748b;font-size:10px;">({bugs_pct}%)</span></td>
+          <td style="text-align:center">{pi}</td>
+          <td>{err_html if err else '<span style="color:#22c55e">&#10003;</span>'}</td>
+        </tr>"""
+
+    # Aggregate totals
+    agg_total = sum(st.get("total", 0) for st in sub_teams)
+    agg_ts = sum(st.get("total_stories", 0) for st in sub_teams)
+    agg_ds = sum(st.get("done_stories", 0) for st in sub_teams)
+    agg_tb = sum(st.get("total_bugs", 0) for st in sub_teams)
+    agg_db = sum(st.get("done_bugs", 0) for st in sub_teams)
+    agg_pi = sum(st.get("prod_issues", 0) for st in sub_teams)
+
+    html_content = f"""
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <style>
+    body {{ font-family: Helvetica, Arial, sans-serif; font-size: 11px; color: #1f2937; margin: 24px; }}
+    h1 {{ font-size: 20px; margin: 0 0 4px; color: #1e3a5f; }}
+    .meta {{ color: #64748b; font-size: 10px; margin-bottom: 16px; }}
+    .kpi-row {{ display: table; width: 100%; margin-bottom: 16px; }}
+    .kpi {{ display: table-cell; border: 1px solid #dbe3ef; border-radius: 6px; padding: 8px 12px; margin: 0 4px; text-align: center; background: #f8fafc; }}
+    .kpi-label {{ font-size: 9px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; }}
+    .kpi-val {{ font-size: 18px; font-weight: bold; color: #1e3a5f; margin-top: 2px; }}
+    h2 {{ font-size: 13px; margin: 18px 0 8px; color: #334155; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }}
+    table {{ width: 100%; border-collapse: collapse; margin-top: 6px; }}
+    th {{ background: #f1f5f9; color: #334155; padding: 7px 8px; text-align: left; border: 1px solid #e2e8f0; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; }}
+    td {{ padding: 6px 8px; border: 1px solid #e2e8f0; vertical-align: middle; }}
+    tr:nth-child(even) td {{ background: #f8fafc; }}
+    .footer {{ margin-top: 24px; color: #94a3b8; font-size: 9px; text-align: right; }}
+    .main-team-box {{ background: #1e3a5f; color: white; padding: 10px 20px; border-radius: 8px; display: inline-block; font-size: 15px; font-weight: bold; margin-bottom: 16px; }}
+  </style>
+</head>
+<body>
+  <h1>Team Diagram Report</h1>
+  <div class="meta">Generated: {generated_at}</div>
+
+  <div class="main-team-box">{main_team.replace("<","&lt;").replace(">","&gt;")}</div>
+
+  <div class="kpi-row">
+    <div class="kpi"><div class="kpi-label">Sub-Teams</div><div class="kpi-val">{len(sub_teams)}</div></div>
+    <div class="kpi"><div class="kpi-label">Total Tickets</div><div class="kpi-val">{agg_total}</div></div>
+    <div class="kpi"><div class="kpi-label">Stories Done</div><div class="kpi-val">{agg_ds}/{agg_ts}</div></div>
+    <div class="kpi"><div class="kpi-label">Bugs Fixed</div><div class="kpi-val">{agg_db}/{agg_tb}</div></div>
+    <div class="kpi"><div class="kpi-label">Prod Issues</div><div class="kpi-val">{agg_pi}</div></div>
+  </div>
+
+  <h2>Sub-Team Breakdown</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Sub-Team</th>
+        <th style="text-align:center">Total Tickets</th>
+        <th style="text-align:center">Stories (Done/Total)</th>
+        <th style="text-align:center">Bugs (Fixed/Total)</th>
+        <th style="text-align:center">Prod Issues</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {sub_rows_html}
+    </tbody>
+  </table>
+
+  <div class="footer">Team Diagram Report &mdash; {main_team.replace("<","&lt;").replace(">","&gt;")} &mdash; {generated_at}</div>
+</body>
+</html>"""
+
+    try:
+        from io import BytesIO
+        from xhtml2pdf import pisa
+        pdf_buf = BytesIO()
+        result = pisa.CreatePDF(html_content, dest=pdf_buf)
+        if result.err:
+            return jsonify({"error": "PDF generation failed"}), 500
+        pdf_buf.seek(0)
+        safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in main_team)
+        filename = f"team_diagram_{safe_name}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+        return send_file(
+            pdf_buf,
+            mimetype="application/pdf",
+            as_attachment=True,
+            download_name=filename,
+        )
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 if __name__ == "__main__":

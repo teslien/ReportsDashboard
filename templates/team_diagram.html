@@ -1,0 +1,402 @@
+{% extends "base.html" %}
+{% block title %}Team Diagram Report{% endblock %}
+
+{% block extra_head %}
+<style>
+  .sub-team-row { transition: background 0.15s; }
+  .sub-team-row:hover { background: rgba(255,255,255,0.04); }
+
+  /* Diagram styles */
+  #diagram-svg .main-circle { fill: #1e3a5f; }
+  #diagram-svg .sub-circle { fill: #1e293b; stroke: #334155; stroke-width: 2; }
+  #diagram-svg .sub-circle.has-error { stroke: #ef4444; }
+  #diagram-svg .connector { stroke: #475569; stroke-width: 1.5; fill: none; }
+  #diagram-svg text { font-family: Inter, sans-serif; fill: #f1f5f9; }
+  #diagram-svg .main-label { font-size: 15px; font-weight: 700; fill: white; }
+  #diagram-svg .sub-name { font-size: 11px; font-weight: 600; fill: #e2e8f0; }
+  #diagram-svg .metric-label { font-size: 9.5px; fill: #94a3b8; }
+  #diagram-svg .metric-val { font-size: 10.5px; font-weight: 600; fill: #cbd5e1; }
+  #diagram-svg .metric-done { fill: #4ade80; }
+  #diagram-svg .metric-bug { fill: #f97316; }
+  #diagram-svg .metric-prod { fill: #f87171; }
+
+  .spinner { border: 3px solid rgba(255,255,255,0.1); border-top-color: #60a5fa; border-radius: 50%; width: 24px; height: 24px; animation: spin 0.7s linear infinite; display: inline-block; vertical-align: middle; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto">
+
+  <!-- Header -->
+  <div class="mb-8">
+    <h1 class="text-2xl font-bold text-white mb-1">Team Diagram Report</h1>
+    <p class="text-gray-400 text-sm">Configure your main team and sub-teams with JQL queries, then generate a hierarchical diagram with live Jira metrics.</p>
+  </div>
+
+  <!-- Config Card -->
+  <div class="bg-gray-800 border border-gray-700 rounded-xl p-6 mb-6">
+    <h2 class="text-base font-semibold text-white mb-4">Configuration</h2>
+
+    <!-- Main Team -->
+    <div class="mb-5">
+      <label class="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Main Team Name</label>
+      <input id="main-team-input" type="text" placeholder="e.g. Payroll"
+        class="w-full bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+    </div>
+
+    <!-- Sub Teams -->
+    <div class="mb-4">
+      <div class="flex items-center justify-between mb-2">
+        <label class="text-xs font-medium text-gray-400 uppercase tracking-wider">Sub-Teams</label>
+        <button id="add-subteam-btn" type="button"
+          class="text-xs bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center gap-1">
+          <i class="fas fa-plus text-xs"></i> Add Sub-Team
+        </button>
+      </div>
+
+      <div id="subteams-container" class="space-y-2">
+        <!-- Rows inserted here -->
+      </div>
+
+      <p id="no-subteams-msg" class="text-sm text-gray-500 text-center py-4 hidden">No sub-teams added yet. Click "Add Sub-Team" to get started.</p>
+    </div>
+
+    <!-- Actions -->
+    <div class="flex items-center gap-3 pt-2 border-t border-gray-700">
+      <button id="fetch-btn" type="button"
+        class="bg-blue-600 hover:bg-blue-500 text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
+        <i class="fas fa-diagram-project"></i> Generate Diagram
+      </button>
+      <button id="pdf-btn" type="button" disabled
+        class="bg-gray-700 hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
+        <i class="fas fa-file-pdf"></i> Download PDF
+      </button>
+      <span id="fetch-status" class="text-sm text-gray-400 hidden"></span>
+    </div>
+  </div>
+
+  <!-- Diagram Section -->
+  <div id="diagram-section" class="hidden bg-gray-800 border border-gray-700 rounded-xl p-6 mb-6">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-base font-semibold text-white">Diagram</h2>
+      <span id="diagram-timestamp" class="text-xs text-gray-500"></span>
+    </div>
+    <div class="overflow-x-auto">
+      <svg id="diagram-svg" xmlns="http://www.w3.org/2000/svg" width="100%" style="min-width:600px;display:block;"></svg>
+    </div>
+  </div>
+
+  <!-- Summary Table -->
+  <div id="table-section" class="hidden bg-gray-800 border border-gray-700 rounded-xl p-6">
+    <h2 class="text-base font-semibold text-white mb-4">Summary Table</h2>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="text-xs text-gray-400 uppercase tracking-wider border-b border-gray-700">
+            <th class="text-left py-2 pr-4">Sub-Team</th>
+            <th class="text-center py-2 px-3">Total Tickets</th>
+            <th class="text-center py-2 px-3">Stories</th>
+            <th class="text-center py-2 px-3">Bugs</th>
+            <th class="text-center py-2 px-3">Prod Issues</th>
+            <th class="text-left py-2 pl-3">JQL</th>
+          </tr>
+        </thead>
+        <tbody id="summary-tbody" class="divide-y divide-gray-700/50"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// ---------------------------------------------------------------------------
+// Sub-team row management
+// ---------------------------------------------------------------------------
+let rowCount = 0;
+
+function addSubTeamRow(name, jql) {
+  rowCount++;
+  const id = rowCount;
+  const noMsg = document.getElementById('no-subteams-msg');
+  if (noMsg) noMsg.classList.add('hidden');
+
+  const row = document.createElement('div');
+  row.className = 'sub-team-row flex items-start gap-2 bg-gray-900/60 border border-gray-700 rounded-lg p-3';
+  row.dataset.rowId = id;
+  row.innerHTML = `
+    <div class="flex-1 min-w-0">
+      <input type="text" placeholder="Sub-team name (e.g. Payroll Core)"
+        value="${escHtml(name || '')}"
+        class="w-full bg-gray-800 border border-gray-600 rounded-md px-2.5 py-1.5 text-white text-sm mb-2 focus:outline-none focus:border-blue-500 subteam-name-input">
+      <textarea placeholder="JQL query (e.g. project = PAY AND sprint in openSprints())"
+        rows="2"
+        class="w-full bg-gray-800 border border-gray-600 rounded-md px-2.5 py-1.5 text-white text-sm resize-none focus:outline-none focus:border-blue-500 subteam-jql-input font-mono">${escHtml(jql || '')}</textarea>
+    </div>
+    <button type="button" onclick="removeRow(${id})"
+      class="mt-1 text-gray-500 hover:text-red-400 transition-colors flex-shrink-0">
+      <i class="fas fa-times"></i>
+    </button>`;
+  document.getElementById('subteams-container').appendChild(row);
+}
+
+function removeRow(id) {
+  const el = document.querySelector(`[data-row-id="${id}"]`);
+  if (el) el.remove();
+  checkNoSubteams();
+}
+
+function checkNoSubteams() {
+  const rows = document.querySelectorAll('#subteams-container .sub-team-row');
+  const noMsg = document.getElementById('no-subteams-msg');
+  if (noMsg) noMsg.classList.toggle('hidden', rows.length > 0);
+}
+
+function escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function getConfig() {
+  const mainTeam = document.getElementById('main-team-input').value.trim();
+  const rows = document.querySelectorAll('#subteams-container .sub-team-row');
+  const subTeams = [];
+  rows.forEach(row => {
+    const name = row.querySelector('.subteam-name-input').value.trim();
+    const jql = row.querySelector('.subteam-jql-input').value.trim();
+    if (name || jql) subTeams.push({ name, jql });
+  });
+  return { mainTeam, subTeams };
+}
+
+// Seed with 3 empty rows on load
+document.addEventListener('DOMContentLoaded', () => {
+  addSubTeamRow('', '');
+  addSubTeamRow('', '');
+  addSubTeamRow('', '');
+  checkNoSubteams();
+});
+
+document.getElementById('add-subteam-btn').addEventListener('click', () => {
+  addSubTeamRow('', '');
+});
+
+// ---------------------------------------------------------------------------
+// Fetch & render
+// ---------------------------------------------------------------------------
+let lastResult = null;
+
+document.getElementById('fetch-btn').addEventListener('click', async () => {
+  const { mainTeam, subTeams } = getConfig();
+  if (!mainTeam) { alert('Please enter a main team name.'); return; }
+  const valid = subTeams.filter(st => st.name && st.jql);
+  if (valid.length === 0) { alert('Please add at least one sub-team with a name and JQL.'); return; }
+
+  const btn = document.getElementById('fetch-btn');
+  const status = document.getElementById('fetch-status');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Fetching…';
+  status.textContent = '';
+  status.classList.remove('hidden');
+
+  try {
+    const res = await fetch('/api/team_diagram/fetch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ main_team: mainTeam, sub_teams: valid }),
+    });
+    const data = await res.json();
+    if (!res.ok) { alert(data.error || 'Failed to fetch data.'); return; }
+
+    lastResult = data;
+    renderDiagram(data);
+    renderTable(data);
+    document.getElementById('diagram-section').classList.remove('hidden');
+    document.getElementById('table-section').classList.remove('hidden');
+    document.getElementById('pdf-btn').disabled = false;
+    document.getElementById('diagram-timestamp').textContent = 'Generated: ' + new Date().toLocaleString();
+    status.textContent = `Fetched ${data.sub_teams.length} sub-team(s)`;
+  } catch (e) {
+    alert('Error: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-diagram-project"></i> Generate Diagram';
+  }
+});
+
+document.getElementById('pdf-btn').addEventListener('click', async () => {
+  if (!lastResult) return;
+  const btn = document.getElementById('pdf-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Generating…';
+  try {
+    const res = await fetch('/api/team_diagram/pdf', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(lastResult),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      alert(err.error || 'PDF generation failed.');
+      return;
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `team_diagram_${lastResult.main_team.replace(/\s+/g,'_')}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    alert('Error: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-file-pdf"></i> Download PDF';
+  }
+});
+
+// ---------------------------------------------------------------------------
+// SVG Diagram renderer
+// ---------------------------------------------------------------------------
+function renderDiagram(data) {
+  const svg = document.getElementById('diagram-svg');
+  svg.innerHTML = '';
+
+  const mainTeam = data.main_team;
+  const subTeams = data.sub_teams || [];
+  const n = subTeams.length;
+
+  // Layout constants
+  const NODE_R = 80;           // sub-team circle radius
+  const MAIN_R = 70;           // main circle radius
+  const NODE_SPACING = 220;    // horizontal spacing between sub-team centers
+  const ROW_Y = 260;           // Y center of sub-team row
+  const MAIN_Y = 90;           // Y center of main node
+
+  const totalW = Math.max(600, n * NODE_SPACING + 80);
+  const svgH = ROW_Y + NODE_R + 30;
+
+  svg.setAttribute('viewBox', `0 0 ${totalW} ${svgH}`);
+  svg.setAttribute('height', svgH);
+
+  const mainX = totalW / 2;
+
+  // Draw connector lines first (behind circles)
+  subTeams.forEach((st, i) => {
+    const subX = getSubX(i, n, totalW, NODE_SPACING);
+    const line = makeSVG('line', {
+      class: 'connector',
+      x1: mainX, y1: MAIN_Y + MAIN_R,
+      x2: subX,  y2: ROW_Y - NODE_R,
+    });
+    svg.appendChild(line);
+  });
+
+  // Main team circle
+  const mainG = makeSVG('g', {});
+  mainG.appendChild(makeSVG('circle', {
+    class: 'main-circle', cx: mainX, cy: MAIN_Y, r: MAIN_R,
+  }));
+  mainG.appendChild(svgText(mainTeam, mainX, MAIN_Y, 'main-label', 'middle'));
+  svg.appendChild(mainG);
+
+  // Sub-team circles
+  subTeams.forEach((st, i) => {
+    const cx = getSubX(i, n, totalW, NODE_SPACING);
+    const cy = ROW_Y;
+    const g = makeSVG('g', {});
+
+    g.appendChild(makeSVG('circle', {
+      class: 'sub-circle' + (st.error ? ' has-error' : ''),
+      cx, cy, r: NODE_R,
+    }));
+
+    // Name (up to 2 lines)
+    const nameLines = wrapText(st.name, 14);
+    const nameStartY = st.error ? cy - 50 : cy - 44;
+    nameLines.forEach((line, li) => {
+      g.appendChild(svgText(line, cx, nameStartY + li * 14, 'sub-name', 'middle'));
+    });
+
+    if (st.error) {
+      g.appendChild(svgText('Error fetching', cx, cy - 10, 'metric-label', 'middle'));
+      g.appendChild(svgText(truncate(st.error, 22), cx, cy + 6, 'metric-label', 'middle'));
+    } else {
+      const metricY = cy - 10 + (nameLines.length - 1) * 8;
+      // Stories
+      g.appendChild(svgText('Stories', cx, metricY + 18, 'metric-label', 'middle'));
+      g.appendChild(svgText(`${st.done_stories}/${st.total_stories}`, cx, metricY + 32, 'metric-val metric-done', 'middle'));
+      // Bugs
+      g.appendChild(svgText('Bugs', cx, metricY + 46, 'metric-label', 'middle'));
+      g.appendChild(svgText(`${st.done_bugs}/${st.total_bugs}`, cx, metricY + 60, 'metric-val metric-bug', 'middle'));
+      // Prod Issues
+      g.appendChild(svgText('Prod Issues', cx, metricY + 74, 'metric-label', 'middle'));
+      g.appendChild(svgText(`${st.prod_issues}`, cx, metricY + 88, 'metric-val metric-prod', 'middle'));
+    }
+
+    svg.appendChild(g);
+  });
+}
+
+function getSubX(i, n, totalW, spacing) {
+  const totalW2 = (n - 1) * spacing;
+  const startX = (totalW - totalW2) / 2;
+  return startX + i * spacing;
+}
+
+function makeSVG(tag, attrs) {
+  const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  Object.entries(attrs).forEach(([k, v]) => el.setAttribute(k, v));
+  return el;
+}
+
+function svgText(content, x, y, cls, anchor) {
+  const t = makeSVG('text', { x, y, class: cls, 'text-anchor': anchor, 'dominant-baseline': 'middle' });
+  t.textContent = content;
+  return t;
+}
+
+function wrapText(str, maxLen) {
+  if (!str) return [''];
+  if (str.length <= maxLen) return [str];
+  const mid = Math.ceil(str.length / 2);
+  return [str.slice(0, mid).trim(), str.slice(mid).trim()];
+}
+
+function truncate(str, max) {
+  return str && str.length > max ? str.slice(0, max) + '…' : (str || '');
+}
+
+// ---------------------------------------------------------------------------
+// Summary Table
+// ---------------------------------------------------------------------------
+function renderTable(data) {
+  const tbody = document.getElementById('summary-tbody');
+  tbody.innerHTML = '';
+  (data.sub_teams || []).forEach(st => {
+    const storiesPct = st.total_stories ? Math.round(st.done_stories / st.total_stories * 100) : 0;
+    const bugsPct = st.total_bugs ? Math.round(st.done_bugs / st.total_bugs * 100) : 0;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="py-2.5 pr-4 font-medium text-white">${escHtml(st.name)}</td>
+      <td class="py-2.5 px-3 text-center text-gray-300">${st.total}</td>
+      <td class="py-2.5 px-3 text-center">
+        <span class="text-green-400 font-semibold">${st.done_stories}/${st.total_stories}</span>
+        <span class="text-gray-500 text-xs ml-1">${storiesPct}%</span>
+      </td>
+      <td class="py-2.5 px-3 text-center">
+        <span class="text-orange-400 font-semibold">${st.done_bugs}/${st.total_bugs}</span>
+        <span class="text-gray-500 text-xs ml-1">${bugsPct}%</span>
+      </td>
+      <td class="py-2.5 px-3 text-center ${st.prod_issues > 0 ? 'text-red-400 font-semibold' : 'text-gray-400'}">${st.prod_issues}</td>
+      <td class="py-2.5 pl-3 text-gray-500 text-xs font-mono max-w-xs truncate" title="${escHtml(st.jql)}">${escHtml(st.jql)}</td>`;
+    if (st.error) {
+      tr.querySelector('td').insertAdjacentHTML('afterend',
+        `<td colspan="4" class="py-2.5 px-3 text-red-400 text-xs italic">${escHtml(st.error)}</td>`);
+    }
+    tbody.appendChild(tr);
+  });
+}
+</script>
+{% endblock %}

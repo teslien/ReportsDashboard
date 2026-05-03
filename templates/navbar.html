@@ -79,7 +79,7 @@
                     {% endif %}
 
                     <!-- Analysis Dropdown -->
-                    {% set analysis_pages = ['custom_reports', 'customer_dashboard', 'team_productivity', 'customer_closure', 'sprint_dashboard', 'explorer', 'query_builder', 'teams', 'work_report', 'assignee_work'] %}
+                    {% set analysis_pages = ['custom_reports', 'customer_dashboard', 'team_productivity', 'customer_closure', 'sprint_dashboard', 'explorer', 'query_builder', 'teams', 'work_report', 'assignee_work', 'team_diagram'] %}
                     {% for p in analysis_pages %}
                         {% if current_user.can_view_page(p) %}{% set nav.has_analysis = true %}{% endif %}
                     {% endfor %}
@@ -147,6 +147,11 @@
                                 <a href="/assignee_work"
                                     class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white"
                                     role="menuitem">Assignee Work</a>
+                                {% endif %}
+                                {% if current_user.role_name == 'Admin' or current_user.can_view_page('team_diagram') %}
+                                <a href="/team_diagram"
+                                    class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white"
+                                    role="menuitem">Team Diagram Report</a>
                                 {% endif %}
                             </div>
                         </div>
