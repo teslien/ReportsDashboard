@@ -170,11 +170,12 @@ function getConfig() {
   return { mainTeam, subTeams };
 }
 
-// Seed with 3 empty rows on load
+// Seed with 3 pre-filled rows on load
 document.addEventListener('DOMContentLoaded', () => {
-  addSubTeamRow('', '');
-  addSubTeamRow('', '');
-  addSubTeamRow('', '');
+  const defaultJql = 'sprint = "RPT 0402_26 Biweekly(Apr 24)"';
+  addSubTeamRow('Payroll Core',  defaultJql);
+  addSubTeamRow('Reports Team',  defaultJql);
+  addSubTeamRow('Quickwins',     defaultJql);
   checkNoSubteams();
 });
 

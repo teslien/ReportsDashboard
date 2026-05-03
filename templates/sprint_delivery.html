@@ -1,0 +1,565 @@
+{% extends "base.html" %}
+{% block title %}Sprint Delivery{% endblock %}
+{% block extra_head %}
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+  * { box-sizing: border-box; }
+  html, body { font-family: 'Inter', sans-serif; background: #f8fafc; color: #0f172a; color-scheme: light; }
+  .dark body { background: #f8fafc !important; color: #0f172a !important; }
+  #theme-toggle-btn, #theme-toggle, .theme-toggle, [data-theme-toggle] { display: none !important; }
+
+  /* Nav */
+  .sd-nav { position:fixed;top:0;left:0;right:0;z-index:1000;background:rgba(255,255,255,.97);backdrop-filter:blur(8px);border-bottom:1px solid #e2e8f0; }
+  .sd-nav-wrap { width:100%;height:58px;padding:0 24px;display:flex;align-items:center;justify-content:space-between;gap:12px; }
+  .sd-brand { display:inline-flex;align-items:center;text-decoration:none;line-height:0; }
+  .sd-brand-logo { height:28px;width:auto;display:block; }
+  .sd-nav-title { font-size:15px;font-weight:700;color:#0f172a; }
+  .sd-nav-links { display:flex;align-items:center;gap:4px; }
+  .sd-nav-link { padding:6px 12px;border-radius:8px;font-size:13px;font-weight:500;color:#64748b;text-decoration:none;transition:all .15s; }
+  .sd-nav-link:hover { background:#f1f5f9;color:#0f172a; }
+
+  /* Layout */
+  .sd-wrap { max-width:1280px;margin:74px auto 48px;padding:0 20px; }
+
+  /* Card */
+  .sd-card { background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:18px 20px;margin-bottom:18px;box-shadow:0 1px 2px rgba(15,23,42,.03); }
+
+  /* Filters */
+  .sd-filters-row { display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px; }
+  .sd-filter-group { display:flex;flex-direction:column;gap:4px; }
+  .sd-label { font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#94a3b8; }
+  .sd-select { border:1px solid #e2e8f0;border-radius:10px;padding:8px 30px 8px 10px;font-size:13px;color:#0f172a;background:#f8fafc;outline:none;transition:border .15s;min-width:200px;
+    appearance:none;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat:no-repeat;background-position:right 9px center; }
+  .sd-select:focus { border-color:#93c5fd;background:#fff; }
+
+  /* Sprint picker */
+  .sd-sprint-picker { position:relative;min-width:260px; }
+  .sd-sprint-toggle { border:1px solid #e2e8f0;border-radius:10px;padding:8px 30px 8px 10px;font-size:13px;color:#0f172a;background:#f8fafc;cursor:pointer;user-select:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:border .15s;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat:no-repeat;background-position:right 9px center; }
+  .sd-sprint-toggle:hover { border-color:#93c5fd; }
+  .sd-sprint-dropdown { position:absolute;top:calc(100% + 4px);left:0;right:0;background:#fff;border:1px solid #e2e8f0;border-radius:10px;box-shadow:0 8px 24px rgba(15,23,42,.1);z-index:200;display:none;min-width:280px; }
+  .sd-sprint-dropdown.open { display:block; }
+  .sd-sprint-search { width:100%;padding:8px 10px;border:none;border-bottom:1px solid #e2e8f0;font-size:13px;outline:none;border-radius:10px 10px 0 0; }
+  .sd-sprint-options { max-height:220px;overflow-y:auto; }
+  .sd-sprint-option { display:flex;align-items:center;gap:8px;padding:7px 10px;font-size:13px;cursor:pointer;transition:background .1s; }
+  .sd-sprint-option:hover { background:#f1f5f9; }
+  .sd-sprint-option input[type=checkbox] { width:14px;height:14px;accent-color:#4f46e5;flex-shrink:0; }
+  .sd-sprint-option .sd-sprint-name { flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+  .sd-sprint-state { font-size:10px;font-weight:700;padding:2px 6px;border-radius:999px;flex-shrink:0; }
+  .sd-sprint-state.active { background:#dcfce7;color:#166534; }
+  .sd-sprint-state.future { background:#dbeafe;color:#1e40af; }
+  .sd-sprint-state.closed { background:#f1f5f9;color:#64748b; }
+  .sd-sprint-empty { padding:14px 10px;font-size:13px;color:#94a3b8;text-align:center; }
+
+  /* Buttons */
+  .sd-btn-primary { display:inline-flex;align-items:center;gap:6px;padding:9px 20px;border-radius:10px;font-size:13px;font-weight:600;border:none;cursor:pointer;background:#4f46e5;color:#fff;transition:all .15s;white-space:nowrap; }
+  .sd-btn-primary:hover { background:#4338ca; }
+  .sd-btn-primary:disabled { opacity:.5;cursor:not-allowed; }
+  .sd-btn-outline { display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:8px;font-size:12px;font-weight:600;border:1px solid #e2e8f0;cursor:pointer;background:#fff;color:#334155;transition:all .15s; }
+  .sd-btn-outline:hover { background:#f1f5f9; }
+  .sd-btn-outline:disabled { opacity:.5;cursor:not-allowed; }
+
+  /* KPI row */
+  .sd-kpi-row { display:flex;flex-wrap:wrap;gap:12px;margin-bottom:18px; }
+  .sd-kpi { background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:14px 22px;min-width:130px;text-align:center;box-shadow:0 1px 2px rgba(15,23,42,.03); }
+  .sd-kpi-val { font-size:26px;font-weight:800;color:#0f172a; }
+  .sd-kpi-lbl { font-size:11px;font-weight:600;color:#94a3b8;margin-top:2px;text-transform:uppercase;letter-spacing:.05em; }
+  .sd-kpi-green .sd-kpi-val { color:#16a34a; }
+  .sd-kpi-red .sd-kpi-val { color:#dc2626; }
+  .sd-kpi-blue .sd-kpi-val { color:#2563eb; }
+
+  /* AI summary */
+  .sd-ai-head { display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px; }
+  .sd-ai-title { font-size:14px;font-weight:700;color:#0f172a;display:flex;align-items:center;gap:7px; }
+  .sd-ai-icon { width:22px;height:22px;background:#eef2ff;border-radius:6px;display:inline-flex;align-items:center;justify-content:center; }
+  .sd-ai-sections { display:grid;grid-template-columns:1fr 1fr;gap:12px; }
+  @media(max-width:700px) { .sd-ai-sections { grid-template-columns:1fr; } }
+  .sd-ai-section { background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px; }
+  .sd-ai-section-title { font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin-bottom:8px; }
+  .sd-ai-section-title.green { color:#16a34a; }
+  .sd-ai-section-title.red { color:#dc2626; }
+  .sd-ai-section-title.blue { color:#2563eb; }
+  .sd-ai-bullets { list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:5px; }
+  .sd-ai-bullets li { font-size:13px;color:#1e293b;padding-left:14px;position:relative;line-height:1.4; }
+  .sd-ai-bullets li::before { content:'•';position:absolute;left:0;color:#94a3b8; }
+  .sd-ai-health { grid-column:1/-1; }
+
+  /* Spinner */
+  .sd-spinner { display:inline-block;width:16px;height:16px;border:2px solid #e2e8f0;border-top-color:#4f46e5;border-radius:50%;animation:sd-spin .7s linear infinite; }
+  @keyframes sd-spin { to { transform:rotate(360deg); } }
+
+  /* Section headers */
+  .sd-section-head { display:flex;align-items:center;gap:10px;margin-bottom:12px; }
+  .sd-section-title { font-size:15px;font-weight:700;color:#0f172a; }
+  .sd-badge { display:inline-flex;align-items:center;justify-content:center;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:700; }
+  .sd-badge-green { background:#dcfce7;color:#166534; }
+  .sd-badge-orange { background:#ffedd5;color:#c2410c; }
+
+  /* Tables */
+  .sd-table-wrap { overflow-x:auto; }
+  .sd-table { width:100%;border-collapse:collapse;font-size:13px; }
+  .sd-table th { font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#64748b;padding:8px 10px;text-align:left;border-bottom:1px solid #e2e8f0;white-space:nowrap; }
+  .sd-table td { padding:9px 10px;border-bottom:1px solid #f1f5f9;vertical-align:middle; }
+  .sd-table tr:last-child td { border-bottom:none; }
+  .sd-table tr.delivered td { background:#f0fdf4; }
+  .sd-table tr.delivered td:first-child { border-left:3px solid #16a34a; }
+  .sd-table tr.spilled td { background:#fff; }
+  .sd-key-link { color:#4f46e5;font-weight:600;text-decoration:none;font-size:12px; }
+  .sd-key-link:hover { text-decoration:underline; }
+  .sd-status-pill { display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600; }
+  .sd-status-done { background:#dcfce7;color:#166534; }
+  .sd-status-inprog { background:#fef3c7;color:#92400e; }
+  .sd-status-open { background:#dbeafe;color:#1e40af; }
+  .sd-status-other { background:#f1f5f9;color:#475569; }
+  .sd-priority-high { color:#dc2626;font-weight:700; }
+  .sd-priority-med { color:#d97706; }
+  .sd-priority-low { color:#94a3b8; }
+  .sd-type-pill { display:inline-block;padding:2px 7px;border-radius:6px;font-size:11px;font-weight:600;background:#f1f5f9;color:#334155;border:1px solid #e2e8f0; }
+  .sd-assignee { font-size:12px;color:#475569;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px; }
+  .sd-sprint-tags { display:flex;flex-wrap:wrap;gap:3px; }
+  .sd-sprint-tag { font-size:10px;padding:1px 6px;border-radius:4px;background:#eef2ff;color:#4338ca;border:1px solid #c7d2fe; }
+
+  /* Empty state */
+  .sd-empty { border:1px dashed #cbd5e1;border-radius:12px;padding:28px;background:#fff;text-align:center;color:#94a3b8;font-size:13px; }
+
+  /* Toast */
+  .sd-toast { position:fixed;bottom:20px;right:20px;background:#0f172a;color:#f8fafc;padding:10px 16px;border-radius:10px;font-size:13px;z-index:9999;opacity:0;transform:translateY(6px);transition:all .2s;pointer-events:none; }
+  .sd-toast.show { opacity:1;transform:none; }
+
+  .sd-hidden { display:none !important; }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Nav -->
+<nav class="sd-nav">
+  <div class="sd-nav-wrap">
+    <div style="display:flex;align-items:center;gap:16px;">
+      <a href="/" class="sd-brand">
+        <img src="/static/logo.png" alt="Logo" class="sd-brand-logo" onerror="this.style.display='none'">
+      </a>
+      <span class="sd-nav-title">Sprint Delivery</span>
+    </div>
+    <div class="sd-nav-links">
+      <a href="/customer_dashboard" class="sd-nav-link">Customer Dashboard</a>
+      <a href="/team_report" class="sd-nav-link">Team Report</a>
+      <a href="/" class="sd-nav-link">Home</a>
+    </div>
+  </div>
+</nav>
+
+<div class="sd-wrap">
+
+  <!-- Filter card -->
+  <div class="sd-card">
+    <div class="sd-filters-row">
+      <!-- Team -->
+      <div class="sd-filter-group">
+        <span class="sd-label">Team</span>
+        <select id="sd-team" class="sd-select">
+          <option value="">— Select Team —</option>
+        </select>
+      </div>
+
+      <!-- Sprint picker -->
+      <div class="sd-filter-group">
+        <span class="sd-label">Sprint(s)</span>
+        <div class="sd-sprint-picker" id="sd-sprint-picker">
+          <div class="sd-sprint-toggle" id="sd-sprint-toggle">— Select Sprints —</div>
+          <div class="sd-sprint-dropdown" id="sd-sprint-dropdown">
+            <input type="text" class="sd-sprint-search" id="sd-sprint-search" placeholder="Search sprints…">
+            <div class="sd-sprint-options" id="sd-sprint-options">
+              <div class="sd-spinner" style="margin:14px auto;display:block;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:flex-end;">
+        <button id="sd-load-btn" class="sd-btn-primary" disabled>
+          <span id="sd-load-spinner" class="sd-spinner sd-hidden"></span>
+          Load Data
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- KPI row -->
+  <div id="sd-kpi-row" class="sd-kpi-row sd-hidden">
+    <div class="sd-kpi"><div class="sd-kpi-val" id="sd-total">0</div><div class="sd-kpi-lbl">Total Tickets</div></div>
+    <div class="sd-kpi sd-kpi-green"><div class="sd-kpi-val" id="sd-delivered-count">0</div><div class="sd-kpi-lbl">Delivered</div></div>
+    <div class="sd-kpi sd-kpi-red"><div class="sd-kpi-val" id="sd-spilled-count">0</div><div class="sd-kpi-lbl">Spilled Over</div></div>
+    <div class="sd-kpi sd-kpi-blue"><div class="sd-kpi-val" id="sd-delivery-rate">—</div><div class="sd-kpi-lbl">Delivery Rate</div></div>
+  </div>
+
+  <!-- AI Summary card -->
+  <div id="sd-ai-card" class="sd-card sd-hidden">
+    <div class="sd-ai-head">
+      <div class="sd-ai-title">
+        <span class="sd-ai-icon">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+        </span>
+        AI Summary
+      </div>
+      <button id="sd-ai-btn" class="sd-btn-outline">
+        <span id="sd-ai-spinner" class="sd-spinner sd-hidden"></span>
+        Generate Summary
+      </button>
+    </div>
+    <div id="sd-ai-content" class="sd-hidden">
+      <div class="sd-ai-sections" id="sd-ai-sections"></div>
+    </div>
+  </div>
+
+  <!-- Delivered section -->
+  <div id="sd-delivered-section" class="sd-card sd-hidden">
+    <div class="sd-section-head">
+      <span class="sd-section-title">Delivered</span>
+      <span class="sd-badge sd-badge-green" id="sd-delivered-badge">0</span>
+    </div>
+    <div class="sd-table-wrap">
+      <table class="sd-table" id="sd-delivered-table">
+        <thead>
+          <tr>
+            <th>Key</th>
+            <th>Summary</th>
+            <th>Type</th>
+            <th>Status</th>
+            <th>Priority</th>
+            <th>Assignee</th>
+            <th>Sprint(s)</th>
+          </tr>
+        </thead>
+        <tbody id="sd-delivered-tbody"></tbody>
+      </table>
+      <div id="sd-delivered-empty" class="sd-empty sd-hidden">No delivered tickets found.</div>
+    </div>
+  </div>
+
+  <!-- Spilled section -->
+  <div id="sd-spilled-section" class="sd-card sd-hidden">
+    <div class="sd-section-head">
+      <span class="sd-section-title">Spilled Over</span>
+      <span class="sd-badge sd-badge-orange" id="sd-spilled-badge">0</span>
+    </div>
+    <div class="sd-table-wrap">
+      <table class="sd-table" id="sd-spilled-table">
+        <thead>
+          <tr>
+            <th>Key</th>
+            <th>Summary</th>
+            <th>Type</th>
+            <th>Status</th>
+            <th>Priority</th>
+            <th>Assignee</th>
+            <th>Sprint(s)</th>
+          </tr>
+        </thead>
+        <tbody id="sd-spilled-tbody"></tbody>
+      </table>
+      <div id="sd-spilled-empty" class="sd-empty sd-hidden">No spilled tickets found.</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="sd-toast" id="sd-toast"></div>
+
+<script>
+(function () {
+  const JIRA_DOMAIN = "{{ project }}";  // used for ticket links via issue key
+
+  // ── Helpers ──────────────────────────────────────────────────────────────
+
+  function showToast(msg, ms = 3000) {
+    const t = document.getElementById("sd-toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    setTimeout(() => t.classList.remove("show"), ms);
+  }
+
+  function show(el) { el && el.classList.remove("sd-hidden"); }
+  function hide(el) { el && el.classList.add("sd-hidden"); }
+
+  function statusClass(s) {
+    const n = (s || "").toLowerCase();
+    if (["done","resolved","closed","deployed","staged"].some(d => n.includes(d))) return "sd-status-done";
+    if (["in progress","in review","progress"].some(d => n.includes(d))) return "sd-status-inprog";
+    if (["open","to do","new","backlog"].some(d => n.includes(d))) return "sd-status-open";
+    return "sd-status-other";
+  }
+
+  function priorityClass(p) {
+    const n = (p || "").toLowerCase();
+    if (["highest","high","critical","blocker","p0","p1"].some(x => n.includes(x))) return "sd-priority-high";
+    if (["medium","normal","p2"].some(x => n.includes(x))) return "sd-priority-med";
+    return "sd-priority-low";
+  }
+
+  function esc(s) {
+    return String(s || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  }
+
+  function buildRow(ticket, rowClass) {
+    const sprintTags = (ticket.sprint_names || [])
+      .map(sn => `<span class="sd-sprint-tag">${esc(sn)}</span>`).join("");
+    return `<tr class="${rowClass}">
+      <td><a class="sd-key-link" href="#" onclick="return false">${esc(ticket.issue_key)}</a></td>
+      <td style="max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(ticket.summary)}">${esc(ticket.summary)}</td>
+      <td><span class="sd-type-pill">${esc(ticket.issue_type)}</span></td>
+      <td><span class="sd-status-pill ${statusClass(ticket.status)}">${esc(ticket.status)}</span></td>
+      <td><span class="${priorityClass(ticket.priority)}">${esc(ticket.priority)}</span></td>
+      <td><span class="sd-assignee" title="${esc(ticket.assignee)}">${esc(ticket.assignee)}</span></td>
+      <td><div class="sd-sprint-tags">${sprintTags || "—"}</div></td>
+    </tr>`;
+  }
+
+  // ── Sprint picker ─────────────────────────────────────────────────────────
+
+  let allSprints = [];
+  let selectedSprintIds = new Set();
+
+  const sprintToggle = document.getElementById("sd-sprint-toggle");
+  const sprintDropdown = document.getElementById("sd-sprint-dropdown");
+  const sprintSearch = document.getElementById("sd-sprint-search");
+  const sprintOptions = document.getElementById("sd-sprint-options");
+
+  sprintToggle.addEventListener("click", (e) => {
+    e.stopPropagation();
+    sprintDropdown.classList.toggle("open");
+    if (sprintDropdown.classList.contains("open")) sprintSearch.focus();
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!document.getElementById("sd-sprint-picker").contains(e.target)) {
+      sprintDropdown.classList.remove("open");
+    }
+  });
+
+  sprintSearch.addEventListener("input", () => renderSprintOptions(sprintSearch.value));
+
+  function renderSprintOptions(filter) {
+    const q = (filter || "").toLowerCase();
+    const filtered = allSprints.filter(s => !q || s.name.toLowerCase().includes(q));
+    if (!filtered.length) {
+      sprintOptions.innerHTML = `<div class="sd-sprint-empty">No sprints found</div>`;
+      return;
+    }
+    sprintOptions.innerHTML = filtered.map(s => {
+      const checked = selectedSprintIds.has(s.id) ? "checked" : "";
+      const stateLabel = s.state || "closed";
+      return `<label class="sd-sprint-option">
+        <input type="checkbox" value="${s.id}" ${checked} onchange="window._sdToggleSprint(${s.id})">
+        <span class="sd-sprint-name">${esc(s.name)}</span>
+        <span class="sd-sprint-state ${stateLabel}">${stateLabel}</span>
+      </label>`;
+    }).join("");
+  }
+
+  window._sdToggleSprint = function(id) {
+    if (selectedSprintIds.has(id)) selectedSprintIds.delete(id);
+    else selectedSprintIds.add(id);
+    updateSprintToggleLabel();
+    updateLoadBtn();
+  };
+
+  function updateSprintToggleLabel() {
+    if (selectedSprintIds.size === 0) {
+      sprintToggle.textContent = "— Select Sprints —";
+    } else if (selectedSprintIds.size === 1) {
+      const s = allSprints.find(x => x.id === [...selectedSprintIds][0]);
+      sprintToggle.textContent = s ? s.name : `1 sprint selected`;
+    } else {
+      sprintToggle.textContent = `${selectedSprintIds.size} sprints selected`;
+    }
+  }
+
+  function updateLoadBtn() {
+    document.getElementById("sd-load-btn").disabled = selectedSprintIds.size === 0;
+  }
+
+  async function loadSprints() {
+    try {
+      const res = await fetch("/api/sprints");
+      if (!res.ok) throw new Error(await res.text());
+      allSprints = await res.json();
+      renderSprintOptions("");
+    } catch (e) {
+      sprintOptions.innerHTML = `<div class="sd-sprint-empty">Failed to load sprints</div>`;
+    }
+  }
+
+  // ── Teams ─────────────────────────────────────────────────────────────────
+
+  async function loadTeams() {
+    try {
+      const res = await fetch("/api/sprint_delivery/teams");
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      const sel = document.getElementById("sd-team");
+      (data.teams || []).forEach(t => {
+        const opt = document.createElement("option");
+        opt.value = t; opt.textContent = t;
+        sel.appendChild(opt);
+      });
+    } catch (e) {
+      showToast("Could not load teams: " + e.message);
+    }
+  }
+
+  // ── Load Data ─────────────────────────────────────────────────────────────
+
+  let lastDelivered = [];
+  let lastSpilled = [];
+  let lastSprintNames = [];
+
+  document.getElementById("sd-load-btn").addEventListener("click", async () => {
+    const team = document.getElementById("sd-team").value;
+    const sprintIds = [...selectedSprintIds];
+    if (!sprintIds.length) { showToast("Select at least one sprint."); return; }
+
+    const btn = document.getElementById("sd-load-btn");
+    const spinner = document.getElementById("sd-load-spinner");
+    btn.disabled = true;
+    show(spinner);
+
+    try {
+      const res = await fetch("/api/sprint_delivery/data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ team_name: team, sprint_ids: sprintIds }),
+      });
+      const data = await res.json();
+      if (!res.ok) { showToast(data.error || "Error loading data"); return; }
+
+      lastDelivered = data.delivered || [];
+      lastSpilled = data.spilled || [];
+      lastSprintNames = [...selectedSprintIds].map(id => {
+        const s = allSprints.find(x => x.id === id);
+        return s ? s.name : String(id);
+      });
+
+      renderResults(data);
+    } catch (e) {
+      showToast("Request failed: " + e.message);
+    } finally {
+      btn.disabled = false;
+      hide(spinner);
+      updateLoadBtn();
+    }
+  });
+
+  function renderResults(data) {
+    const total = data.total || 0;
+    const dCount = data.delivered_count || 0;
+    const sCount = data.spilled_count || 0;
+    const rate = total > 0 ? Math.round((dCount / total) * 100) + "%" : "—";
+
+    document.getElementById("sd-total").textContent = total;
+    document.getElementById("sd-delivered-count").textContent = dCount;
+    document.getElementById("sd-spilled-count").textContent = sCount;
+    document.getElementById("sd-delivery-rate").textContent = rate;
+    show(document.getElementById("sd-kpi-row"));
+
+    // Delivered table
+    const dTbody = document.getElementById("sd-delivered-tbody");
+    const dEmpty = document.getElementById("sd-delivered-empty");
+    if (lastDelivered.length) {
+      dTbody.innerHTML = lastDelivered.map(t => buildRow(t, "delivered")).join("");
+      hide(dEmpty);
+      show(document.getElementById("sd-delivered-table"));
+    } else {
+      dTbody.innerHTML = "";
+      hide(document.getElementById("sd-delivered-table"));
+      show(dEmpty);
+    }
+    document.getElementById("sd-delivered-badge").textContent = dCount;
+    show(document.getElementById("sd-delivered-section"));
+
+    // Spilled table
+    const sTbody = document.getElementById("sd-spilled-tbody");
+    const sEmpty = document.getElementById("sd-spilled-empty");
+    if (lastSpilled.length) {
+      sTbody.innerHTML = lastSpilled.map(t => buildRow(t, "spilled")).join("");
+      hide(sEmpty);
+      show(document.getElementById("sd-spilled-table"));
+    } else {
+      sTbody.innerHTML = "";
+      hide(document.getElementById("sd-spilled-table"));
+      show(sEmpty);
+    }
+    document.getElementById("sd-spilled-badge").textContent = sCount;
+    show(document.getElementById("sd-spilled-section"));
+
+    // Show AI card, reset summary
+    show(document.getElementById("sd-ai-card"));
+    hide(document.getElementById("sd-ai-content"));
+    document.getElementById("sd-ai-sections").innerHTML = "";
+    document.getElementById("sd-ai-btn").disabled = false;
+    document.getElementById("sd-ai-btn").textContent = "Generate Summary";
+  }
+
+  // ── AI Summary ────────────────────────────────────────────────────────────
+
+  document.getElementById("sd-ai-btn").addEventListener("click", async () => {
+    const btn = document.getElementById("sd-ai-btn");
+    const spinner = document.getElementById("sd-ai-spinner");
+    btn.disabled = true;
+    show(spinner);
+    btn.lastChild.textContent = " Generating…";
+
+    const sprintLabel = lastSprintNames.join(", ");
+
+    try {
+      const res = await fetch("/api/sprint_delivery/ai_summary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sprint_name: sprintLabel,
+          delivered: lastDelivered.slice(0, 60),
+          spilled: lastSpilled.slice(0, 40),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) { showToast(data.error || "AI summary failed"); return; }
+
+      const s = data.summary || {};
+      const sections = document.getElementById("sd-ai-sections");
+      sections.innerHTML = "";
+
+      function makeSection(title, bullets, cls, extraCls) {
+        if (!bullets || !bullets.length) return "";
+        const items = bullets.map(b => `<li>${esc(b)}</li>`).join("");
+        return `<div class="sd-ai-section ${extraCls || ''}">
+          <div class="sd-ai-section-title ${cls}">${title}</div>
+          <ul class="sd-ai-bullets">${items}</ul>
+        </div>`;
+      }
+
+      sections.innerHTML =
+        makeSection("What Was Delivered", s.delivered_summary, "green") +
+        makeSection("Spilled Over", s.spilled_summary, "red") +
+        makeSection("Overall Health", s.health, "blue", "sd-ai-health");
+
+      show(document.getElementById("sd-ai-content"));
+      btn.textContent = "Regenerate";
+    } catch (e) {
+      showToast("AI request failed: " + e.message);
+      btn.textContent = "Generate Summary";
+    } finally {
+      btn.disabled = false;
+      hide(spinner);
+    }
+  });
+
+  // ── Init ──────────────────────────────────────────────────────────────────
+
+  loadTeams();
+  loadSprints();
+
+})();
+</script>
+{% endblock %}

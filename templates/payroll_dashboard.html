@@ -1,0 +1,385 @@
+{% extends "base.html" %}
+{% block title %}Payroll Dashboard{% endblock %}
+{% block extra_head %}
+<style>
+  .pd-card { background:#0f172a; border:1px solid rgba(148,163,184,.18); border-radius:14px; }
+  .pd-kpi-label { color:#94a3b8; font-size:11px; text-transform:uppercase; letter-spacing:.07em; font-weight:700; }
+  .pd-kpi-value { color:#f8fafc; font-size:28px; font-weight:800; line-height:1.1; margin-top:4px; }
+  .pd-table { width:100%; border-collapse:collapse; font-size:13px; }
+  .pd-table th { color:#64748b; font-size:10px; text-transform:uppercase; letter-spacing:.06em; font-weight:700; padding:8px 10px; text-align:left; border-bottom:1px solid rgba(148,163,184,.15); white-space:nowrap; }
+  .pd-table td { color:#e2e8f0; padding:9px 10px; border-bottom:1px solid rgba(148,163,184,.07); vertical-align:middle; }
+  .pd-table tr:last-child td { border-bottom:none; }
+  .pd-table tr:hover td { background:rgba(255,255,255,.02); }
+  .status-done { color:#4ade80; font-weight:600; font-size:11px; }
+  .status-spill { color:#fb923c; font-weight:600; font-size:11px; }
+  .pd-btn { border:1px solid rgba(148,163,184,.25); border-radius:8px; padding:5px 11px; font-size:11px; font-weight:600; color:#cbd5e1; background:#1e293b; cursor:pointer; }
+  .pd-btn:hover { background:#334155; color:#f1f5f9; }
+  .pd-btn-primary { background:#3b82f6; border-color:#3b82f6; color:#fff; }
+  .pd-btn-primary:hover { background:#2563eb; }
+  .tbl-section { border-radius:10px; overflow:hidden; margin-bottom:16px; }
+  .tbl-section-head { display:flex; align-items:center; justify-content:space-between; padding:10px 12px; }
+  .tbl-section-title { font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; }
+  .tbl-section-count { font-size:11px; font-weight:600; background:rgba(255,255,255,.08); border-radius:999px; padding:2px 9px; }
+  .bugs-head { background:rgba(239,68,68,.12); border:1px solid rgba(239,68,68,.25); border-radius:10px 10px 0 0; }
+  .bugs-head .tbl-section-title { color:#f87171; }
+  .bugs-body { border:1px solid rgba(239,68,68,.15); border-top:none; border-radius:0 0 10px 10px; }
+  .prod-head { background:rgba(251,191,36,.1); border:1px solid rgba(251,191,36,.22); border-radius:10px 10px 0 0; }
+  .prod-head .tbl-section-title { color:#fbbf24; }
+  .prod-body { border:1px solid rgba(251,191,36,.12); border-top:none; border-radius:0 0 10px 10px; }
+  .work-head { background:rgba(34,211,238,.1); border:1px solid rgba(34,211,238,.22); border-radius:10px 10px 0 0; }
+  .work-head .tbl-section-title { color:#22d3ee; }
+  .work-body { border:1px solid rgba(34,211,238,.12); border-top:none; border-radius:0 0 10px 10px; }
+  .pd-spinner { display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.2);border-top-color:#3b82f6;border-radius:50%;animation:spin .7s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+  <!-- Filter Card -->
+  <div class="pd-card p-5">
+    <div class="flex flex-wrap gap-4 items-end">
+      <div>
+        <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Sprint(s) — hold Ctrl/Cmd to multi-select</label>
+        <select id="pd-sprints" multiple class="bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-slate-100 min-h-[120px] min-w-[300px]"></select>
+      </div>
+      <div class="flex flex-col gap-2 pb-1">
+        <button id="pd-load-btn" class="pd-btn pd-btn-primary">Load Dashboard</button>
+        <div id="pd-error" class="text-xs text-rose-400 hidden"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Overall KPIs (hidden until loaded) -->
+  <div id="pd-overall" class="hidden grid grid-cols-2 md:grid-cols-5 gap-3">
+    <div class="pd-card p-4"><div class="pd-kpi-label">Total Tickets</div><div id="k-total" class="pd-kpi-value">0</div></div>
+    <div class="pd-card p-4"><div class="pd-kpi-label">Delivered</div><div id="k-delivered" class="pd-kpi-value text-emerald-400">0</div></div>
+    <div class="pd-card p-4"><div class="pd-kpi-label">Spilled Over</div><div id="k-spilled" class="pd-kpi-value text-orange-400">0</div></div>
+    <div class="pd-card p-4"><div class="pd-kpi-label">Avg Cycle (days)</div><div id="k-cycle" class="pd-kpi-value">-</div></div>
+    <div class="pd-card p-4"><div class="pd-kpi-label">Avg Bugs / Ticket</div><div id="k-bugs" class="pd-kpi-value">0</div></div>
+  </div>
+
+  <!-- Sprint sections injected here -->
+  <div id="pd-sprint-sections" class="space-y-8"></div>
+
+</div>
+
+<!-- Edit Metrics Modal -->
+<div id="pd-modal" class="fixed inset-0 bg-black/70 hidden z-50" style="display:none">
+  <div class="flex items-center justify-center min-h-screen p-4">
+    <div class="pd-card w-full max-w-lg p-6">
+      <h3 class="text-base font-bold text-slate-100 mb-4">Edit Ticket Metrics <span id="m-issue-badge" class="ml-2 text-xs font-mono text-blue-400"></span></h3>
+      <div class="space-y-3">
+        <div>
+          <label class="text-xs text-slate-400">Manual Bug Count (in addition to Jira linked bugs)</label>
+          <input id="m-bugs" type="number" min="0" class="w-full mt-1 bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-sm text-slate-100 focus:border-blue-500 outline-none">
+        </div>
+        <div>
+          <label class="text-xs text-slate-400">Test Cases Written</label>
+          <input id="m-tests" type="number" min="0" class="w-full mt-1 bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-sm text-slate-100 focus:border-blue-500 outline-none">
+        </div>
+        <div>
+          <label class="text-xs text-slate-400">Manual Bug Ticket Links (comma separated)</label>
+          <textarea id="m-links" rows="2" class="w-full mt-1 bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-sm text-slate-100 focus:border-blue-500 outline-none resize-none"></textarea>
+        </div>
+        <div>
+          <label class="text-xs text-slate-400">Notes</label>
+          <textarea id="m-notes" rows="2" class="w-full mt-1 bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-sm text-slate-100 focus:border-blue-500 outline-none resize-none"></textarea>
+        </div>
+      </div>
+      <div class="flex justify-end gap-2 mt-5">
+        <button class="pd-btn" onclick="closeModal()">Cancel</button>
+        <button id="m-save-btn" class="pd-btn pd-btn-primary" onclick="saveModal()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const JIRA_BASE = (window.JIRA_DOMAIN || '').replace(/\/$/, '');
+let dashboardData = null;
+let editingKey = null;
+let ticketMap = {};
+
+// ── Utilities ────────────────────────────────────────────────────────────────
+function esc(v) {
+  return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+}
+function fmt(v) {
+  return (v === null || v === undefined || v === '') ? '—' : v;
+}
+function isBug(t)  { return String(t.issue_type || '').toLowerCase() === 'bug'; }
+function isProd(t) { return !!t.is_production; }
+
+function showError(msg) {
+  const el = document.getElementById('pd-error');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+}
+function hideError() {
+  document.getElementById('pd-error').classList.add('hidden');
+}
+
+// ── Sprint loader ─────────────────────────────────────────────────────────────
+async function loadSprints() {
+  const sel = document.getElementById('pd-sprints');
+  sel.innerHTML = '<option disabled>Loading sprints…</option>';
+  try {
+    const res = await fetch('/api/sprints');
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed');
+    sel.innerHTML = '';
+    (data || []).forEach(s => {
+      const o = document.createElement('option');
+      o.value = s.id;
+      o.textContent = `${s.name}  (${s.state || 'unknown'})`;
+      sel.appendChild(o);
+    });
+  } catch (e) {
+    sel.innerHTML = '<option disabled>Failed to load sprints</option>';
+  }
+}
+
+function getSelectedSprintIds() {
+  return Array.from(document.getElementById('pd-sprints').selectedOptions)
+    .map(o => Number(o.value)).filter(Boolean);
+}
+
+// ── Dashboard load ────────────────────────────────────────────────────────────
+async function loadDashboard() {
+  const ids = getSelectedSprintIds();
+  if (!ids.length) { showError('Select at least one sprint.'); return; }
+  hideError();
+  const btn = document.getElementById('pd-load-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="pd-spinner"></span> Loading…';
+  try {
+    const res = await fetch('/api/payroll_dashboard/data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sprint_ids: ids })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to load dashboard');
+    dashboardData = data;
+    render();
+  } catch (e) {
+    showError(e.message || String(e));
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = 'Load Dashboard';
+  }
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function render() {
+  const o = dashboardData.overall || {};
+  document.getElementById('pd-overall').classList.remove('hidden');
+  document.getElementById('k-total').textContent     = fmt(o.total);
+  document.getElementById('k-delivered').textContent = fmt(o.delivered_count);
+  document.getElementById('k-spilled').textContent   = fmt(o.spilled_count);
+  document.getElementById('k-cycle').textContent     = fmt(o.avg_cycle_days);
+  document.getElementById('k-bugs').textContent      = fmt(o.avg_bugs_per_ticket);
+
+  const container = document.getElementById('pd-sprint-sections');
+  container.innerHTML = '';
+  ticketMap = {};
+
+  for (const sprint of (dashboardData.sprints || [])) {
+    const tickets = sprint.tickets || [];
+
+    // register all in map
+    tickets.forEach(t => { ticketMap[t.issue_key] = t; });
+
+    // split into 3 groups
+    const bugs  = tickets.filter(t => isBug(t));
+    const prod  = tickets.filter(t => isProd(t));
+    const work  = tickets.filter(t => !isBug(t));   // stories + tasks + other
+
+    const sprintName = tickets.length && tickets[0].sprints && tickets[0].sprints.length
+      ? tickets[0].sprints.find(s => s.id === sprint.sprint_id)?.name || `Sprint ${sprint.sprint_id}`
+      : `Sprint ${sprint.sprint_id}`;
+
+    const sec = document.createElement('div');
+    sec.className = 'pd-card p-5';
+    sec.innerHTML = `
+      <!-- Sprint header -->
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <div>
+          <h3 class="text-lg font-bold text-slate-100">${esc(sprintName)}</h3>
+          <p class="text-xs text-slate-500 mt-0.5">ID: ${sprint.sprint_id}</p>
+        </div>
+        <button class="pd-btn pd-btn-primary text-xs" onclick="generateAI(${sprint.sprint_id})">✦ AI Summary</button>
+      </div>
+
+      <!-- Sprint KPIs -->
+      <div class="grid grid-cols-2 md:grid-cols-6 gap-2 mb-4">
+        ${kpiBox('Total', sprint.total)}
+        ${kpiBox('Delivered', sprint.delivered_count, 'text-emerald-400')}
+        ${kpiBox('Spilled', sprint.spilled_count, 'text-orange-400')}
+        ${kpiBox('Avg Cycle (days)', fmt(sprint.avg_cycle_days), '')}
+        ${kpiBox('Avg Bugs/Ticket', fmt(sprint.avg_bugs_per_ticket), '')}
+        ${kpiBox('Avg Test Cases', fmt(sprint.avg_test_cases_per_ticket), '')}
+      </div>
+
+      <!-- AI summary box -->
+      <div id="ai-${sprint.sprint_id}" class="hidden mb-4 bg-slate-900/80 border border-slate-700/60 rounded-xl p-4 text-sm text-slate-300 space-y-3"></div>
+
+      <!-- TABLE 1: Bugs -->
+      ${tableSection('bugs', '🐛 Bug Tickets', bugs)}
+
+      <!-- TABLE 2: Stories / Tasks / Subtasks / Other -->
+      ${tableSection('work', '📋 Stories / Tasks / Subtasks / Other', work)}
+
+      <!-- TABLE 3: Production Tickets -->
+      ${tableSection('prod', '🚀 Production Tickets', prod)}
+    `;
+    container.appendChild(sec);
+  }
+}
+
+function kpiBox(label, val, valClass = '') {
+  return `<div class="bg-slate-900 rounded-lg p-3">
+    <div class="text-xs font-semibold text-slate-500 uppercase tracking-wide">${label}</div>
+    <div class="text-xl font-bold mt-1 ${valClass}">${fmt(val)}</div>
+  </div>`;
+}
+
+function tableSection(kind, title, tickets) {
+  const headClass = { bugs:'bugs-head', work:'work-head', prod:'prod-head' }[kind];
+  const bodyClass = { bugs:'bugs-body', work:'work-body', prod:'prod-body' }[kind];
+  const empty = `<tr><td colspan="9" class="py-4 text-center text-slate-500 text-xs">No tickets in this group.</td></tr>`;
+  const rows = tickets.map(t => ticketRow(t)).join('');
+  return `
+    <div class="tbl-section mb-4">
+      <div class="tbl-section-head ${headClass}">
+        <span class="tbl-section-title">${title}</span>
+        <span class="tbl-section-count text-slate-400">${tickets.length}</span>
+      </div>
+      <div class="${bodyClass} overflow-x-auto">
+        <table class="pd-table">
+          <thead>
+            <tr>
+              <th>Key</th><th>Summary</th><th>Type</th><th>Status</th>
+              <th>Assignee</th><th>Priority</th><th>Cycle (days)</th>
+              <th>Bugs (total)</th><th>Test Cases</th><th></th>
+            </tr>
+          </thead>
+          <tbody>${tickets.length ? rows : empty}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+function ticketRow(t) {
+  const statusClass = t.is_delivered ? 'status-done' : 'status-spill';
+  const safeKey = encodeURIComponent(t.issue_key || '');
+  return `
+    <tr>
+      <td><a class="text-blue-400 font-semibold font-mono text-xs" target="_blank"
+          href="${JIRA_BASE}/browse/${safeKey}">${esc(t.issue_key)}</a></td>
+      <td class="max-w-xs"><div class="truncate" title="${esc(t.summary)}">${esc(t.summary)}</div></td>
+      <td><span class="text-xs text-slate-400">${esc(t.issue_type || '—')}</span></td>
+      <td><span class="${statusClass}">${esc(t.status)}</span></td>
+      <td class="text-slate-300 text-xs">${esc(t.assignee || '—')}</td>
+      <td class="text-xs text-slate-400">${esc(t.priority || '—')}</td>
+      <td class="text-xs text-slate-300 tabular-nums">${fmt(t.cycle_days)}</td>
+      <td class="text-xs tabular-nums ${(t.total_bug_count||0) > 0 ? 'text-rose-400 font-bold' : 'text-slate-400'}">${fmt(t.total_bug_count)}</td>
+      <td class="text-xs tabular-nums ${(t.test_cases_count||0) > 0 ? 'text-emerald-400 font-semibold' : 'text-slate-400'}">${fmt(t.test_cases_count)}</td>
+      <td><button class="pd-btn text-xs" onclick="openModal('${safeKey}')">Edit</button></td>
+    </tr>`;
+}
+
+// ── AI summary ────────────────────────────────────────────────────────────────
+async function generateAI(sprintId) {
+  const s = (dashboardData.sprints || []).find(x => x.sprint_id === sprintId);
+  if (!s) return;
+  const box = document.getElementById(`ai-${sprintId}`);
+  box.classList.remove('hidden');
+  box.innerHTML = '<div class="flex items-center gap-2"><span class="pd-spinner"></span><span class="text-slate-400">Generating AI summary…</span></div>';
+  try {
+    const sprintName = (s.tickets || [])[0]?.sprints?.find(sp => sp.id === sprintId)?.name || `Sprint ${sprintId}`;
+    const res = await fetch('/api/payroll_dashboard/ai_summary', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sprint_name: sprintName, delivered: s.delivered || [], spilled: s.spilled || [] })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed');
+    const sum = data.summary || {};
+    const bullets = (title, arr, color) => arr && arr.length ? `
+      <div>
+        <div class="text-xs font-bold uppercase tracking-wider ${color} mb-1">${title}</div>
+        <ul class="list-disc ml-4 space-y-0.5">${(arr || []).map(b => `<li class="text-sm text-slate-300">${esc(b)}</li>`).join('')}</ul>
+      </div>` : '';
+    box.innerHTML = `
+      <div class="grid md:grid-cols-3 gap-4">
+        ${bullets('✅ Delivered', sum.delivered_summary, 'text-emerald-400')}
+        ${bullets('⚠️ Spilled', sum.spilled_summary, 'text-orange-400')}
+        ${bullets('🔍 Quality', sum.quality_summary, 'text-blue-400')}
+      </div>`;
+  } catch (e) {
+    box.innerHTML = `<div class="text-rose-400 text-sm">${esc(e.message || String(e))}</div>`;
+  }
+}
+
+// ── Modal ─────────────────────────────────────────────────────────────────────
+function openModal(encodedKey) {
+  const key = decodeURIComponent(encodedKey);
+  const t = ticketMap[key];
+  if (!t) return;
+  editingKey = key;
+  document.getElementById('m-issue-badge').textContent = key;
+  document.getElementById('m-bugs').value  = t.manual_bug_count  || 0;
+  document.getElementById('m-tests').value = t.test_cases_count  || 0;
+  document.getElementById('m-links').value = t.manual_bug_links  || '';
+  document.getElementById('m-notes').value = t.notes             || '';
+  document.getElementById('pd-modal').style.display = 'block';
+}
+
+function closeModal() {
+  document.getElementById('pd-modal').style.display = 'none';
+  editingKey = null;
+}
+
+async function saveModal() {
+  if (!editingKey) return;
+  const btn = document.getElementById('m-save-btn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  const payload = {
+    manual_bug_count: Number(document.getElementById('m-bugs').value  || 0),
+    test_cases_count: Number(document.getElementById('m-tests').value || 0),
+    manual_bug_links: document.getElementById('m-links').value || '',
+    notes:            document.getElementById('m-notes').value || ''
+  };
+  try {
+    const res = await fetch(`/api/payroll_dashboard/ticket_meta/${encodeURIComponent(editingKey)}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to save');
+    closeModal();
+    await loadDashboard();
+  } catch (e) {
+    alert(e.message || String(e));
+  } finally {
+    btn.disabled = false; btn.textContent = 'Save';
+  }
+}
+
+// close modal on backdrop click
+document.getElementById('pd-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  loadSprints();
+  document.getElementById('pd-load-btn').addEventListener('click', loadDashboard);
+});
+</script>
+{% endblock %}

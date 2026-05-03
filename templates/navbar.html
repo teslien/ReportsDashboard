@@ -123,6 +123,16 @@
                                     class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white"
                                     role="menuitem">Sprint Dashboard</a>
                                 {% endif %}
+                                {% if current_user.can_view_page('sprint_delivery') %}
+                                <a href="/sprint_delivery"
+                                    class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white"
+                                    role="menuitem">Sprint Delivery</a>
+                                {% endif %}
+                                {% if current_user.can_view_page('payroll_dashboard') %}
+                                <a href="/payroll_dashboard"
+                                    class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white"
+                                    role="menuitem">Payroll Dashboard</a>
+                                {% endif %}
                                 {% if current_user.can_view_page('explorer') %}
                                 <a href="/explorer"
                                     class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white"
@@ -361,6 +371,10 @@
             {% if current_user.can_view_page('sprint_dashboard') %}
             <a href="/sprint_dashboard"
                 class="block px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:text-white hover:bg-gray-700">Sprint Dashboard</a>
+            {% endif %}
+            {% if current_user.can_view_page('payroll_dashboard') %}
+            <a href="/payroll_dashboard"
+                class="block px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:text-white hover:bg-gray-700">Payroll Dashboard</a>
             {% endif %}
             {% if current_user.can_view_page('explorer') %}
             <a href="/explorer"

@@ -111,9 +111,15 @@ class User(UserMixin):
 
     def can_view_page(self, page_key):
         if self.role_name == 'Admin': return True
-        # If 'allowed_pages' is not present, default to True (backward compatibility)
         allowed = self.permissions.get('allowed_pages')
-        if allowed is None: return True 
+        # Payroll dashboard is opt-in per role (Admin always). Legacy roles with no
+        # allowed_pages list otherwise see all pages; exclude this page until granted.
+        if page_key == "payroll_dashboard":
+            if not isinstance(allowed, list):
+                return False
+            return page_key in allowed
+        # If 'allowed_pages' is not present, default to True (backward compatibility)
+        if allowed is None: return True
         return page_key in allowed
 
     def to_dict(self):
@@ -478,7 +484,10 @@ def init_db():
                 for page in default_editor_pages:
                     if page not in allowed:
                         allowed.append(page)
-                perms['allowed_pages'] = allowed
+                # Payroll: Admin-only by default; remove from Editor if it was auto-added earlier.
+                if "payroll_dashboard" in allowed:
+                    allowed = [p for p in allowed if p != "payroll_dashboard"]
+                perms["allowed_pages"] = allowed
                 cursor.execute("UPDATE roles SET permissions = %s WHERE name = 'Editor'", (json.dumps(perms),))
 
     # Trackers Table
@@ -597,6 +606,20 @@ def init_db():
         cursor.execute("ALTER TABLE sprint_tickets DROP FOREIGN KEY sprint_tickets_ibfk_2")
     except:
         pass
+
+    # Payroll Dashboard - local ticket metadata (does not update Jira)
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS payroll_ticket_meta (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            issue_key VARCHAR(50) NOT NULL UNIQUE,
+            manual_bug_count INT DEFAULT 0,
+            manual_bug_links TEXT,
+            test_cases_count INT DEFAULT 0,
+            notes TEXT,
+            updated_by VARCHAR(255),
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        )
+    ''')
 
     # Scrum Notes Table
     cursor.execute('''
@@ -1105,6 +1128,7 @@ PAGE_PERMISSIONS = [
     {"key": "scrum_notes", "label": "Scrum Notes"},
     {"key": "work_report", "label": "Work Report"},
     {"key": "assignee_work", "label": "Assignee Work"},
+    {"key": "payroll_dashboard", "label": "Payroll Dashboard"},
     {"key": "planning", "label": "Sprint Planning"},
     {"key": "teams", "label": "Teams"},
     {"key": "settings", "label": "Settings"},
@@ -5915,6 +5939,586 @@ def team_report_ai_summary():
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
 
+
+# ── Sprint Delivery Dashboard ─────────────────────────────────────────────────
+
+@app.route("/sprint_delivery")
+@page_permission_required("sprint_delivery")
+def sprint_delivery_page():
+    return render_template("sprint_delivery.html", project=PROJECT_KEY, show_navbar=False)
+
+
+@app.route("/payroll_dashboard")
+@page_permission_required("payroll_dashboard")
+def payroll_dashboard_page():
+    return render_template("payroll_dashboard.html", project=PROJECT_KEY)
+
+
+def _first_done_transition_at(issue, fields_obj):
+    histories = (issue.get("changelog") or {}).get("histories") or []
+    hits = []
+    for history in histories:
+        ts = _parse_jira_datetime(history.get("created"))
+        if not ts:
+            continue
+        for item in history.get("items") or []:
+            if item.get("field") != "status":
+                continue
+            to_s = item.get("toString") or ""
+            if _is_done_like_status(to_s, "done"):
+                hits.append(ts)
+    if hits:
+        return min(hits)
+    for k in ("resolutiondate", "updated"):
+        fallback = _parse_jira_datetime((fields_obj or {}).get(k))
+        if fallback:
+            return fallback
+    return None
+
+
+def _safe_dt_days(start_dt, end_dt):
+    if not start_dt or not end_dt:
+        return None
+    delta = end_dt - start_dt
+    return round(max(delta.total_seconds(), 0) / 86400.0, 2)
+
+
+def _linked_bug_count(fields_obj):
+    links = (fields_obj or {}).get("issuelinks") or []
+    bug_count = 0
+    for link in links:
+        linked = link.get("inwardIssue") or link.get("outwardIssue") or {}
+        l_fields = linked.get("fields") or {}
+        l_type = ((l_fields.get("issuetype") or {}).get("name") or "").strip().lower()
+        if l_type == "bug":
+            bug_count += 1
+    return bug_count
+
+
+def _load_payroll_meta_map(issue_keys):
+    if not issue_keys:
+        return {}
+    placeholders = ",".join(["%s"] * len(issue_keys))
+    conn, cursor = get_db_connection(dictionary=True)
+    if not conn:
+        return {}
+    try:
+        cursor.execute(
+            f"""SELECT issue_key, manual_bug_count, manual_bug_links, test_cases_count, notes
+                FROM payroll_ticket_meta
+                WHERE issue_key IN ({placeholders})""",
+            tuple(issue_keys),
+        )
+        rows = cursor.fetchall() or []
+        return {r["issue_key"]: r for r in rows}
+    except Exception:
+        return {}
+    finally:
+        conn.close()
+
+
+@app.route("/api/payroll_dashboard/data", methods=["POST"])
+@login_required
+def payroll_dashboard_data():
+    if not current_user.can_view_page("payroll_dashboard"):
+        return jsonify({"error": "Access denied."}), 403
+    project_key_str = str(PROJECT_KEY).strip()
+    if not project_key_str:
+        return jsonify({"error": "Missing project key. Save it in Settings first."}), 400
+    headers_dict = dict(HEADERS)
+    if "Authorization" not in headers_dict:
+        return jsonify({"error": "Missing Jira credentials. Save them in Settings first."}), 401
+
+    payload = request.get_json(silent=True) or {}
+    sprint_ids = payload.get("sprint_ids") or []
+    if not isinstance(sprint_ids, list):
+        sprint_ids = []
+    sprint_ids = [int(s) for s in sprint_ids if str(s).strip().isdigit()]
+    if not sprint_ids:
+        return jsonify({"error": "At least one sprint_id is required."}), 400
+
+    sprint_clause = ", ".join(str(s) for s in sprint_ids)
+    jql = f'project = "{project_key_str}" AND sprint in ({sprint_clause}) ORDER BY created DESC'
+    fields = (
+        "summary,status,priority,issuetype,assignee,labels,customfield_10020,"
+        "issuelinks,created,updated,resolutiondate"
+    )
+    _plat_cf = _get_platform_checkboxes_field_id()
+    if _plat_cf:
+        fields += f",{_plat_cf}"
+
+    all_issues = []
+    start_at = 0
+    for _ in range(80):
+        params = {
+            "jql": jql,
+            "maxResults": 100,
+            "fields": fields,
+            "expand": "changelog",
+            "startAt": start_at,
+        }
+        try:
+            res = requests.get(
+                f"{JIRA_DOMAIN}/rest/api/3/search/jql",
+                headers=headers_dict,
+                params=params,
+                timeout=45,
+            )
+            if not res.ok:
+                return jsonify({"error": f"Jira API error: {res.text}"}), res.status_code
+            body = res.json()
+            page = body.get("issues") or []
+            all_issues.extend(page)
+            if len(page) < 100:
+                break
+            start_at += len(page)
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 500
+
+    seen = set()
+    unique = []
+    for issue in all_issues:
+        k = issue.get("key")
+        if k and k not in seen:
+            seen.add(k)
+            unique.append(issue)
+
+    issue_keys = [i.get("key") for i in unique if i.get("key")]
+    meta_map = _load_payroll_meta_map(issue_keys)
+
+    by_sprint = {}
+    all_rows = []
+    for issue in unique:
+        fields_obj = issue.get("fields") or {}
+        raw_sprints = _extract_sprint_values(fields_obj.get("customfield_10020") or [])
+        sprint_ids_on_issue = [s["id"] for s in raw_sprints if s.get("id")]
+        matched = [sid for sid in sprint_ids_on_issue if sid in sprint_ids]
+
+        status_obj = fields_obj.get("status") or {}
+        status_name = (status_obj.get("name") or "Unknown").strip()
+        status_category = ((status_obj.get("statusCategory") or {}).get("key") or "").strip()
+        is_delivered = _is_done_like_status(status_name, status_category)
+        created_at = _parse_jira_datetime(fields_obj.get("created"))
+        done_at = _first_done_transition_at(issue, fields_obj) if is_delivered else None
+        cycle_days = _safe_dt_days(created_at, done_at)
+        jira_bug_count = _linked_bug_count(fields_obj)
+        meta = meta_map.get(issue.get("key"), {}) or {}
+        manual_bug_count = int(meta.get("manual_bug_count") or 0)
+        total_bug_count = jira_bug_count + manual_bug_count
+        _plat_raw = fields_obj.get(_plat_cf) if _plat_cf else None
+
+        row = {
+            "issue_key": issue.get("key"),
+            "summary": fields_obj.get("summary") or "",
+            "status": status_name,
+            "priority": ((fields_obj.get("priority") or {}).get("name") or "Unspecified").strip(),
+            "issue_type": ((fields_obj.get("issuetype") or {}).get("name") or "Task").strip(),
+            "assignee": ((fields_obj.get("assignee") or {}).get("displayName") or "Unassigned"),
+            "labels": fields_obj.get("labels") or [],
+            "sprints": raw_sprints,
+            "matched_sprint_ids": matched,
+            "is_delivered": is_delivered,
+            "created": fields_obj.get("created"),
+            "done_at": done_at.isoformat() if done_at else None,
+            "cycle_days": cycle_days,
+            "jira_bug_count": jira_bug_count,
+            "manual_bug_count": manual_bug_count,
+            "total_bug_count": total_bug_count,
+            "is_production": _jira_platform_includes_production(_plat_raw),
+            "manual_bug_links": meta.get("manual_bug_links") or "",
+            "test_cases_count": int(meta.get("test_cases_count") or 0),
+            "notes": meta.get("notes") or "",
+        }
+        all_rows.append(row)
+        for sid in matched:
+            by_sprint.setdefault(sid, []).append(row)
+
+    sprint_summaries = []
+    for sid in sprint_ids:
+        rows = by_sprint.get(sid, [])
+        delivered = [r for r in rows if r["is_delivered"]]
+        spilled = [r for r in rows if not r["is_delivered"]]
+        cycle_vals = [r["cycle_days"] for r in delivered if isinstance(r.get("cycle_days"), (int, float))]
+        avg_cycle = round(sum(cycle_vals) / len(cycle_vals), 2) if cycle_vals else None
+        avg_bugs = round(sum((r.get("total_bug_count") or 0) for r in rows) / len(rows), 2) if rows else 0
+        bug_density_pct = round((sum((r.get("total_bug_count") or 0) for r in rows) / len(rows)) * 100, 2) if rows else 0
+        avg_test_cases = round(sum((r.get("test_cases_count") or 0) for r in rows) / len(rows), 2) if rows else 0
+        sprint_summaries.append({
+            "sprint_id": sid,
+            "total": len(rows),
+            "delivered_count": len(delivered),
+            "spilled_count": len(spilled),
+            "avg_cycle_days": avg_cycle,
+            "avg_bugs_per_ticket": avg_bugs,
+            "avg_bug_percentage_score": bug_density_pct,
+            "avg_test_cases_per_ticket": avg_test_cases,
+            "tickets": rows,
+            "delivered": delivered,
+            "spilled": spilled,
+        })
+
+    total_rows = len(all_rows)
+    all_delivered = [r for r in all_rows if r["is_delivered"]]
+    all_cycle_vals = [r["cycle_days"] for r in all_delivered if isinstance(r.get("cycle_days"), (int, float))]
+    return jsonify({
+        "sprints": sprint_summaries,
+        "overall": {
+            "total": total_rows,
+            "delivered_count": len(all_delivered),
+            "spilled_count": total_rows - len(all_delivered),
+            "avg_cycle_days": round(sum(all_cycle_vals) / len(all_cycle_vals), 2) if all_cycle_vals else None,
+            "avg_bugs_per_ticket": round(sum((r.get("total_bug_count") or 0) for r in all_rows) / total_rows, 2) if total_rows else 0,
+            "avg_test_cases_per_ticket": round(sum((r.get("test_cases_count") or 0) for r in all_rows) / total_rows, 2) if total_rows else 0,
+        },
+        "jql": jql,
+    })
+
+
+@app.route("/api/payroll_dashboard/ticket_meta/<issue_key>", methods=["PUT"])
+@login_required
+def payroll_dashboard_upsert_ticket_meta(issue_key):
+    if not current_user.can_view_page("payroll_dashboard"):
+        return jsonify({"error": "Access denied."}), 403
+    issue_key = (issue_key or "").strip().upper()
+    if not issue_key:
+        return jsonify({"error": "issue_key is required."}), 400
+    payload = request.get_json(silent=True) or {}
+    manual_bug_count = payload.get("manual_bug_count", 0)
+    test_cases_count = payload.get("test_cases_count", 0)
+    manual_bug_links = (payload.get("manual_bug_links") or "").strip()
+    notes = (payload.get("notes") or "").strip()
+    try:
+        manual_bug_count = max(int(manual_bug_count), 0)
+    except Exception:
+        manual_bug_count = 0
+    try:
+        test_cases_count = max(int(test_cases_count), 0)
+    except Exception:
+        test_cases_count = 0
+
+    conn, cursor = get_db_connection()
+    if not conn:
+        return jsonify({"error": "Database error"}), 500
+    try:
+        cursor.execute(
+            """INSERT INTO payroll_ticket_meta
+               (issue_key, manual_bug_count, manual_bug_links, test_cases_count, notes, updated_by)
+               VALUES (%s, %s, %s, %s, %s, %s)
+               ON DUPLICATE KEY UPDATE
+               manual_bug_count = VALUES(manual_bug_count),
+               manual_bug_links = VALUES(manual_bug_links),
+               test_cases_count = VALUES(test_cases_count),
+               notes = VALUES(notes),
+               updated_by = VALUES(updated_by)""",
+            (issue_key, manual_bug_count, manual_bug_links, test_cases_count, notes, getattr(current_user, "email", "system")),
+        )
+        conn.commit()
+        return jsonify({"ok": True})
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+    finally:
+        conn.close()
+
+
+@app.route("/api/payroll_dashboard/ai_summary", methods=["POST"])
+@login_required
+def payroll_dashboard_ai_summary():
+    if not current_user.can_view_page("payroll_dashboard"):
+        return jsonify({"error": "Access denied."}), 403
+    payload = request.get_json(silent=True) or {}
+    sprint_name = str(payload.get("sprint_name") or "").strip()
+    delivered = payload.get("delivered") or []
+    spilled = payload.get("spilled") or []
+    model = payload.get("model") or "claude-sonnet-4-20250514"
+
+    anthropic_key = (_get_app_config_value("anthropic_api_key") or "").strip()
+    if not anthropic_key:
+        return jsonify({"error": "Anthropic API key not configured."}), 400
+    if not delivered and not spilled:
+        return jsonify({"error": "No tickets provided."}), 400
+
+    def compact(rows, limit=70):
+        out = []
+        for r in rows[:limit]:
+            out.append({
+                "key": r.get("issue_key"),
+                "type": r.get("issue_type"),
+                "status": r.get("status"),
+                "summary": str(r.get("summary") or "")[:140],
+                "cycle_days": r.get("cycle_days"),
+                "bugs": r.get("total_bug_count"),
+                "test_cases": r.get("test_cases_count"),
+            })
+        return out
+
+    prompt = (
+        f"You are an engineering delivery analyst. Sprint: '{sprint_name or 'Selected sprint'}'.\n"
+        f"Delivered tickets: {json.dumps(compact(delivered), ensure_ascii=False)}\n"
+        f"Spilled tickets: {json.dumps(compact(spilled), ensure_ascii=False)}\n\n"
+        "Write a short dashboard summary in JSON with keys:\n"
+        "- delivered_summary: 2-4 bullet strings\n"
+        "- spilled_summary: 1-3 bullet strings\n"
+        "- quality_summary: 1-3 bullet strings mentioning bug trend and test-case trend\n"
+        "Return only a valid JSON object."
+    )
+    try:
+        res = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "Content-Type": "application/json",
+                "x-api-key": anthropic_key,
+                "anthropic-version": "2023-06-01",
+            },
+            json={
+                "model": model,
+                "max_tokens": 800,
+                "messages": [{"role": "user", "content": prompt}],
+            },
+            timeout=60,
+        )
+        if not res.ok:
+            return jsonify({"error": f"Claude HTTP {res.status_code}"}), 502
+        body = res.json()
+        raw = (body.get("content") or [{}])[0].get("text", "").strip().strip("`").strip()
+        if raw.startswith("json"):
+            raw = raw[4:].strip()
+        result = json.loads(raw)
+        return jsonify({"sprint": sprint_name, "summary": result})
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/api/sprint_delivery/teams", methods=["GET"])
+def sprint_delivery_teams():
+    """Return unique team names from recent Jira issues."""
+    project_key_str = str(PROJECT_KEY).strip()
+    if not project_key_str:
+        return jsonify({"error": "Missing project key. Save it in Settings first."}), 400
+    headers_dict = dict(HEADERS)
+    if "Authorization" not in headers_dict:
+        return jsonify({"error": "Missing Jira credentials. Save them in Settings first."}), 401
+
+    jql = f'project = "{project_key_str}" ORDER BY created DESC'
+    params = {"jql": jql, "maxResults": 500, "fields": "customfield_10001"}
+    try:
+        res = requests.get(
+            f"{JIRA_DOMAIN}/rest/api/3/search/jql",
+            headers=headers_dict,
+            params=params,
+            timeout=30,
+        )
+        if not res.ok:
+            return jsonify({"error": f"Jira API error: {res.text}"}), res.status_code
+        teams = set()
+        for issue in (res.json().get("issues") or []):
+            t = _team_name_from_jira_fields(issue.get("fields") or {})
+            if t and t.lower() != "unspecified":
+                teams.add(t)
+        return jsonify({"teams": sorted(teams, key=lambda x: x.lower())})
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/api/sprint_delivery/data", methods=["POST"])
+def sprint_delivery_data():
+    """Fetch tickets for selected team + sprint(s), classify as delivered or spilled."""
+    project_key_str = str(PROJECT_KEY).strip()
+    if not project_key_str:
+        return jsonify({"error": "Missing project key. Save it in Settings first."}), 400
+    headers_dict = dict(HEADERS)
+    if "Authorization" not in headers_dict:
+        return jsonify({"error": "Missing Jira credentials. Save them in Settings first."}), 401
+
+    payload = request.get_json(silent=True) or {}
+    team_name = (payload.get("team_name") or "").strip()
+    sprint_ids = payload.get("sprint_ids") or []
+    if not isinstance(sprint_ids, list):
+        sprint_ids = []
+    sprint_ids = [int(s) for s in sprint_ids if str(s).strip().isdigit()]
+
+    if not sprint_ids:
+        return jsonify({"error": "At least one sprint_id is required."}), 400
+
+    sprint_clause = ", ".join(str(s) for s in sprint_ids)
+    jql = f'project = "{project_key_str}" AND sprint in ({sprint_clause})'
+    if team_name:
+        jql += f' AND team = "{team_name}"'
+    jql += " ORDER BY created DESC"
+
+    fields = "summary,status,priority,issuetype,assignee,labels,customfield_10001,customfield_10020"
+
+    all_issues = []
+    start_at = 0
+    for _ in range(80):
+        params = {"jql": jql, "maxResults": 100, "fields": fields, "startAt": start_at}
+        try:
+            res = requests.get(
+                f"{JIRA_DOMAIN}/rest/api/3/search/jql",
+                headers=headers_dict,
+                params=params,
+                timeout=30,
+            )
+            if not res.ok:
+                break
+            body = res.json()
+            page = body.get("issues") or []
+            all_issues.extend(page)
+            if len(page) < 100:
+                break
+            npt = body.get("nextPageToken")
+            if npt:
+                start_at = npt
+            else:
+                start_at += len(page)
+        except Exception:
+            break
+
+    # Deduplicate
+    seen = set()
+    unique = []
+    for issue in all_issues:
+        k = issue.get("key")
+        if k and k not in seen:
+            seen.add(k)
+            unique.append(issue)
+
+    rows = []
+    for issue in unique:
+        f = issue.get("fields") or {}
+        status_name = ((f.get("status") or {}).get("name") or "Unknown").strip()
+        status_category = ((f.get("status") or {}).get("statusCategory") or {}).get("key", "")
+        priority_name = ((f.get("priority") or {}).get("name") or "Unspecified").strip()
+        issue_type = ((f.get("issuetype") or {}).get("name") or "Task").strip()
+        assignee = ((f.get("assignee") or {}).get("displayName") or "Unassigned")
+        labels = f.get("labels") or []
+        team = _team_name_from_jira_fields(f)
+
+        raw_sprints = f.get("customfield_10020") or []
+        sprint_names = []
+        sprint_ids_on_issue = []
+        if isinstance(raw_sprints, list):
+            for s in raw_sprints:
+                if isinstance(s, dict):
+                    nm = s.get("name")
+                    sid = s.get("id")
+                    if nm:
+                        sprint_names.append(nm)
+                    if sid:
+                        sprint_ids_on_issue.append(int(sid))
+                elif isinstance(s, str):
+                    import re as _re
+                    m_name = _re.search(r"name=([^,\]]+)", s)
+                    m_id = _re.search(r"id=(\d+)", s)
+                    if m_name:
+                        sprint_names.append(m_name.group(1))
+                    if m_id:
+                        sprint_ids_on_issue.append(int(m_id.group(1)))
+
+        # Match which of the requested sprints this ticket belongs to
+        matched_sprint_ids = [sid for sid in sprint_ids_on_issue if sid in sprint_ids]
+
+        is_delivered = _is_done_like_status(status_name, status_category)
+
+        rows.append({
+            "issue_key": issue.get("key"),
+            "summary": f.get("summary") or "",
+            "status": status_name,
+            "priority": priority_name,
+            "issue_type": issue_type,
+            "assignee": assignee,
+            "team_name": team,
+            "sprint_names": sprint_names,
+            "sprint_ids": sprint_ids_on_issue,
+            "matched_sprint_ids": matched_sprint_ids,
+            "labels": labels,
+            "is_delivered": is_delivered,
+        })
+
+    delivered = [r for r in rows if r["is_delivered"]]
+    spilled = [r for r in rows if not r["is_delivered"]]
+
+    return jsonify({
+        "delivered": delivered,
+        "spilled": spilled,
+        "total": len(rows),
+        "delivered_count": len(delivered),
+        "spilled_count": len(spilled),
+    })
+
+
+@app.route("/api/sprint_delivery/ai_summary", methods=["POST"])
+def sprint_delivery_ai_summary():
+    """Generate an AI summary for a sprint delivery using Claude."""
+    payload = request.get_json(silent=True) or {}
+    sprint_name = str(payload.get("sprint_name") or "").strip()
+    delivered = payload.get("delivered") or []
+    spilled = payload.get("spilled") or []
+    model = payload.get("model") or "claude-sonnet-4-20250514"
+
+    anthropic_key = (_get_app_config_value("anthropic_api_key") or "").strip()
+    if not anthropic_key:
+        return jsonify({"error": "Anthropic API key not configured."}), 400
+    if not delivered and not spilled:
+        return jsonify({"error": "No tickets provided."}), 400
+
+    def compact(tickets, limit=60):
+        return [
+            {
+                "key": t.get("issue_key"),
+                "type": t.get("issue_type"),
+                "status": t.get("status"),
+                "priority": t.get("priority"),
+                "summary": str(t.get("summary") or "")[:140],
+                "assignee": t.get("assignee"),
+            }
+            for t in tickets[:limit]
+        ]
+
+    context_label = f" for sprint '{sprint_name}'" if sprint_name else ""
+    prompt = (
+        f"You are a delivery analyst. Below are Jira tickets{context_label}.\n\n"
+        f"DELIVERED ({len(delivered)} tickets): {json.dumps(compact(delivered), ensure_ascii=False)}\n\n"
+        f"SPILLED OVER ({len(spilled)} tickets): {json.dumps(compact(spilled), ensure_ascii=False)}\n\n"
+        "Write a concise sprint delivery summary with these sections:\n"
+        "1. What was delivered (2-4 bullets about key outcomes and customer value)\n"
+        "2. What spilled over (1-3 bullets about unfinished work and potential impact)\n"
+        "3. Overall health (1 bullet: delivery rate assessment)\n\n"
+        "Rules:\n"
+        "- Focus on customer-facing impact, not internal engineering details.\n"
+        "- Keep each bullet short and factual.\n"
+        "- Return ONLY a JSON object with keys 'delivered_summary', 'spilled_summary', 'health' — each being an array of bullet strings.\n"
+        "Example: {\"delivered_summary\": [\"...\"], \"spilled_summary\": [\"...\"], \"health\": [\"...\"]}"
+    )
+
+    try:
+        res = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "Content-Type": "application/json",
+                "x-api-key": anthropic_key,
+                "anthropic-version": "2023-06-01",
+            },
+            json={
+                "model": model,
+                "max_tokens": 800,
+                "messages": [{"role": "user", "content": prompt}],
+            },
+            timeout=60,
+        )
+        if not res.ok:
+            return jsonify({"error": f"Claude HTTP {res.status_code}"}), 502
+        body = res.json()
+        raw = (body.get("content") or [{}])[0].get("text", "").strip()
+        raw = raw.strip("`").strip()
+        if raw.startswith("json"):
+            raw = raw[4:].strip()
+        result = json.loads(raw)
+        return jsonify({"sprint": sprint_name, "summary": result})
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+# ── Assignee Work ─────────────────────────────────────────────────────────────
 
 @app.route("/assignee_work")
 @page_permission_required("assignee_work")
