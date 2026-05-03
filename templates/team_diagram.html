@@ -268,72 +268,91 @@ function renderDiagram(data) {
   const subTeams = data.sub_teams || [];
   const n = subTeams.length;
 
-  // Layout constants
-  const NODE_R = 80;           // sub-team circle radius
-  const MAIN_R = 70;           // main circle radius
-  const NODE_SPACING = 220;    // horizontal spacing between sub-team centers
-  const ROW_Y = 260;           // Y center of sub-team row
-  const MAIN_Y = 90;           // Y center of main node
+  // Aggregate totals for main circle
+  const agg = {
+    total_stories: subTeams.reduce((s, t) => s + (t.total_stories || 0), 0),
+    done_stories:  subTeams.reduce((s, t) => s + (t.done_stories  || 0), 0),
+    total_bugs:    subTeams.reduce((s, t) => s + (t.total_bugs    || 0), 0),
+    done_bugs:     subTeams.reduce((s, t) => s + (t.done_bugs     || 0), 0),
+    prod_issues:   subTeams.reduce((s, t) => s + (t.prod_issues   || 0), 0),
+  };
 
-  const totalW = Math.max(600, n * NODE_SPACING + 80);
-  const svgH = ROW_Y + NODE_R + 30;
+  // Layout — all names sit ABOVE their circle, circles contain only metrics
+  const NODE_R = 80;
+  const MAIN_R = 85;
+  const NODE_SPACING = 220;
+  const NAME_GAP = 14;          // gap between bottom of name text and circle top
+  const MAIN_NAME_Y = 20;       // Y of main team name (top of SVG)
+  const MAIN_Y = MAIN_NAME_Y + 20 + MAIN_R;  // circle center: name + gap + radius
+  const SUB_NAME_OFFSET = 18;   // how far above circle top the sub-name sits
+  const CONNECTOR_GAP = 60;     // vertical space between main circle bottom and sub name
+  const SUB_NAME_Y = MAIN_Y + MAIN_R + CONNECTOR_GAP;          // Y of sub-team names
+  const SUB_CY = SUB_NAME_Y + SUB_NAME_OFFSET + NODE_R;        // Y center of sub circles
+
+  const totalW = Math.max(640, n * NODE_SPACING + 80);
+  const svgH = SUB_CY + NODE_R + 20;
 
   svg.setAttribute('viewBox', `0 0 ${totalW} ${svgH}`);
   svg.setAttribute('height', svgH);
 
   const mainX = totalW / 2;
 
-  // Draw connector lines first (behind circles)
+  // Connector lines (drawn first, behind everything)
   subTeams.forEach((st, i) => {
     const subX = getSubX(i, n, totalW, NODE_SPACING);
-    const line = makeSVG('line', {
+    svg.appendChild(makeSVG('line', {
       class: 'connector',
       x1: mainX, y1: MAIN_Y + MAIN_R,
-      x2: subX,  y2: ROW_Y - NODE_R,
-    });
-    svg.appendChild(line);
+      x2: subX,  y2: SUB_CY - NODE_R,
+    }));
   });
 
-  // Main team circle
+  // ── Main team ──
   const mainG = makeSVG('g', {});
-  mainG.appendChild(makeSVG('circle', {
-    class: 'main-circle', cx: mainX, cy: MAIN_Y, r: MAIN_R,
-  }));
-  mainG.appendChild(svgText(mainTeam, mainX, MAIN_Y, 'main-label', 'middle'));
+  // Name above circle
+  mainG.appendChild(svgText(mainTeam, mainX, MAIN_NAME_Y, 'main-label', 'middle'));
+  // Circle
+  mainG.appendChild(makeSVG('circle', { class: 'main-circle', cx: mainX, cy: MAIN_Y, r: MAIN_R }));
+  // Aggregate metrics inside circle
+  const mY = MAIN_Y - 34;
+  mainG.appendChild(svgText('Stories',     mainX, mY,      'metric-label', 'middle'));
+  mainG.appendChild(svgText(`${agg.done_stories}/${agg.total_stories}`, mainX, mY + 14, 'metric-val metric-done', 'middle'));
+  mainG.appendChild(svgText('Bugs',        mainX, mY + 30, 'metric-label', 'middle'));
+  mainG.appendChild(svgText(`${agg.done_bugs}/${agg.total_bugs}`,       mainX, mY + 44, 'metric-val metric-bug',  'middle'));
+  mainG.appendChild(svgText('Prod Issues', mainX, mY + 60, 'metric-label', 'middle'));
+  mainG.appendChild(svgText(`${agg.prod_issues}`,                       mainX, mY + 74, 'metric-val metric-prod', 'middle'));
   svg.appendChild(mainG);
 
-  // Sub-team circles
+  // ── Sub-team circles ──
   subTeams.forEach((st, i) => {
     const cx = getSubX(i, n, totalW, NODE_SPACING);
-    const cy = ROW_Y;
+    const cy = SUB_CY;
     const g = makeSVG('g', {});
 
+    // Name ABOVE the circle
+    const nameLines = wrapText(st.name, 16);
+    nameLines.forEach((line, li) => {
+      g.appendChild(svgText(line, cx, SUB_NAME_Y + li * 14, 'sub-name', 'middle'));
+    });
+
+    // Circle
     g.appendChild(makeSVG('circle', {
       class: 'sub-circle' + (st.error ? ' has-error' : ''),
       cx, cy, r: NODE_R,
     }));
 
-    // Name (up to 2 lines)
-    const nameLines = wrapText(st.name, 14);
-    const nameStartY = st.error ? cy - 50 : cy - 44;
-    nameLines.forEach((line, li) => {
-      g.appendChild(svgText(line, cx, nameStartY + li * 14, 'sub-name', 'middle'));
-    });
-
+    // Metrics inside circle
     if (st.error) {
       g.appendChild(svgText('Error fetching', cx, cy - 10, 'metric-label', 'middle'));
       g.appendChild(svgText(truncate(st.error, 22), cx, cy + 6, 'metric-label', 'middle'));
     } else {
-      const metricY = cy - 10 + (nameLines.length - 1) * 8;
-      // Stories
-      g.appendChild(svgText('Stories', cx, metricY + 18, 'metric-label', 'middle'));
-      g.appendChild(svgText(`${st.done_stories}/${st.total_stories}`, cx, metricY + 32, 'metric-val metric-done', 'middle'));
-      // Bugs
-      g.appendChild(svgText('Bugs', cx, metricY + 46, 'metric-label', 'middle'));
-      g.appendChild(svgText(`${st.done_bugs}/${st.total_bugs}`, cx, metricY + 60, 'metric-val metric-bug', 'middle'));
-      // Prod Issues
-      g.appendChild(svgText('Prod Issues', cx, metricY + 74, 'metric-label', 'middle'));
-      g.appendChild(svgText(`${st.prod_issues}`, cx, metricY + 88, 'metric-val metric-prod', 'middle'));
+      const mStart = cy - 34;
+      g.appendChild(svgText('Stories',     cx, mStart,      'metric-label', 'middle'));
+      g.appendChild(svgText(`${st.done_stories}/${st.total_stories}`, cx, mStart + 14, 'metric-val metric-done', 'middle'));
+      g.appendChild(svgText('Bugs',        cx, mStart + 30, 'metric-label', 'middle'));
+      g.appendChild(svgText(`${st.done_bugs}/${st.total_bugs}`,       cx, mStart + 44, 'metric-val metric-bug',  'middle'));
+      g.appendChild(svgText('Prod Issues', cx, mStart + 60, 'metric-label', 'middle'));
+      g.appendChild(svgText(`${st.prod_issues}`,                      cx, mStart + 74, 'metric-val metric-prod', 'middle'));
     }
 
     svg.appendChild(g);
