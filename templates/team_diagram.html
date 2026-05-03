@@ -6,19 +6,41 @@
   .sub-team-row { transition: background 0.15s; }
   .sub-team-row:hover { background: rgba(255,255,255,0.04); }
 
-  /* Diagram styles */
-  #diagram-svg .main-circle { fill: #1e3a5f; }
-  #diagram-svg .sub-circle { fill: #1e293b; stroke: #334155; stroke-width: 2; }
-  #diagram-svg .sub-circle.has-error { stroke: #ef4444; }
-  #diagram-svg .connector { stroke: #475569; stroke-width: 1.5; fill: none; }
-  #diagram-svg text { font-family: Inter, sans-serif; fill: #f1f5f9; }
-  #diagram-svg .main-label { font-size: 15px; font-weight: 700; fill: white; }
-  #diagram-svg .sub-name { font-size: 11px; font-weight: 600; fill: #e2e8f0; }
-  #diagram-svg .metric-label { font-size: 9.5px; fill: #94a3b8; }
-  #diagram-svg .metric-val { font-size: 10.5px; font-weight: 600; fill: #cbd5e1; }
-  #diagram-svg .metric-done { fill: #4ade80; }
-  #diagram-svg .metric-bug { fill: #f97316; }
-  #diagram-svg .metric-prod { fill: #f87171; }
+  /* Diagram canvas — white background for presentation quality */
+  #diagram-wrap {
+    background: #ffffff;
+    border-radius: 12px;
+    padding: 28px 20px 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 16px rgba(0,0,0,0.06);
+  }
+
+  /* SVG element styles */
+  #diagram-svg .bg-rect      { fill: #ffffff; }
+  #diagram-svg .main-circle  { fill: #1d3557; }
+  #diagram-svg .sub-circle   { fill: #eef2f9; stroke: #a8bbd6; stroke-width: 1.5; }
+  #diagram-svg .sub-circle.has-error { stroke: #dc2626; }
+  #diagram-svg .connector    { stroke: #94a3b8; stroke-width: 1.2; fill: none; }
+  #diagram-svg text          { font-family: Inter, Helvetica, sans-serif; }
+
+  /* Main circle text — white on dark navy */
+  #diagram-svg .main-label   { font-size: 15px; font-weight: 700; fill: #ffffff; letter-spacing: 0.01em; }
+  #diagram-svg .main-metric-label { font-size: 9px; fill: rgba(255,255,255,0.65); letter-spacing: 0.04em; text-transform: uppercase; }
+  #diagram-svg .main-metric-val   { font-size: 13px; font-weight: 700; }
+
+  /* Sub-circle text — dark on light */
+  #diagram-svg .sub-name     { font-size: 12px; font-weight: 700; fill: #1e293b; letter-spacing: 0.01em; }
+  #diagram-svg .metric-label { font-size: 9px; fill: #64748b; letter-spacing: 0.04em; text-transform: uppercase; }
+  #diagram-svg .metric-val   { font-size: 13px; font-weight: 700; }
+
+  /* Metric value colours — professional, slightly muted */
+  #diagram-svg .c-stories    { fill: #16a34a; }   /* forest green */
+  #diagram-svg .c-bugs       { fill: #b45309; }   /* warm amber   */
+  #diagram-svg .c-prod       { fill: #b91c1c; }   /* deep red     */
+
+  /* Main circle uses lighter tints for contrast on navy */
+  #diagram-svg .cm-stories   { fill: #6ee7b7; }   /* mint green   */
+  #diagram-svg .cm-bugs      { fill: #fcd34d; }   /* golden amber */
+  #diagram-svg .cm-prod      { fill: #fca5a5; }   /* soft red     */
 
   .spinner { border: 3px solid rgba(255,255,255,0.1); border-top-color: #60a5fa; border-radius: 50%; width: 24px; height: 24px; animation: spin 0.7s linear infinite; display: inline-block; vertical-align: middle; }
   @keyframes spin { to { transform: rotate(360deg); } }
@@ -77,13 +99,15 @@
   </div>
 
   <!-- Diagram Section -->
-  <div id="diagram-section" class="hidden bg-gray-800 border border-gray-700 rounded-xl p-6 mb-6">
-    <div class="flex items-center justify-between mb-4">
+  <div id="diagram-section" class="hidden mb-6">
+    <div class="flex items-center justify-between mb-3">
       <h2 class="text-base font-semibold text-white">Diagram</h2>
       <span id="diagram-timestamp" class="text-xs text-gray-500"></span>
     </div>
     <div class="overflow-x-auto">
-      <svg id="diagram-svg" xmlns="http://www.w3.org/2000/svg" width="100%" style="min-width:600px;display:block;"></svg>
+      <div id="diagram-wrap">
+        <svg id="diagram-svg" xmlns="http://www.w3.org/2000/svg" width="100%" style="min-width:600px;display:block;"></svg>
+      </div>
     </div>
   </div>
 
@@ -277,27 +301,28 @@ function renderDiagram(data) {
     prod_issues:   subTeams.reduce((s, t) => s + (t.prod_issues   || 0), 0),
   };
 
-  // Layout — all names sit ABOVE their circle, circles contain only metrics
-  const NODE_R = 80;
-  const MAIN_R = 85;
-  const NODE_SPACING = 220;
-  const NAME_GAP = 14;          // gap between bottom of name text and circle top
-  const MAIN_NAME_Y = 20;       // Y of main team name (top of SVG)
-  const MAIN_Y = MAIN_NAME_Y + 20 + MAIN_R;  // circle center: name + gap + radius
-  const SUB_NAME_OFFSET = 18;   // how far above circle top the sub-name sits
-  const CONNECTOR_GAP = 60;     // vertical space between main circle bottom and sub name
-  const SUB_NAME_Y = MAIN_Y + MAIN_R + CONNECTOR_GAP;          // Y of sub-team names
-  const SUB_CY = SUB_NAME_Y + SUB_NAME_OFFSET + NODE_R;        // Y center of sub circles
+  // Layout constants
+  const NODE_R       = 82;
+  const MAIN_R       = 88;
+  const NODE_SPACING = 230;
+  const PAD_TOP      = 30;   // top padding before main label
+  const MAIN_NAME_Y  = PAD_TOP;
+  const MAIN_Y       = MAIN_NAME_Y + 22 + MAIN_R;
+  const CONNECTOR_GAP = 56;  // space between main circle bottom and sub-team name
+  const SUB_NAME_Y   = MAIN_Y + MAIN_R + CONNECTOR_GAP;
+  const SUB_CY       = SUB_NAME_Y + 20 + NODE_R;
 
-  const totalW = Math.max(640, n * NODE_SPACING + 80);
-  const svgH = SUB_CY + NODE_R + 20;
+  const totalW = Math.max(700, n * NODE_SPACING + 100);
+  const svgH   = SUB_CY + NODE_R + 28;
+  const mainX  = totalW / 2;
 
   svg.setAttribute('viewBox', `0 0 ${totalW} ${svgH}`);
   svg.setAttribute('height', svgH);
 
-  const mainX = totalW / 2;
+  // White background rect (for PDF and screenshot export)
+  svg.appendChild(makeSVG('rect', { class: 'bg-rect', x: 0, y: 0, width: totalW, height: svgH }));
 
-  // Connector lines (drawn first, behind everything)
+  // Connector lines — behind everything
   subTeams.forEach((st, i) => {
     const subX = getSubX(i, n, totalW, NODE_SPACING);
     svg.appendChild(makeSVG('line', {
@@ -313,29 +338,29 @@ function renderDiagram(data) {
   mainG.appendChild(svgText(mainTeam, mainX, MAIN_NAME_Y, 'main-label', 'middle'));
   // Circle
   mainG.appendChild(makeSVG('circle', { class: 'main-circle', cx: mainX, cy: MAIN_Y, r: MAIN_R }));
-  // Aggregate metrics inside circle
-  const mY = MAIN_Y - 34;
-  mainG.appendChild(svgText('Stories',     mainX, mY,      'metric-label', 'middle'));
-  mainG.appendChild(svgText(`${agg.done_stories}/${agg.total_stories}`, mainX, mY + 14, 'metric-val metric-done', 'middle'));
-  mainG.appendChild(svgText('Bugs',        mainX, mY + 30, 'metric-label', 'middle'));
-  mainG.appendChild(svgText(`${agg.done_bugs}/${agg.total_bugs}`,       mainX, mY + 44, 'metric-val metric-bug',  'middle'));
-  mainG.appendChild(svgText('Prod Issues', mainX, mY + 60, 'metric-label', 'middle'));
-  mainG.appendChild(svgText(`${agg.prod_issues}`,                       mainX, mY + 74, 'metric-val metric-prod', 'middle'));
+  // Aggregate metrics inside (light tints on dark navy)
+  const mY = MAIN_Y - 37;
+  mainG.appendChild(svgText('STORIES',     mainX, mY,       'main-metric-label', 'middle'));
+  mainG.appendChild(svgText(`${agg.done_stories}/${agg.total_stories}`, mainX, mY + 15, 'main-metric-val cm-stories', 'middle'));
+  mainG.appendChild(svgText('BUGS',        mainX, mY + 32,  'main-metric-label', 'middle'));
+  mainG.appendChild(svgText(`${agg.done_bugs}/${agg.total_bugs}`,       mainX, mY + 47, 'main-metric-val cm-bugs',    'middle'));
+  mainG.appendChild(svgText('PROD ISSUES', mainX, mY + 64,  'main-metric-label', 'middle'));
+  mainG.appendChild(svgText(`${agg.prod_issues}`,                       mainX, mY + 79, 'main-metric-val cm-prod',    'middle'));
   svg.appendChild(mainG);
 
   // ── Sub-team circles ──
   subTeams.forEach((st, i) => {
     const cx = getSubX(i, n, totalW, NODE_SPACING);
     const cy = SUB_CY;
-    const g = makeSVG('g', {});
+    const g  = makeSVG('g', {});
 
-    // Name ABOVE the circle
-    const nameLines = wrapText(st.name, 16);
+    // Name ABOVE the circle — dark text on white background
+    const nameLines = wrapText(st.name, 17);
     nameLines.forEach((line, li) => {
-      g.appendChild(svgText(line, cx, SUB_NAME_Y + li * 14, 'sub-name', 'middle'));
+      g.appendChild(svgText(line, cx, SUB_NAME_Y + li * 15, 'sub-name', 'middle'));
     });
 
-    // Circle
+    // Circle (light fill, dark text)
     g.appendChild(makeSVG('circle', {
       class: 'sub-circle' + (st.error ? ' has-error' : ''),
       cx, cy, r: NODE_R,
@@ -344,15 +369,15 @@ function renderDiagram(data) {
     // Metrics inside circle
     if (st.error) {
       g.appendChild(svgText('Error fetching', cx, cy - 10, 'metric-label', 'middle'));
-      g.appendChild(svgText(truncate(st.error, 22), cx, cy + 6, 'metric-label', 'middle'));
+      g.appendChild(svgText(truncate(st.error, 22), cx, cy + 8, 'metric-label', 'middle'));
     } else {
-      const mStart = cy - 34;
-      g.appendChild(svgText('Stories',     cx, mStart,      'metric-label', 'middle'));
-      g.appendChild(svgText(`${st.done_stories}/${st.total_stories}`, cx, mStart + 14, 'metric-val metric-done', 'middle'));
-      g.appendChild(svgText('Bugs',        cx, mStart + 30, 'metric-label', 'middle'));
-      g.appendChild(svgText(`${st.done_bugs}/${st.total_bugs}`,       cx, mStart + 44, 'metric-val metric-bug',  'middle'));
-      g.appendChild(svgText('Prod Issues', cx, mStart + 60, 'metric-label', 'middle'));
-      g.appendChild(svgText(`${st.prod_issues}`,                      cx, mStart + 74, 'metric-val metric-prod', 'middle'));
+      const mStart = cy - 37;
+      g.appendChild(svgText('STORIES',     cx, mStart,       'metric-label', 'middle'));
+      g.appendChild(svgText(`${st.done_stories}/${st.total_stories}`, cx, mStart + 15, 'metric-val c-stories', 'middle'));
+      g.appendChild(svgText('BUGS',        cx, mStart + 32,  'metric-label', 'middle'));
+      g.appendChild(svgText(`${st.done_bugs}/${st.total_bugs}`,       cx, mStart + 47, 'metric-val c-bugs',    'middle'));
+      g.appendChild(svgText('PROD ISSUES', cx, mStart + 64,  'metric-label', 'middle'));
+      g.appendChild(svgText(`${st.prod_issues}`,                      cx, mStart + 79, 'metric-val c-prod',    'middle'));
     }
 
     svg.appendChild(g);
