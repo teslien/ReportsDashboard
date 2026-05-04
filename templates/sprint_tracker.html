@@ -117,6 +117,7 @@
   }
   #st-toast-bar.error { background: #dc2626; }
   #st-toast-bar.ok    { background: #16a34a; }
+  #st-toast-bar.warn  { background: #d97706; }
   #st-toast-body {
     display: flex;
     align-items: flex-start;
@@ -136,6 +137,7 @@
   }
   #st-toast-icon.error { background: #fee2e2; color: #dc2626; }
   #st-toast-icon.ok    { background: #dcfce7; color: #16a34a; }
+  #st-toast-icon.warn  { background: #fef3c7; color: #d97706; }
   #st-toast-text {
     flex: 1;
     min-width: 0;
@@ -363,15 +365,15 @@
     const ttl     = document.getElementById("st-toast-title");
     const det     = document.getElementById("st-toast-detail");
     if (!toast) return;
-    bar.className  = type;   // "error" or "ok"
+    bar.className  = type;   // "error" | "ok" | "warn"
     icon.className = type;
-    icon.textContent = type === "ok" ? "✓" : "✕";
+    icon.textContent = type === "ok" ? "✓" : type === "warn" ? "!" : "✕";
     ttl.textContent  = title;
     det.textContent  = detail || "";
     det.style.display = detail ? "" : "none";
     toast.classList.add("visible");
     if (_toastTimer) clearTimeout(_toastTimer);
-    const dur = durationMs ?? (type === "error" ? 0 : 3500);
+    const dur = durationMs ?? (type === "error" ? 0 : type === "warn" ? 8000 : 3500);
     if (dur > 0) _toastTimer = setTimeout(() => toast.classList.remove("visible"), dur);
   }
   document.addEventListener("DOMContentLoaded", () => {
@@ -969,14 +971,19 @@
         body: JSON.stringify({ jql, anthropic_api_key: key || "" }),
         loaderText: "Fetching Jira tickets and generating themes..."
       });
-      const previewText = [
+      const previewLines = [
         `Tickets fetched: ${preview.ticket_count}`,
         `Themes generated: ${preview.theme_count}`,
         `Inferred sprint goal: ${preview.sprint_goal}`,
         "",
         "Themes:",
         ...(preview.themes || []).slice(0, 8).map(t => `- ${t.epic_name || t.theme_key} (${(t.tickets || []).length} tickets)`),
-      ].join("\n");
+      ];
+      if (preview.claude_note) {
+        previewLines.push("", `Note: ${preview.claude_note}`);
+        showToast("warn", "Theme generation notice", preview.claude_note);
+      }
+      const previewText = previewLines.join("\n");
       const confirmDialog = await showDialog({
         title: "Confirm Generated Sprint",
         message: "Review details and confirm sprint creation.",

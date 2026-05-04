@@ -8503,12 +8503,53 @@ def _resolve_epic_summary(issue, jira_domain, jira_headers, epic_cache):
     return summary
 
 
+def _sprint_preview_anthropic_http_timeout():
+    """(connect, read) timeouts for Claude during /api/sprint_tracker/jql/preview.
+
+    Sync Gunicorn workers often use a 30s worker timeout. If this HTTP call blocks
+    longer than that, the master aborts the worker (WORKER TIMEOUT). Default read
+    timeout stays safely below a 30s worker unless you set env vars.
+
+    - SPRINT_PREVIEW_ANTHROPIC_CONNECT_TIMEOUT (default 15)
+    - SPRINT_PREVIEW_ANTHROPIC_READ_TIMEOUT: if unset, min(25, worker_limit - 4)
+      where worker_limit comes from GUNICORN_WORKER_TIMEOUT or GUNICORN_TIMEOUT
+      (default 30). If set explicitly, used as-is (must stay below real Gunicorn
+      --timeout or workers will still be killed).
+    """
+    try:
+        connect = float(os.environ.get("SPRINT_PREVIEW_ANTHROPIC_CONNECT_TIMEOUT", "15"))
+    except ValueError:
+        connect = 15.0
+    explicit_read = os.environ.get("SPRINT_PREVIEW_ANTHROPIC_READ_TIMEOUT")
+    if explicit_read is not None and str(explicit_read).strip() != "":
+        try:
+            read = float(explicit_read)
+        except ValueError:
+            read = 25.0
+    else:
+        try:
+            worker_limit = float(
+                os.environ.get("GUNICORN_WORKER_TIMEOUT")
+                or os.environ.get("GUNICORN_TIMEOUT")
+                or "30"
+            )
+        except ValueError:
+            worker_limit = 30.0
+        safety = 4.0
+        read = min(25.0, max(8.0, worker_limit - safety))
+    return (connect, read)
+
+
 def _generate_themes_with_claude(grouped, anthropic_key):
+    """Returns (theme_by_group_dict, optional_user_message).
+
+    On Anthropic timeout or failure, dict may be {} and themes fall back to epic/summary text.
+    """
     try:
         groups_blob = json.dumps(grouped, ensure_ascii=False)
     except (TypeError, ValueError) as ser_exc:
         print(f"Sprint tracker Claude prompt serialization error: {ser_exc}")
-        return {}
+        return {}, None
     prompt = (
         "You are preparing sprint tracker themes from Jira ticket groups.\n"
         "For EACH group return:\n"
@@ -8520,6 +8561,7 @@ def _generate_themes_with_claude(grouped, anthropic_key):
         "{ \"themes\": [ { \"group_key\": \"...\", \"theme_key\": \"...\", \"epic_name\": \"...\", \"sentence\": \"...\", \"bullets\": [\"...\"] } ] }\n"
         f"Groups:\n{groups_blob}"
     )
+    timeout = _sprint_preview_anthropic_http_timeout()
     try:
         resp = requests.post(
             "https://api.anthropic.com/v1/messages",
@@ -8533,15 +8575,16 @@ def _generate_themes_with_claude(grouped, anthropic_key):
                 "max_tokens": 1800,
                 "messages": [{"role": "user", "content": prompt}],
             },
-            timeout=70,
+            timeout=timeout,
         )
         if not resp.ok:
-            return {}
+            print(f"Claude theme generation HTTP {resp.status_code}: {(resp.text or '')[:500]}")
+            return {}, None
         data = resp.json()
         text = "".join(b.get("text", "") for b in (data.get("content") or []) if b.get("type") == "text")
         m = re.search(r"\{[\s\S]*\}", text)
         if not m:
-            return {}
+            return {}, None
         parsed = json.loads(m.group(0))
         items = parsed.get("themes") or []
         by_group = {}
@@ -8556,10 +8599,23 @@ def _generate_themes_with_claude(grouped, anthropic_key):
                 "sentence": str(t.get("sentence") or "").strip(),
                 "bullets": bullets[:3],
             }
-        return by_group
+        return by_group, None
+    except requests.Timeout:
+        print(
+            "Claude theme generation timed out (Anthropic HTTP). "
+            f"timeout={timeout!r} — raise Gunicorn --timeout or SPRINT_PREVIEW_ANTHROPIC_READ_TIMEOUT if needed."
+        )
+        return {}, (
+            "Theme generation timed out talking to Anthropic; using automatic theme text. "
+            "Increase Gunicorn worker timeout (e.g. --timeout 120) and optionally "
+            "SPRINT_PREVIEW_ANTHROPIC_READ_TIMEOUT if Claude is often slow."
+        )
+    except requests.RequestException as e:
+        print(f"Claude theme generation HTTP error: {e}")
+        return {}, None
     except Exception as e:
         print(f"Claude theme generation error: {e}")
-        return {}
+        return {}, None
 
 
 @app.route("/api/sprint_tracker/jql/preview", methods=["POST"])
@@ -8622,7 +8678,7 @@ def sprint_tracker_jql_preview():
                 "tickets": [{"key": t["ticket_key"], "summary": t["summary"], "description": t["description"]} for t in tickets],
             })
 
-        generated = _generate_themes_with_claude(claude_groups, anthropic_key)
+        generated, claude_note = _generate_themes_with_claude(claude_groups, anthropic_key)
 
         themes = []
         for idx, (group_key, tickets) in enumerate(grouped.items()):
@@ -8656,14 +8712,17 @@ def sprint_tracker_jql_preview():
         else:
             inferred_goal = f"Ship {top_sentences[0]}, {top_sentences[1]}, and {top_sentences[2]}"
 
-        return jsonify({
+        body = {
             "success": True,
             "jql": jql,
             "ticket_count": len(issues),
             "theme_count": len(themes),
             "sprint_goal": inferred_goal,
             "themes": themes,
-        })
+        }
+        if claude_note:
+            body["claude_note"] = claude_note
+        return jsonify(body)
     except Exception as exc:
         import traceback
         traceback.print_exc()
