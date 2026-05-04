@@ -1,7 +1,13 @@
 {% extends "base.html" %}
 {% block title %}Team Diagram Report{% endblock %}
 
+{% block main_class %}pt-24 pb-12 px-4 lg:px-6 max-w-none w-full mx-0{% endblock %}
+
 {% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <style>
   .sub-team-row { transition: background 0.15s; }
   .sub-team-row:hover { background: rgba(255,255,255,0.04); }
@@ -10,8 +16,355 @@
   #diagram-wrap {
     background: #ffffff;
     border-radius: 12px;
-    padding: 28px 20px 20px;
+    padding: 28px 16px 24px;
     box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 16px rgba(0,0,0,0.06);
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  #diagram-svg .summary-panel-bg {
+    fill: #f8fafc;
+    stroke: #e2e8f0;
+    stroke-width: 1;
+  }
+
+  #diagram-svg foreignObject .td-svg-ai-root {
+    font-family: Inter, Helvetica, sans-serif;
+    font-size: 11px;
+    color: #1e293b;
+    height: 100%;
+    overflow: auto;
+    box-sizing: border-box;
+    padding: 14px 16px 12px;
+    background: transparent;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  #diagram-svg foreignObject .td-svg-ai-meta {
+    font-size: 9px;
+    color: #64748b;
+    margin: 0;
+    padding: 0;
+    border: none;
+  }
+
+  /* Source / cache strip — under main summary card */
+  #diagram-svg foreignObject .td-svg-ai-actions {
+    margin: 10px 0 10px;
+    padding-top: 10px;
+    border-top: 1px solid #e2e8f0;
+  }
+
+  #diagram-svg foreignObject .td-svg-ai-meta-footer {
+    margin: 0;
+    padding: 0;
+    border: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    line-height: 1.4;
+  }
+
+  #diagram-svg foreignObject .td-svg-ai-meta .cached { color: #047857; font-weight: 600; }
+  #diagram-svg foreignObject .td-svg-ai-meta .live {
+    color: #1d4ed8;
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    text-decoration-thickness: 1px;
+  }
+  #diagram-svg foreignObject .td-svg-ai-meta .warn { color: #dc2626; font-weight: 600; }
+
+  #diagram-svg foreignObject .td-svg-ai-meta-sep {
+    color: #cbd5e1;
+    font-weight: 500;
+    user-select: none;
+  }
+
+  #diagram-svg foreignObject .td-svg-ai-meta-note {
+    font-size: 8px;
+    font-weight: 500;
+    color: #94a3b8;
+  }
+
+  #diagram-svg foreignObject .td-svg-ai-h {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #475569;
+    margin: 12px 0 6px;
+    border-top: 1px solid #e2e8f0;
+    padding-top: 10px;
+  }
+
+  #diagram-svg foreignObject .td-svg-ai-h.first {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+  }
+
+  /* Primary “Overall” card + optional prod card */
+  #diagram-svg foreignObject .td-svg-ai-section {
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+    background: linear-gradient(180deg, #f8fafc 0%, #ffffff 42%);
+    padding: 10px 12px 11px;
+    margin: 0 0 2px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  }
+
+  #diagram-svg foreignObject .td-svg-ai-section-head {
+    margin-bottom: 8px;
+  }
+
+  #diagram-svg foreignObject .td-svg-ai-badge {
+    display: inline-block;
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #1e293b;
+    background: #e2e8f0;
+    padding: 4px 9px;
+    border-radius: 999px;
+    border: 1px solid #cbd5e1;
+  }
+
+  #diagram-svg foreignObject .td-svg-ai-section-prod {
+    background: linear-gradient(180deg, #fffbeb 0%, #ffffff 42%);
+    border-color: #fde68a;
+  }
+
+  #diagram-svg foreignObject .td-svg-ai-section-prod .td-svg-ai-badge {
+    color: #7c2d12;
+    background: #ffedd5;
+    border-color: #fdba74;
+  }
+
+  #diagram-svg foreignObject .td-svg-ai-section-overall ul.td-svg-ai-ul {
+    margin-bottom: 0;
+  }
+
+  #diagram-svg foreignObject .td-svg-stories-summary-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1;
+  }
+
+  #diagram-svg foreignObject .td-svg-stories-summary-main {
+    font-weight: 600;
+    color: #1e293b;
+  }
+
+  #diagram-svg foreignObject .td-svg-stories-summary-hint {
+    font-size: 8px;
+    font-weight: 500;
+    color: #64748b;
+    line-height: 1.3;
+  }
+
+  /* Collapsible per-story bullets — lives at bottom under cache line */
+  #diagram-svg foreignObject .td-svg-stories-details {
+    margin: 0;
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+    background: #f1f5f9;
+    overflow: hidden;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  }
+
+  #diagram-svg foreignObject .td-svg-stories-details summary {
+    cursor: pointer;
+    font-size: 10px;
+    font-weight: 600;
+    color: #334155;
+    list-style: none;
+    padding: 10px 12px;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.12s ease;
+  }
+
+  #diagram-svg foreignObject .td-svg-stories-details summary:hover {
+    background: #e2e8f0;
+  }
+
+  #diagram-svg foreignObject .td-svg-stories-details summary::-webkit-details-marker {
+    display: none;
+  }
+
+  #diagram-svg foreignObject .td-svg-stories-details .td-svg-expand-icon {
+    font-size: 10px;
+    color: #475569;
+    width: 1.1em;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.18s ease;
+  }
+
+  #diagram-svg foreignObject .td-svg-stories-details[open] .td-svg-expand-icon {
+    transform: rotate(90deg);
+  }
+
+  #diagram-svg foreignObject .td-svg-stories-details .td-svg-stories-inner {
+    padding: 2px 12px 12px;
+    border-top: 1px solid #e2e8f0;
+    background: #ffffff;
+  }
+
+  #diagram-svg foreignObject ul.td-svg-ai-ul {
+    margin: 0;
+    padding-left: 16px;
+    list-style-type: disc;
+  }
+
+  #diagram-svg foreignObject ul.td-svg-ai-ul li {
+    margin-bottom: 8px;
+    line-height: 1.5;
+    color: #334155;
+  }
+
+  #diagram-svg foreignObject ul.td-svg-ai-ul li:last-child {
+    margin-bottom: 0;
+  }
+
+  #diagram-svg foreignObject ul.td-svg-prod-ticket-ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  #diagram-svg foreignObject .td-svg-prod-ticket-li {
+    margin-bottom: 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #f1f5f9;
+    font-size: 10px;
+    line-height: 1.4;
+    color: #334155;
+  }
+
+  #diagram-svg foreignObject .td-svg-prod-ticket-li:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+  }
+
+  #diagram-svg foreignObject .td-svg-prod-key-inline {
+    font-family: ui-monospace, monospace;
+    font-weight: 700;
+    font-size: 10px;
+    margin-right: 6px;
+    white-space: nowrap;
+  }
+
+  #diagram-svg foreignObject .td-svg-prod-sum-inline {
+    display: inline;
+    color: #475569;
+  }
+
+  #diagram-svg foreignObject .td-svg-prod-st {
+    display: block;
+    font-size: 9px;
+    font-weight: 600;
+    color: #64748b;
+    margin-top: 4px;
+  }
+
+  #diagram-svg foreignObject .td-svg-claude-head {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin: 0 0 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #e2e8f0;
+  }
+
+  #diagram-svg foreignObject .td-svg-claude-head-text {
+    flex: 1;
+    min-width: 0;
+  }
+
+  #diagram-svg foreignObject .td-svg-bot-wrap {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+    background: linear-gradient(145deg, #eef2ff 0%, #e0e7ff 100%);
+    border: 1px solid #c7d2fe;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  #diagram-svg foreignObject .td-svg-claude-title {
+    font-size: 12px;
+    font-weight: 800;
+    color: #0f172a;
+    letter-spacing: -0.02em;
+    line-height: 1.25;
+  }
+
+  #diagram-svg foreignObject .td-svg-claude-sub {
+    font-size: 9px;
+    font-weight: 500;
+    color: #64748b;
+    margin-top: 4px;
+    line-height: 1.4;
+  }
+
+  #diagram-svg foreignObject a.td-svg-key-link {
+    color: #2563eb;
+    font-weight: 700;
+    font-family: ui-monospace, monospace;
+    font-size: 10px;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    white-space: nowrap;
+  }
+
+  #diagram-svg foreignObject a.td-svg-key-link:hover {
+    color: #1d4ed8;
+  }
+
+  #diagram-svg foreignObject .td-svg-prod-head {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin: 0 0 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #fed7aa;
+  }
+
+  #diagram-svg foreignObject .td-svg-bug-wrap {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+    background: linear-gradient(145deg, #fff7ed 0%, #ffedd5 100%);
+    border: 1px solid #fdba74;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #c2410c;
+    font-size: 14px;
+  }
+
+  #diagram-svg foreignObject .td-svg-prod-title {
+    font-size: 11px;
+    font-weight: 800;
+    color: #9a3412;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
   }
 
   /* SVG element styles */
@@ -36,28 +389,282 @@
   #diagram-svg .c-stories    { fill: #16a34a; }   /* forest green */
   #diagram-svg .c-bugs       { fill: #b45309; }   /* warm amber   */
   #diagram-svg .c-prod       { fill: #b91c1c; }   /* deep red     */
+  #diagram-svg .c-tests      { fill: #7c3aed; }   /* violet — test automation */
 
   /* Main circle uses lighter tints for contrast on navy */
   #diagram-svg .cm-stories   { fill: #6ee7b7; }   /* mint green   */
   #diagram-svg .cm-bugs      { fill: #fcd34d; }   /* golden amber */
   #diagram-svg .cm-prod      { fill: #fca5a5; }   /* soft red     */
+  #diagram-svg .cm-tests     { fill: #c4b5fd; }   /* light violet */
 
   .spinner { border: 3px solid rgba(255,255,255,0.1); border-top-color: #60a5fa; border-radius: 50%; width: 24px; height: 24px; animation: spin 0.7s linear infinite; display: inline-block; vertical-align: middle; }
   @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Portfolio KPI strip (above diagram) */
+  #team-diagram-kpis.td-kpi-strip {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+    gap: 12px;
+  }
+
+  #team-diagram-kpis .td-kpi-card {
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    padding: 13px 14px 11px;
+    border-top-width: 4px;
+    border-top-style: solid;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+
+  #team-diagram-kpis .td-kpi-card.td-kpi-blue {
+    border-top-color: #2563eb;
+    background: linear-gradient(180deg, #eff6ff 0%, #ffffff 36%);
+  }
+  #team-diagram-kpis .td-kpi-card.td-kpi-teal {
+    border-top-color: #0d9488;
+    background: linear-gradient(180deg, #f0fdfa 0%, #ffffff 36%);
+  }
+  #team-diagram-kpis .td-kpi-card.td-kpi-red {
+    border-top-color: #dc2626;
+    background: linear-gradient(180deg, #fef2f2 0%, #ffffff 36%);
+  }
+  #team-diagram-kpis .td-kpi-card.td-kpi-amber {
+    border-top-color: #d97706;
+    background: linear-gradient(180deg, #fffbeb 0%, #ffffff 36%);
+  }
+  #team-diagram-kpis .td-kpi-card.td-kpi-violet {
+    border-top-color: #7c3aed;
+    background: linear-gradient(180deg, #f5f3ff 0%, #ffffff 36%);
+  }
+  #team-diagram-kpis .td-kpi-card.td-kpi-slate {
+    border-top-color: #475569;
+    background: linear-gradient(180deg, #f1f5f9 0%, #ffffff 36%);
+  }
+
+  #team-diagram-kpis .td-kpi-title {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    color: #64748b;
+    text-transform: uppercase;
+    line-height: 1.25;
+  }
+
+  #team-diagram-kpis .td-kpi-rule {
+    height: 1px;
+    background: #e2e8f0;
+    margin: 8px 0 6px;
+  }
+
+  #team-diagram-kpis .td-kpi-main {
+    font-size: 23px;
+    font-weight: 800;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    margin-bottom: 4px;
+  }
+
+  #team-diagram-kpis .td-kpi-cap {
+    font-size: 10px;
+    color: #94a3b8;
+    font-weight: 500;
+  }
+
+  #team-diagram-kpis .td-kpi-num-blue { color: #2563eb; }
+  #team-diagram-kpis .td-kpi-num-teal { color: #0d9488; }
+  #team-diagram-kpis .td-kpi-num-red { color: #dc2626; }
+  #team-diagram-kpis .td-kpi-num-amber { color: #b45309; }
+  #team-diagram-kpis .td-kpi-num-violet { color: #7c3aed; }
+  #team-diagram-kpis .td-kpi-num-slate { color: #334155; }
+  #team-diagram-kpis .td-kpi-den { color: #475569; font-weight: 700; }
+
+  /* Word cloud (below diagram SVG) */
+  #team-diagram-wordcloud-wrap {
+    background: #ffffff;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 16px rgba(0,0,0,0.06);
+    padding: 20px 20px 16px;
+  }
+
+  #team-diagram-wordcloud-wrap h3 {
+    color: #0f172a;
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    margin: 0 0 4px;
+    text-align: center;
+  }
+
+  #team-diagram-wordcloud-wrap .td-wc-sub {
+    font-size: 11px;
+    color: #64748b;
+    margin: 0 0 16px;
+    font-weight: 500;
+    text-align: center;
+  }
+
+  #team-diagram-wordcloud-wrap .td-wc-canvas-row {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    width: 100%;
+  }
+
+  #team-diagram-wordcloud-canvas {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    max-height: 560px;
+    border-radius: 8px;
+    background: #fafafa;
+    box-sizing: border-box;
+  }
+
+  /* Customers strip */
+  #team-diagram-customers-wrap {
+    background: #ffffff;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 16px rgba(0,0,0,0.06);
+    padding: 18px 20px 16px;
+  }
+
+  #team-diagram-customers-wrap h3 {
+    color: #0f172a;
+    font-size: 13px;
+    font-weight: 800;
+    margin: 0 0 4px;
+    text-align: center;
+  }
+
+  #team-diagram-customers-wrap .td-cust-sub {
+    font-size: 11px;
+    color: #64748b;
+    text-align: center;
+    margin: 0 0 14px;
+  }
+
+  #team-diagram-customers-chips {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  #team-diagram-customers-chips .td-cust-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+    border: 1px solid #cbd5e1;
+    color: #334155;
+  }
+
+  /* Charts grid */
+  #team-diagram-charts-wrap {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+    margin-top: 24px;
+  }
+
+  #team-diagram-charts-wrap .td-chart-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+
+  #team-diagram-charts-wrap .td-chart-card h4 {
+    font-size: 12px;
+    font-weight: 800;
+    color: #0f172a;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin: 0 0 12px;
+  }
+
+  #team-diagram-charts-wrap .td-chart-canvas-h {
+    position: relative;
+    width: 100%;
+    min-height: 220px;
+  }
+
+  /* Presentation mode */
+  #td-pres-toolbar {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    height: 3.5rem;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 1.25rem;
+    background: rgba(255, 255, 255, 0.97);
+    border-bottom: 1px solid #e2e8f0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+
+  body.td-pres-mode > nav {
+    display: none !important;
+  }
+
+  body.td-pres-mode main {
+    padding-top: 3.5rem !important;
+    background: #f1f5f9 !important;
+    min-height: 100vh;
+  }
+
+  body.td-pres-mode #td-pres-toolbar {
+    display: flex !important;
+  }
+
+  body.td-pres-mode #td-page-intro,
+  body.td-pres-mode #td-page-config {
+    display: none !important;
+  }
+
+  body.td-pres-mode #table-section {
+    display: none !important;
+  }
+
+  body.td-pres-mode #diagram-section .diagram-section-heading {
+    color: #0f172a !important;
+  }
+
+  body.td-pres-mode #diagram-section #diagram-timestamp {
+    color: #64748b !important;
+  }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="max-w-5xl mx-auto">
+<div id="td-root" class="w-full max-w-none mx-0">
+
+  <div id="td-pres-toolbar" aria-label="Presentation toolbar">
+    <span id="td-pres-title" class="font-bold text-slate-900 text-base truncate pr-4">Presentation</span>
+    <button id="td-pres-exit" type="button"
+      class="text-sm font-semibold text-slate-700 hover:bg-slate-100 px-4 py-2 rounded-lg border border-slate-300 bg-white shrink-0">
+      Exit presentation <span class="text-slate-400 font-normal">Esc</span>
+    </button>
+  </div>
 
   <!-- Header -->
-  <div class="mb-8">
+  <div id="td-page-intro" class="mb-8">
     <h1 class="text-2xl font-bold text-white mb-1">Team Diagram Report</h1>
-    <p class="text-gray-400 text-sm">Configure your main team and sub-teams with JQL queries, then generate a hierarchical diagram with live Jira metrics.</p>
+    <p class="text-gray-400 text-sm">Under each sub-team: a <strong class="text-gray-300">story tickets</strong> Claude panel, then a linked panel below for <strong class="text-gray-300">production issues &amp; bugs</strong>. Keys link to Jira as <strong class="text-gray-300">(PROJ-123)</strong>. Enter <strong class="text-gray-300">team size</strong> per sub-team: we sum <strong class="text-gray-300">story points</strong> from Jira (<code class="text-gray-300">customfield_10016</code>), treat <strong class="text-gray-300">1 SP = 1 person-day</strong> for <strong class="text-gray-300">estimated days = Σ SP ÷ team size</strong> on each circle, and for the portfolio strip compute <strong class="text-gray-300">avg story points per member per day = Σ SP ÷ Σ team members ÷ 10</strong> calendar days. <strong class="text-gray-300">Cache only</strong> skips new Claude calls. Test case fields optional.</p>
   </div>
 
   <!-- Config Card -->
-  <div class="bg-gray-800 border border-gray-700 rounded-xl p-6 mb-6">
+  <div id="td-page-config" class="bg-gray-800 border border-gray-700 rounded-xl p-6 mb-6">
     <h2 class="text-base font-semibold text-white mb-4">Configuration</h2>
 
     <!-- Main Team -->
@@ -85,7 +692,7 @@
     </div>
 
     <!-- Actions -->
-    <div class="flex items-center gap-3 pt-2 border-t border-gray-700">
+    <div class="flex flex-wrap items-center gap-3 pt-2 border-t border-gray-700">
       <button id="fetch-btn" type="button"
         class="bg-blue-600 hover:bg-blue-500 text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
         <i class="fas fa-diagram-project"></i> Generate Diagram
@@ -94,19 +701,64 @@
         class="bg-gray-700 hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
         <i class="fas fa-file-pdf"></i> Download PDF
       </button>
-      <span id="fetch-status" class="text-sm text-gray-400 hidden"></span>
+      <button id="td-pres-btn" type="button" disabled
+        class="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
+        <i class="fas fa-expand"></i> Presentation mode
+      </button>
+      <label class="flex items-center gap-2 text-xs text-gray-400 cursor-pointer select-none ml-auto sm:ml-0">
+        <input id="ai-cache-only" type="checkbox"
+          class="rounded border-gray-600 bg-gray-900 text-blue-500 focus:ring-blue-500 focus:ring-offset-0">
+        Claude summaries: cache only (reuse stored text, no API call)
+      </label>
+      <span id="fetch-status" class="text-sm text-gray-400 hidden w-full sm:w-auto"></span>
     </div>
   </div>
 
-  <!-- Diagram Section -->
-  <div id="diagram-section" class="hidden mb-6">
-    <div class="flex items-center justify-between mb-3">
-      <h2 class="text-base font-semibold text-white">Diagram</h2>
+  <!-- Diagram Section — uses full main width (see main_class block) -->
+  <div id="diagram-section" class="hidden mb-6 w-full">
+    <div class="flex items-center justify-between mb-3 max-w-none">
+      <h2 class="diagram-section-heading text-base font-semibold text-white">Diagram</h2>
       <span id="diagram-timestamp" class="text-xs text-gray-500"></span>
     </div>
-    <div class="overflow-x-auto">
-      <div id="diagram-wrap">
-        <svg id="diagram-svg" xmlns="http://www.w3.org/2000/svg" width="100%" style="min-width:600px;display:block;"></svg>
+    <div id="team-diagram-kpis" class="td-kpi-strip mb-4" aria-label="Portfolio summary"></div>
+    <div class="overflow-x-auto w-full max-w-none">
+      <div id="diagram-wrap" class="w-full">
+        <svg id="diagram-svg" xmlns="http://www.w3.org/2000/svg" width="100%" style="min-width:720px;display:block;"></svg>
+      </div>
+    </div>
+
+    <div id="team-diagram-wordcloud-wrap" class="hidden mt-6">
+      <h3 id="team-diagram-wordcloud-title">Outcome phrases</h3>
+      <p class="td-wc-sub">Short <strong>2–3 word phrases</strong> from Claude summaries (weighted toward fixes &amp; deliveries). Similar phrases merge (e.g. report / reports / reporting).</p>
+      <div class="td-wc-canvas-row">
+        <canvas id="team-diagram-wordcloud-canvas" width="960" height="560" aria-label="Outcome phrases"></canvas>
+      </div>
+      <p id="team-diagram-wordcloud-empty" class="hidden text-center text-sm text-slate-500 py-10 px-4"></p>
+    </div>
+
+    <div id="team-diagram-customers-wrap" class="hidden mt-6">
+      <h3 id="team-diagram-customers-title">Customers in scope</h3>
+      <p class="td-cust-sub">Unique values from the Jira <strong>Customer</strong> field on tickets returned by your sub-team JQLs.</p>
+      <div id="team-diagram-customers-chips"></div>
+      <p id="team-diagram-customers-empty" class="hidden text-center text-sm text-slate-500 py-6">No customer field values on returned tickets.</p>
+    </div>
+
+    <div id="team-diagram-charts-wrap" class="hidden">
+      <div class="td-chart-card">
+        <h4>Tickets per sub-team</h4>
+        <div class="td-chart-canvas-h"><canvas id="td-chart-tickets-by-team" aria-label="Tickets per sub-team"></canvas></div>
+      </div>
+      <div class="td-chart-card">
+        <h4>Portfolio completion</h4>
+        <div class="td-chart-canvas-h" style="max-width:360px;margin:0 auto;"><canvas id="td-chart-ticket-completion" aria-label="Done vs open tickets"></canvas></div>
+      </div>
+      <div class="td-chart-card">
+        <h4>Work items — done vs open</h4>
+        <div class="td-chart-canvas-h"><canvas id="td-chart-work-stack" aria-label="Stories tasks subtasks"></canvas></div>
+      </div>
+      <div class="td-chart-card">
+        <h4>Bugs — fixed vs open</h4>
+        <div class="td-chart-canvas-h"><canvas id="td-chart-bugs-stack" aria-label="Bugs by sub-team"></canvas></div>
       </div>
     </div>
   </div>
@@ -119,9 +771,13 @@
         <thead>
           <tr class="text-xs text-gray-400 uppercase tracking-wider border-b border-gray-700">
             <th class="text-left py-2 pr-4">Sub-Team</th>
+            <th class="text-center py-2 px-2 whitespace-nowrap">Team Size</th>
+            <th class="text-center py-2 px-2 whitespace-nowrap">&Sigma; SP</th>
+            <th class="text-center py-2 px-2 whitespace-nowrap">Est. Days</th>
             <th class="text-center py-2 px-3">Total Tickets</th>
-            <th class="text-center py-2 px-3">Stories</th>
+            <th class="text-center py-2 px-3 leading-tight max-w-[7rem]">Stories / Tasks / Sub</th>
             <th class="text-center py-2 px-3">Bugs</th>
+            <th class="text-center py-2 px-3">Test Cases</th>
             <th class="text-center py-2 px-3">Prod Issues</th>
             <th class="text-left py-2 pl-3">JQL</th>
           </tr>
@@ -141,11 +797,15 @@
 // ---------------------------------------------------------------------------
 let rowCount = 0;
 
-function addSubTeamRow(name, jql) {
+function addSubTeamRow(name, jql, testTotal, testAuto, teamMembers) {
   rowCount++;
   const id = rowCount;
   const noMsg = document.getElementById('no-subteams-msg');
   if (noMsg) noMsg.classList.add('hidden');
+
+  const tt = testTotal != null && testTotal !== '' ? escHtml(String(testTotal)) : '';
+  const ta = testAuto != null && testAuto !== '' ? escHtml(String(testAuto)) : '';
+  const tm = teamMembers != null && teamMembers !== '' ? escHtml(String(teamMembers)) : '';
 
   const row = document.createElement('div');
   row.className = 'sub-team-row flex items-start gap-2 bg-gray-900/60 border border-gray-700 rounded-lg p-3';
@@ -158,6 +818,26 @@ function addSubTeamRow(name, jql) {
       <textarea placeholder="JQL query (e.g. project = PAY AND sprint in openSprints())"
         rows="2"
         class="w-full bg-gray-800 border border-gray-600 rounded-md px-2.5 py-1.5 text-white text-sm resize-none focus:outline-none focus:border-blue-500 subteam-jql-input font-mono">${escHtml(jql || '')}</textarea>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2">
+        <div>
+          <label class="block text-[10px] font-medium text-gray-500 uppercase tracking-wider mb-0.5">Team size</label>
+          <input type="number" min="1" step="1" placeholder="For SP÷days estimate"
+            value="${tm}"
+            class="w-full bg-gray-800 border border-gray-600 rounded-md px-2.5 py-1.5 text-white text-sm focus:outline-none focus:border-blue-500 subteam-team-members-input">
+        </div>
+        <div>
+          <label class="block text-[10px] font-medium text-gray-500 uppercase tracking-wider mb-0.5">Test cases (total)</label>
+          <input type="number" min="0" step="1" placeholder="Optional — from Jira if empty"
+            value="${tt}"
+            class="w-full bg-gray-800 border border-gray-600 rounded-md px-2.5 py-1.5 text-white text-sm focus:outline-none focus:border-blue-500 subteam-test-total-input">
+        </div>
+        <div>
+          <label class="block text-[10px] font-medium text-gray-500 uppercase tracking-wider mb-0.5">Test cases (automated)</label>
+          <input type="number" min="0" step="1" placeholder="Optional — from Jira if empty"
+            value="${ta}"
+            class="w-full bg-gray-800 border border-gray-600 rounded-md px-2.5 py-1.5 text-white text-sm focus:outline-none focus:border-blue-500 subteam-test-auto-input">
+        </div>
+      </div>
     </div>
     <button type="button" onclick="removeRow(${id})"
       class="mt-1 text-gray-500 hover:text-red-400 transition-colors flex-shrink-0">
@@ -182,6 +862,106 @@ function escHtml(str) {
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+const TEAM_DIAGRAM_JIRA_BASE = ({{ JIRA_DOMAIN | tojson }} || '').replace(/\/+$/, '');
+
+function tdJiraBrowseUrl(key) {
+  const k = String(key || '').trim();
+  const base = TEAM_DIAGRAM_JIRA_BASE || (typeof window !== 'undefined' && window.JIRA_DOMAIN ? String(window.JIRA_DOMAIN).replace(/\/+$/, '') : '');
+  if (!k || !base) return '#';
+  return `${base}/browse/${encodeURIComponent(k)}`;
+}
+
+/** Jira-style issue keys at word boundaries, e.g. TIM-27907 */
+const TD_JIRA_KEY_RE = /\b([A-Z][A-Z0-9]{1,15}-\d+)\b/g;
+
+/** Strip leading markers so we don't show "• : text" after removing PROJ-123 from "PROJ-123: text". */
+function stripLeadingBulletNoise(s) {
+  let t = String(s || '').trim();
+  for (let i = 0; i < 6; i++) {
+    const prev = t;
+    t = t.replace(/^[\s•·\u2022]+/, '');
+    t = t.replace(/^[\-\u2013\u2014]\s*/, '');
+    t = t.replace(/^\d+[.)]\s*/, '');
+    t = t.replace(/^:\s*/, '');
+    t = t.trim();
+    if (t === prev) break;
+  }
+  return t;
+}
+
+function ticketLinkParen(key) {
+  const k = String(key || '').trim();
+  if (!k) return '';
+  const href = tdJiraBrowseUrl(k);
+  return `<a class="td-svg-key-link" href="${escHtml(href)}" target="_blank" rel="noopener noreferrer">(${escHtml(k)})</a>`;
+}
+
+function bulletLiHtml(text) {
+  const raw = stripLeadingBulletNoise(String(text || ''));
+  if (!raw) return '<li style="color:#94a3b8;">—</li>';
+  const keys = [...new Set([...raw.matchAll(TD_JIRA_KEY_RE)].map((m) => m[1]))];
+  let stripped = raw.replace(TD_JIRA_KEY_RE, '').replace(/\s{2,}/g, ' ').trim();
+  stripped = stripped.replace(/\(\s*$/g, '').replace(/^\s*\)\s*/g, '').trim();
+  stripped = stripLeadingBulletNoise(stripped);
+  let bodyHtml;
+  if (!stripped && keys.length) {
+    bodyHtml = '';
+  } else if (!stripped) {
+    bodyHtml = escHtml(raw);
+  } else {
+    bodyHtml = escHtml(stripped);
+  }
+  const suffix = keys.length ? keys.map((k) => ticketLinkParen(k)).join(' ') : '';
+  return `<li>${bodyHtml}${bodyHtml && suffix ? ' ' : ''}${suffix}</li>`;
+}
+
+function prodBugRowLiHtml(row) {
+  const k = String(row.key || '').trim();
+  const sum = String(row.summary || '').trim();
+  const st = String(row.status || '').trim();
+  const href = tdJiraBrowseUrl(k);
+  const sumShort = sum.length > 220 ? `${sum.slice(0, 220)}…` : sum;
+  const keyHtml = k
+    ? `<a class="td-svg-key-link td-svg-prod-key-inline" href="${escHtml(href)}" target="_blank" rel="noopener noreferrer">${escHtml(k)}</a>`
+    : '';
+  return (
+    `<li class="td-svg-prod-ticket-li">${keyHtml}<span class="td-svg-prod-sum-inline">${escHtml(sumShort)}</span>` +
+    `<span class="td-svg-prod-st">${escHtml(st || '—')}</span></li>`
+  );
+}
+
+function claudeBotSvgMarkup(gradId) {
+  const gid = escHtml(gradId);
+  return (
+    `<svg viewBox="0 0 24 24" fill="none" width="18" height="18" aria-hidden="true">` +
+    `<path d="M12 2.5v2.3" stroke="#2563eb" stroke-width="1.4" stroke-linecap="round"/>` +
+    `<circle cx="12" cy="2" r="1.2" fill="#60a5fa"/>` +
+    `<rect x="4.2" y="6.2" width="15.6" height="13.6" rx="4.2" fill="url(#${gid})" stroke="#93c5fd" stroke-width="1"/>` +
+    `<circle cx="9.2" cy="11.6" r="1.35" fill="#1e3a8a"/>` +
+    `<circle cx="14.8" cy="11.6" r="1.35" fill="#1e3a8a"/>` +
+    `<rect x="8.2" y="15.1" width="7.6" height="1.7" rx="0.85" fill="#3b82f6"/>` +
+    `<defs><linearGradient id="${gid}" x1="4" y1="6" x2="20" y2="20" gradientUnits="userSpaceOnUse">` +
+    `<stop stop-color="#eff6ff"/><stop offset="1" stop-color="#dbeafe"/></linearGradient></defs></svg>`
+  );
+}
+
+function parseOptionalNonNegInt(val) {
+  const t = String(val ?? '').trim();
+  if (t === '') return null;
+  const n = parseInt(t, 10);
+  if (Number.isNaN(n)) return null;
+  return Math.max(0, n);
+}
+
+/** Positive team size only; empty or invalid → omit from payload */
+function parseOptionalTeamMembers(val) {
+  const t = String(val ?? '').trim();
+  if (t === '') return null;
+  const n = parseInt(t, 10);
+  if (Number.isNaN(n) || n < 1) return null;
+  return n;
+}
+
 function getConfig() {
   const mainTeam = document.getElementById('main-team-input').value.trim();
   const rows = document.querySelectorAll('#subteams-container .sub-team-row');
@@ -189,22 +969,57 @@ function getConfig() {
   rows.forEach(row => {
     const name = row.querySelector('.subteam-name-input').value.trim();
     const jql = row.querySelector('.subteam-jql-input').value.trim();
-    if (name || jql) subTeams.push({ name, jql });
+    const testTotal = parseOptionalNonNegInt(row.querySelector('.subteam-test-total-input')?.value);
+    const testAuto = parseOptionalNonNegInt(row.querySelector('.subteam-test-auto-input')?.value);
+    const teamMembers = parseOptionalTeamMembers(row.querySelector('.subteam-team-members-input')?.value);
+    if (name || jql) {
+      const entry = { name, jql };
+      if (teamMembers !== null) entry.team_member_count = teamMembers;
+      if (testTotal !== null) entry.test_cases_total = testTotal;
+      if (testAuto !== null) entry.test_cases_automated = testAuto;
+      subTeams.push(entry);
+    }
   });
   return { mainTeam, subTeams };
 }
 
-// Seed with 3 pre-filled rows on load
+function tdRandomTeamSeed() {
+  const teamMembers = String(Math.floor(5 + Math.random() * 6));
+  const testTotal = Math.floor(55 + Math.random() * 95);
+  const autoHi = Math.max(10, Math.floor(testTotal * 0.58));
+  const testAuto = Math.max(8, Math.floor(10 + Math.random() * (autoHi - 9)));
+  return {
+    teamMembers,
+    testTotal: String(testTotal),
+    testAuto: String(Math.min(testAuto, testTotal - 6)),
+  };
+}
+
+// Seed with 3 pre-filled rows (sprint JQLs) + sample team size / test counts on load
 document.addEventListener('DOMContentLoaded', () => {
-  const defaultJql = 'sprint = "RPT 0402_26 Biweekly(Apr 24)"';
-  addSubTeamRow('Payroll Core',  defaultJql);
-  addSubTeamRow('Reports Team',  defaultJql);
-  addSubTeamRow('Quickwins',     defaultJql);
+  const seeds = [
+    {
+      name: 'Payroll (PR)',
+      jql: 'sprint = "PR 0501_26 Biweekly(Apr 24)" AND labels NOT IN (QuickWins, Reports-FocusTeam) ORDER BY Rank ASC',
+    },
+    {
+      name: 'Reports-FocusTeam',
+      jql: 'sprint = "RPT 0501_26 Biweekly(Apr 24)" AND labels = Reports-FocusTeam ORDER BY Rank ASC',
+    },
+    {
+      name: 'QuickWins',
+      jql: 'sprint = "QW 0501_26 Biweekly (24 Apr)" AND labels = QuickWins ORDER BY Rank ASC',
+    },
+  ];
+  seeds.forEach((s) => {
+    const { teamMembers, testTotal, testAuto } = tdRandomTeamSeed();
+    addSubTeamRow(s.name, s.jql, testTotal, testAuto, teamMembers);
+  });
   checkNoSubteams();
 });
 
 document.getElementById('add-subteam-btn').addEventListener('click', () => {
-  addSubTeamRow('', '');
+  addSubTeamRow('', '', '', '', '');
 });
 
 // ---------------------------------------------------------------------------
@@ -229,17 +1044,30 @@ document.getElementById('fetch-btn').addEventListener('click', async () => {
     const res = await fetch('/api/team_diagram/fetch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ main_team: mainTeam, sub_teams: valid }),
+      body: JSON.stringify({
+        main_team: mainTeam,
+        sub_teams: valid,
+        ai_cache_only: document.getElementById('ai-cache-only').checked,
+      }),
     });
     const data = await res.json();
     if (!res.ok) { alert(data.error || 'Failed to fetch data.'); return; }
 
     lastResult = data;
-    renderDiagram(data);
-    renderTable(data);
     document.getElementById('diagram-section').classList.remove('hidden');
     document.getElementById('table-section').classList.remove('hidden');
+    requestAnimationFrame(() => {
+      renderTeamDiagramKpis(data);
+      renderDiagram(data);
+      renderTable(data);
+      requestAnimationFrame(() => {
+        renderTeamWordCloud(data);
+        renderPortfolioCustomers(data);
+        requestAnimationFrame(() => renderTeamDiagramCharts(data));
+      });
+    });
     document.getElementById('pdf-btn').disabled = false;
+    document.getElementById('td-pres-btn').disabled = false;
     document.getElementById('diagram-timestamp').textContent = 'Generated: ' + new Date().toLocaleString();
     status.textContent = `Fetched ${data.sub_teams.length} sub-team(s)`;
   } catch (e) {
@@ -250,29 +1078,250 @@ document.getElementById('fetch-btn').addEventListener('click', async () => {
   }
 });
 
+/** Match dashboard colors on a light canvas (page background is dark Tailwind). */
+function tdPdfNormalizeCloneForPrint(doc, rootId) {
+  const root = doc.getElementById(rootId);
+  if (!root) return;
+  root.style.background = '#f8fafc';
+  root.style.color = '#1e293b';
+  if (rootId === 'diagram-section') {
+    root.querySelectorAll('.diagram-section-heading').forEach((n) => {
+      n.style.color = '#0f172a';
+    });
+    root.querySelectorAll('#diagram-timestamp').forEach((n) => {
+      n.style.color = '#64748b';
+    });
+    root.querySelectorAll('.text-white').forEach((n) => {
+      n.style.color = '#1e293b';
+    });
+    root.querySelectorAll('.text-gray-300').forEach((n) => {
+      n.style.color = '#475569';
+    });
+    root.querySelectorAll('.text-gray-400').forEach((n) => {
+      n.style.color = '#64748b';
+    });
+    root.querySelectorAll('h3').forEach((n) => {
+      n.style.color = '#0f172a';
+    });
+    root.querySelectorAll('strong').forEach((n) => {
+      n.style.color = '#0f172a';
+    });
+  }
+  if (rootId === 'table-section') {
+    root.style.background = '#ffffff';
+    root.style.borderColor = '#e2e8f0';
+    root.querySelectorAll('h2').forEach((n) => {
+      n.style.color = '#0f172a';
+    });
+    root.querySelectorAll('table').forEach((t) => {
+      t.style.color = '#334155';
+    });
+    root.querySelectorAll('th').forEach((th) => {
+      th.style.color = '#475569';
+      th.style.borderColor = '#e2e8f0';
+    });
+    root.querySelectorAll('td').forEach((td) => {
+      td.style.color = '#334155';
+    });
+    root.querySelectorAll('.text-gray-400').forEach((n) => {
+      n.style.color = '#64748b';
+    });
+  }
+}
+
+/** Stack snapshot canvases vertically and scale so one raster fits a single PDF page. */
+function tdStackCanvasesForSinglePage(canvases, gapPx) {
+  const gap = gapPx ?? 10;
+  const list = canvases.filter((c) => c && c.width >= 4 && c.height >= 4);
+  if (!list.length) return null;
+  const maxSrcW = Math.max(...list.map((c) => c.width));
+  let W = Math.min(5600, maxSrcW);
+  const heightsAt = (w) => list.map((c) => Math.max(1, Math.round(c.height * (w / c.width))));
+  let scaledHeights = heightsAt(W);
+  let totalH = scaledHeights.reduce((a, h) => a + h, 0) + gap * (list.length - 1);
+  const MAX_PIXELS = 95_000_000;
+  if (W * totalH > MAX_PIXELS) {
+    const s = Math.sqrt(MAX_PIXELS / (W * totalH));
+    W = Math.max(480, Math.floor(W * s));
+    scaledHeights = heightsAt(W);
+    totalH = scaledHeights.reduce((a, h) => a + h, 0) + gap * (list.length - 1);
+  }
+  const master = document.createElement('canvas');
+  master.width = W;
+  master.height = totalH;
+  const ctx = master.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, W, totalH);
+  let y = 0;
+  list.forEach((c, i) => {
+    const h = scaledHeights[i];
+    ctx.drawImage(c, 0, 0, c.width, c.height, 0, y, W, h);
+    y += h + gap;
+  });
+  return master;
+}
+
+function tdAddCanvasFitSinglePage(doc, canvas) {
+  if (!canvas || canvas.width < 2 || canvas.height < 2) return;
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const margin = 6;
+  const contentW = pageW - 2 * margin;
+  const contentH = pageH - 2 * margin;
+  const scale = Math.min(contentW / canvas.width, contentH / canvas.height);
+  const drawW = canvas.width * scale;
+  const drawH = canvas.height * scale;
+  const ox = margin + (contentW - drawW) / 2;
+  const oy = margin + (contentH - drawH) / 2;
+  doc.addImage(canvas.toDataURL('image/png', 0.92), 'PNG', ox, oy, drawW, drawH);
+}
+
+/** Inline SVG width="100%" often rasterizes as empty under html2canvas; pin to px while exporting. */
+function tdPinSvgPixelSizingForExport() {
+  const svg = document.getElementById('diagram-svg');
+  if (!svg) return () => {};
+  const rb = svg.getBoundingClientRect();
+  const w = Math.max(1, Math.ceil(rb.width));
+  const h = Math.max(1, Math.ceil(rb.height));
+  const prev = {
+    wa: svg.getAttribute('width'),
+    ha: svg.getAttribute('height'),
+    sw: svg.style.width,
+    sh: svg.style.height,
+  };
+  svg.setAttribute('width', String(w));
+  svg.setAttribute('height', String(h));
+  svg.style.width = `${w}px`;
+  svg.style.height = `${h}px`;
+  return () => {
+    if (prev.wa == null) svg.removeAttribute('width');
+    else svg.setAttribute('width', prev.wa);
+    if (prev.ha == null) svg.removeAttribute('height');
+    else svg.setAttribute('height', prev.ha);
+    svg.style.width = prev.sw;
+    svg.style.height = prev.sh;
+  };
+}
+
+async function tdCaptureRegionToCanvas(el) {
+  const overflowRestore = [];
+  el.querySelectorAll('.overflow-x-auto').forEach((node) => {
+    overflowRestore.push([node, node.style.overflow, node.style.maxWidth]);
+    node.style.overflow = 'visible';
+    node.style.maxWidth = 'none';
+  });
+  const unpinSvg = tdPinSvgPixelSizingForExport();
+
+  const maxSide = 8192;
+  const pr = Math.min(2, maxSide / Math.max(1, el.offsetWidth, el.offsetHeight, el.scrollWidth, el.scrollHeight));
+
+  let canvas;
+  try {
+    const filterToolbar = (node) =>
+      !(node instanceof HTMLElement && node.classList && node.classList.contains('td-pres-toolbar'));
+
+    if (typeof htmlToImage !== 'undefined' && typeof htmlToImage.toCanvas === 'function') {
+      try {
+        canvas = await htmlToImage.toCanvas(el, {
+          cacheBust: true,
+          backgroundColor: '#ffffff',
+          pixelRatio: pr,
+          skipFonts: true,
+          filter: filterToolbar,
+        });
+      } catch (e) {
+        console.warn('html-to-image capture failed', e);
+        canvas = null;
+      }
+    }
+
+    const unusable = !canvas || canvas.width < 16 || canvas.height < 16;
+    if (unusable && typeof html2canvas === 'function') {
+      canvas = await html2canvas(el, {
+        scale: pr,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+        foreignObjectRendering: false,
+        onclone(clonedDoc) {
+          tdPdfNormalizeCloneForPrint(clonedDoc, el.id);
+          clonedDoc.querySelectorAll('.overflow-x-auto').forEach((node) => {
+            node.style.overflow = 'visible';
+            node.style.maxWidth = 'none';
+          });
+          const liveSvg = document.getElementById('diagram-svg');
+          const cSvg = clonedDoc.getElementById('diagram-svg');
+          if (liveSvg && cSvg) {
+            const rb = liveSvg.getBoundingClientRect();
+            const sw = Math.max(1, Math.ceil(rb.width));
+            const sh = Math.max(1, Math.ceil(rb.height));
+            cSvg.setAttribute('width', String(sw));
+            cSvg.setAttribute('height', String(sh));
+            cSvg.style.width = `${sw}px`;
+            cSvg.style.height = `${sh}px`;
+          }
+        },
+      });
+    }
+  } finally {
+    unpinSvg();
+    overflowRestore.forEach(([node, ov, mw]) => {
+      node.style.overflow = ov;
+      node.style.maxWidth = mw;
+    });
+  }
+
+  return canvas;
+}
+
 document.getElementById('pdf-btn').addEventListener('click', async () => {
   if (!lastResult) return;
+  const JsPdf = window.jspdf && window.jspdf.jsPDF;
+  if (!JsPdf || (!window.htmlToImage && !window.html2canvas)) {
+    alert('PDF libraries failed to load. Refresh the page and try again.');
+    return;
+  }
   const btn = document.getElementById('pdf-btn');
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Generating…';
   try {
-    const res = await fetch('/api/team_diagram/pdf', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(lastResult),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      alert(err.error || 'PDF generation failed.');
+    await document.fonts.ready.catch(() => {});
+    const diagramSec = document.getElementById('diagram-section');
+    const tableSec = document.getElementById('table-section');
+    if (!diagramSec || diagramSec.classList.contains('hidden')) {
+      alert('Generate the diagram first.');
       return;
     }
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `team_diagram_${lastResult.main_team.replace(/\s+/g,'_')}.pdf`;
-    a.click();
-    URL.revokeObjectURL(url);
+    diagramSec.scrollIntoView({ block: 'start', behavior: 'auto' });
+    await new Promise((r) => setTimeout(r, 300));
+
+    const captureParts = [];
+    const diagramCanvas = await tdCaptureRegionToCanvas(diagramSec);
+    if (!diagramCanvas || diagramCanvas.width < 8 || diagramCanvas.height < 8) {
+      alert('PDF snapshot was empty. Try Chrome, ensure the diagram is visible, then retry.');
+      return;
+    }
+    captureParts.push(diagramCanvas);
+
+    if (tableSec && !tableSec.classList.contains('hidden')) {
+      tableSec.scrollIntoView({ block: 'start', behavior: 'auto' });
+      await new Promise((r) => setTimeout(r, 250));
+      const tableCanvas = await tdCaptureRegionToCanvas(tableSec);
+      if (tableCanvas && tableCanvas.width >= 8 && tableCanvas.height >= 8) {
+        captureParts.push(tableCanvas);
+      }
+    }
+
+    const composite = tdStackCanvasesForSinglePage(captureParts, 10);
+    if (!composite) {
+      alert('Could not build PDF image.');
+      return;
+    }
+    const doc = new JsPdf({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    tdAddCanvasFitSinglePage(doc, composite);
+
+    const stamp = String(lastResult.main_team || 'team_diagram').replace(/[^\w\- ]+/g, '_').replace(/\s+/g, '_');
+    doc.save(`team_diagram_${stamp}_${Date.now()}.pdf`);
   } catch (e) {
     alert('Error: ' + e.message);
   } finally {
@@ -280,6 +1329,601 @@ document.getElementById('pdf-btn').addEventListener('click', async () => {
     btn.innerHTML = '<i class="fas fa-file-pdf"></i> Download PDF';
   }
 });
+
+// ---------------------------------------------------------------------------
+// Word cloud (after diagram — corpus from Claude bullets + team labels)
+// ---------------------------------------------------------------------------
+const TD_WC_STOP = new Set(
+  `a an the and or but if in on at to for of as is was were been be are being
+  has have had do did does done doing so such than then them these those this that
+  with from into over under again once here there when where while why how all each
+  both few more most other some only own same too very can could should would may might
+  must will just also back above below between before after during without within any
+  many much per via among including multiple various several regarding concerning across
+  towards`.trim().split(/\s+/),
+);
+
+/** Lines mentioning fixes, resolutions, or improvements get repeated in the corpus for emphasis */
+const TD_WC_FOCUS_LINE =
+  /\b(fix(?:ed|es)?|fixes|resolved?|resolv(?:es|ing)|improv(?:es|ed|ing)|improvements?|enhancement?s?|deploy(?:ed|ment)?|complet(?:ed|ion)?|completed|added|clos(?:ed|ure)?|deliver(?:ed|y)?|address(?:ed|ing)?|correct(?:ed|ions?)?|patch(?:es|ed)?|implement(?:ed|ations?)?|shipped?|mitigat(?:e|ed|ion)|bug\s*fix|bugfix|works?\s+now|rolled\s+out|fixing)\b/i;
+
+/** Words that rarely carry “what was done” alone — phrase must include something else. */
+const TD_WC_PHRASE_NOISE = new Set(
+  `team teams ticket tickets issue issues story stories bug bugs sprint sprints task tasks subtask subtasks jira jql member members week weeks day days`.split(/\s+/),
+);
+
+/** Rough stem for merging report / reports / reporting etc. */
+function wcNormalizeStem(w) {
+  let s = String(w || '').toLowerCase();
+  if (s.length <= 3) return s;
+  if (s.endsWith('ies') && s.length > 5) return `${s.slice(0, -3)}y`;
+  if (s.endsWith('ing') && s.length > 6) return s.slice(0, -3);
+  if (s.endsWith('ed') && s.length > 5) return s.slice(0, -2);
+  if (s.endsWith('es') && s.length >= 5) return s.slice(0, -2);
+  if (s.endsWith('s') && !s.endsWith('ss') && s.length > 5 && /[^aeiouy]s$/.test(s)) return s.slice(0, -1);
+  return s;
+}
+
+function wcCleanBulletLine(s) {
+  return String(s || '')
+    .replace(/\([A-Z][A-Z0-9]{1,15}-\d+\)/g, ' ')
+    .replace(/\b[A-Z][A-Z0-9]{1,15}-\d+\b/g, ' ')
+    .replace(/https?:\/\/\S+/gi, ' ')
+    .trim();
+}
+
+function wcSentenceChunks(s) {
+  return wcCleanBulletLine(s)
+    .split(/[\n\r;.]+/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
+function wcTokenizeChunk(chunk) {
+  return chunk
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 2 && !/^\d+$/.test(t));
+}
+
+function wcPhraseStemKey(words) {
+  return words.map((w) => wcNormalizeStem(w)).join('|');
+}
+
+function wcTitleCasePhrase(words) {
+  return words
+    .map((w) => {
+      const low = String(w).toLowerCase();
+      if (/^\d/.test(low)) return low;
+      if (low === '401k') return '401k';
+      if (low.length <= 1) return low.toUpperCase();
+      return low.charAt(0).toUpperCase() + low.slice(1);
+    })
+    .join(' ');
+}
+
+function wcPhraseHasContent(words) {
+  return words.some((w) => !TD_WC_STOP.has(w) && !TD_WC_PHRASE_NOISE.has(w));
+}
+
+/** Phrases containing these patterns read as “what was done”. */
+const TD_WC_OUTCOME_IN_PHRASE =
+  /\b(fix|fixes|fixed|resolv|resolved|complet|completed|deploy|delivered|deliver|implement|implemented|address|addressed|correct|corrected|patch|patched|clos|closed|improv|improved|enhanc)\w*\b/i;
+
+/** 2–3 word phrases weighted toward “done” lines so the cloud reads as outcomes (e.g. “Payroll Report Fixes”). */
+function extractPhraseCloudPairs(data) {
+  const phraseGroups = new Map();
+
+  function recordPhrase(words, weight) {
+    if (words.length < 2 || words.length > 3) return;
+    const lw = words.map((w) => String(w).toLowerCase());
+    if (!wcPhraseHasContent(lw)) return;
+    const key = wcPhraseStemKey(lw);
+    const display = wcTitleCasePhrase(lw);
+    let g = phraseGroups.get(key);
+    if (!g) {
+      phraseGroups.set(key, { total: weight, display, wc: lw.length });
+      return;
+    }
+    g.total += weight;
+    if (lw.length > g.wc || (lw.length === g.wc && display.length > g.display.length)) {
+      g.display = display;
+      g.wc = lw.length;
+    }
+  }
+
+  const seedTokens = [];
+  const main = String(data.main_team || '').trim();
+  if (main) seedTokens.push(...wcTokenizeChunk(main));
+  const pcust = data.portfolio_customer_names;
+  if (Array.isArray(pcust)) {
+    pcust.forEach((c) => seedTokens.push(...wcTokenizeChunk(String(c || ''))));
+  }
+  for (const st of data.sub_teams || []) {
+    seedTokens.push(...wcTokenizeChunk(String(st.name || '')));
+    const ai = st.ai || {};
+    for (const key of ['stories_bullets', 'overall_bullets', 'prod_bullets']) {
+      const arr = ai[key];
+      if (!Array.isArray(arr)) continue;
+      arr.forEach((line) => {
+        const s = String(line || '').trim();
+        if (!s) return;
+        const focus = TD_WC_FOCUS_LINE.test(s);
+        const mult = focus ? 2.8 : 1;
+        wcSentenceChunks(s).forEach((chunk) => {
+          const tokens = wcTokenizeChunk(chunk);
+          if (tokens.length < 2) return;
+          for (let i = 0; i <= tokens.length - 3; i++) {
+            const slice3 = tokens.slice(i, i + 3);
+            const ob = TD_WC_OUTCOME_IN_PHRASE.test(slice3.join(' ')) ? 1.45 : 1;
+            recordPhrase(slice3, 2.4 * mult * ob);
+          }
+          for (let i = 0; i <= tokens.length - 2; i++) {
+            const slice2 = tokens.slice(i, i + 2);
+            const ob = TD_WC_OUTCOME_IN_PHRASE.test(slice2.join(' ')) ? 1.35 : 1;
+            recordPhrase(slice2, 1 * mult * ob);
+          }
+        });
+      });
+    }
+  }
+
+  for (let i = 0; i <= seedTokens.length - 2; i++) {
+    recordPhrase([seedTokens[i], seedTokens[i + 1]], 0.32);
+  }
+
+  return [...phraseGroups.values()]
+    .map((v) => [v.display, v.total])
+    .filter(([, t]) => t >= 0.45)
+    .sort((a, b) => b[1] - a[1] || b[0].length - a[0].length)
+    .slice(0, 52);
+}
+
+function wcRectsOverlap(a, b, pad) {
+  const p = pad || 2;
+  return !(
+    a.x + a.w + p < b.x
+    || b.x + b.w + p < a.x
+    || a.y + a.h + p < b.y
+    || b.y + b.h + p < a.y
+  );
+}
+
+/** Axis-aligned bounds for text box (tw × th) centered at (cx,cy) rotated by rot radians */
+function wcRotatedTextAabb(cx, cy, tw, th, rot) {
+  const ac = Math.abs(Math.cos(rot));
+  const as = Math.abs(Math.sin(rot));
+  const rw = tw * ac + th * as;
+  const rh = tw * as + th * ac;
+  return { x: cx - rw / 2, y: cy - rh / 2, w: rw, h: rh };
+}
+
+function renderTeamWordCloud(data) {
+  const wrap = document.getElementById('team-diagram-wordcloud-wrap');
+  const canvas = document.getElementById('team-diagram-wordcloud-canvas');
+  const emptyEl = document.getElementById('team-diagram-wordcloud-empty');
+  const titleEl = document.getElementById('team-diagram-wordcloud-title');
+  if (!wrap || !canvas || !emptyEl) return;
+
+  const mainName = String(data.main_team || 'Team').trim() || 'Team';
+  if (titleEl) titleEl.textContent = `Outcome phrases — ${mainName}`;
+
+  const pairs = extractPhraseCloudPairs(data);
+
+  if (pairs.length < 4) {
+    wrap.classList.remove('hidden');
+    canvas.classList.add('hidden');
+    emptyEl.classList.remove('hidden');
+    emptyEl.textContent =
+      'Not enough phrases yet. Run Generate with Claude summaries (turn off “cache only” if bullets are empty), then refresh.';
+    return;
+  }
+
+  wrap.classList.remove('hidden');
+  canvas.classList.remove('hidden');
+  emptyEl.classList.add('hidden');
+
+  const margin = 10;
+  const cssW = Math.min(1080, Math.max(640, wrap.clientWidth || 960));
+  const cssH = Math.round(cssW * 0.58);
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.style.width = `${cssW}px`;
+  canvas.style.height = `${cssH}px`;
+  canvas.width = Math.floor(cssW * dpr);
+  canvas.height = Math.floor(cssH * dpr);
+
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = '#fafafa';
+  ctx.fillRect(0, 0, cssW, cssH);
+
+  const maxC = pairs[0][1];
+  const placed = [];
+  const palette = ['#1e40af', '#0d9488', '#b45309', '#7c3aed', '#1d3557', '#0369a1', '#be185d', '#0f766e', '#c2410c'];
+  const rotations = [0, Math.PI / 2, -Math.PI / 2];
+
+  pairs.forEach(([phrase, c], idx) => {
+    let fontSize = Math.round(Math.min(36, Math.max(11, 11 + (c / maxC) * 24)));
+    const maxTextW = cssW - margin * 2 - 8;
+    ctx.font = `700 ${fontSize}px Inter, system-ui, -apple-system, sans-serif`;
+    while (fontSize > 10 && ctx.measureText(phrase).width > maxTextW) {
+      fontSize -= 1;
+      ctx.font = `700 ${fontSize}px Inter, system-ui, -apple-system, sans-serif`;
+    }
+    const tw = ctx.measureText(phrase).width;
+    const th = fontSize * 1.25;
+    const maxSpan = Math.max(tw, th);
+    if (maxSpan > cssW - margin * 2 || maxSpan > cssH - margin * 2) return;
+
+    let placedOk = false;
+    for (let attempt = 0; attempt < 1400 && !placedOk; attempt++) {
+      const rot = rotations[(idx + attempt) % rotations.length];
+      const spiralAngle = attempt * 0.37;
+      const radius = 12 + attempt * 1.28;
+      const cx = cssW / 2 + Math.cos(spiralAngle) * radius;
+      const cy = cssH / 2 + Math.sin(spiralAngle) * radius;
+
+      const rect = wcRotatedTextAabb(cx, cy, tw, th, rot);
+      if (
+        rect.x < margin
+        || rect.y < margin
+        || rect.x + rect.w > cssW - margin
+        || rect.y + rect.h > cssH - margin
+      ) {
+        continue;
+      }
+
+      let hit = false;
+      for (let pi = 0; pi < placed.length; pi++) {
+        if (wcRectsOverlap(rect, placed[pi], 4)) {
+          hit = true;
+          break;
+        }
+      }
+      if (hit) continue;
+
+      placed.push(rect);
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(rot);
+      ctx.fillStyle = palette[idx % palette.length];
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(phrase, 0, 0);
+      ctx.restore();
+      placedOk = true;
+    }
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Portfolio customers (Jira Customer field) + Chart.js graphs
+// ---------------------------------------------------------------------------
+let tdChartInstances = [];
+
+function destroyTdCharts() {
+  tdChartInstances.forEach((c) => {
+    try {
+      c.destroy();
+    } catch (e) {
+      /* noop */
+    }
+  });
+  tdChartInstances = [];
+}
+
+function renderPortfolioCustomers(data) {
+  const wrap = document.getElementById('team-diagram-customers-wrap');
+  const chips = document.getElementById('team-diagram-customers-chips');
+  const emptyEl = document.getElementById('team-diagram-customers-empty');
+  const titleEl = document.getElementById('team-diagram-customers-title');
+  if (!wrap || !chips || !emptyEl) return;
+
+  const names = Array.isArray(data.portfolio_customer_names) ? data.portfolio_customer_names : [];
+  const mt = String(data.main_team || 'Portfolio').trim() || 'Portfolio';
+  if (titleEl) titleEl.textContent = `Customers we worked with — ${mt}`;
+
+  wrap.classList.remove('hidden');
+  if (!names.length) {
+    chips.innerHTML = '';
+    emptyEl.classList.remove('hidden');
+    return;
+  }
+  emptyEl.classList.add('hidden');
+  chips.innerHTML = names
+    .map((n) => `<span class="td-cust-chip">${escHtml(String(n))}</span>`)
+    .join('');
+}
+
+function renderTeamDiagramCharts(data) {
+  if (typeof Chart === 'undefined') return;
+  destroyTdCharts();
+
+  const wrap = document.getElementById('team-diagram-charts-wrap');
+  if (!wrap) return;
+
+  const teams = (data.sub_teams || []).filter((t) => !t.error);
+  if (!teams.length) {
+    wrap.classList.add('hidden');
+    return;
+  }
+  wrap.classList.remove('hidden');
+
+  const labels = teams.map((t) => String(t.name || 'Sub-team'));
+  const totals = teams.map((t) => Number(t.total) || 0);
+  const stDone = teams.map((t) =>
+    (t.story_tasks_done != null ? t.story_tasks_done : t.done_stories) || 0,
+  );
+  const stTot = teams.map((t) =>
+    (t.story_tasks_total != null ? t.story_tasks_total : t.total_stories) || 0,
+  );
+  const stOpen = stTot.map((tot, i) => Math.max(0, tot - stDone[i]));
+  const bugsDone = teams.map((t) => Number(t.done_bugs) || 0);
+  const bugsTot = teams.map((t) => Number(t.total_bugs) || 0);
+  const bugsOpen = bugsTot.map((tot, i) => Math.max(0, tot - bugsDone[i]));
+
+  const ok = teams;
+  const aggDone = ok.reduce((s, t) => s + (Number(t.done_total) || 0), 0);
+  const aggTot = ok.reduce((s, t) => s + (Number(t.total) || 0), 0);
+  const aggOpen = Math.max(0, aggTot - aggDone);
+
+  const tickStyle = { color: '#64748b', font: { family: 'Inter', size: 11 } };
+  const gridColor = '#e2e8f0';
+
+  const el1 = document.getElementById('td-chart-tickets-by-team');
+  if (el1 && el1.parentElement) {
+    el1.parentElement.style.height = `${Math.max(200, labels.length * 34)}px`;
+    tdChartInstances.push(
+      new Chart(el1, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{ label: 'Tickets', data: totals, backgroundColor: '#3b82f6', borderRadius: 6 }],
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { grid: { color: gridColor }, ticks: tickStyle, beginAtZero: true },
+            y: { grid: { display: false }, ticks: { ...tickStyle, font: { ...tickStyle.font, weight: '600' } } },
+          },
+        },
+      }),
+    );
+  }
+
+  const el2 = document.getElementById('td-chart-ticket-completion');
+  if (el2 && el2.parentElement) {
+    el2.parentElement.style.height = '240px';
+    tdChartInstances.push(
+      new Chart(el2, {
+        type: 'doughnut',
+        data: {
+          labels: ['Completed tickets', 'Open tickets'],
+          datasets: [
+            {
+              data: [aggDone, aggOpen],
+              backgroundColor: ['#10b981', '#cbd5e1'],
+              borderWidth: 2,
+              borderColor: '#fff',
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: { color: '#475569', font: { family: 'Inter', size: 11 }, padding: 14 },
+            },
+          },
+        },
+      }),
+    );
+  }
+
+  const el3 = document.getElementById('td-chart-work-stack');
+  if (el3 && el3.parentElement) {
+    el3.parentElement.style.height = '260px';
+    tdChartInstances.push(
+      new Chart(el3, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            {
+              label: 'Done (S / T / Sub)',
+              data: stDone,
+              backgroundColor: '#0d9488',
+              borderRadius: 4,
+              stack: 'w',
+            },
+            {
+              label: 'Open',
+              data: stOpen,
+              backgroundColor: '#99f6e4',
+              borderRadius: 4,
+              stack: 'w',
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'top',
+              labels: { color: '#475569', font: { family: 'Inter', size: 11 } },
+            },
+          },
+          scales: {
+            x: { stacked: true, grid: { display: false }, ticks: { ...tickStyle, maxRotation: 40 } },
+            y: { stacked: true, beginAtZero: true, grid: { color: gridColor }, ticks: tickStyle },
+          },
+        },
+      }),
+    );
+  }
+
+  const el4 = document.getElementById('td-chart-bugs-stack');
+  if (el4 && el4.parentElement) {
+    el4.parentElement.style.height = '260px';
+    tdChartInstances.push(
+      new Chart(el4, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            {
+              label: 'Fixed',
+              data: bugsDone,
+              backgroundColor: '#ea580c',
+              borderRadius: 4,
+              stack: 'b',
+            },
+            {
+              label: 'Open',
+              data: bugsOpen,
+              backgroundColor: '#fdba74',
+              borderRadius: 4,
+              stack: 'b',
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'top',
+              labels: { color: '#475569', font: { family: 'Inter', size: 11 } },
+            },
+          },
+          scales: {
+            x: { stacked: true, grid: { display: false }, ticks: { ...tickStyle, maxRotation: 40 } },
+            y: { stacked: true, beginAtZero: true, grid: { color: gridColor }, ticks: tickStyle },
+          },
+        },
+      }),
+    );
+  }
+}
+
+function enterTdPresentation() {
+  if (!lastResult) {
+    alert('Generate the diagram first.');
+    return;
+  }
+  document.body.classList.add('td-pres-mode');
+  const t = document.getElementById('td-pres-title');
+  if (t) t.textContent = `Presentation — ${lastResult.main_team || 'Team'}`;
+  const root = document.documentElement;
+  if (root.requestFullscreen) root.requestFullscreen().catch(() => {});
+  window.setTimeout(() => {
+    renderTeamDiagramCharts(lastResult);
+  }, 200);
+}
+
+function exitTdPresentation() {
+  document.body.classList.remove('td-pres-mode');
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+}
+
+document.getElementById('td-pres-exit').addEventListener('click', exitTdPresentation);
+document.getElementById('td-pres-btn').addEventListener('click', enterTdPresentation);
+
+document.addEventListener('fullscreenchange', () => {
+  if (!document.fullscreenElement) document.body.classList.remove('td-pres-mode');
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && document.body.classList.contains('td-pres-mode')) {
+    exitTdPresentation();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Portfolio KPI cards (above diagram)
+// ---------------------------------------------------------------------------
+/** Fixed window for portfolio “avg story points per member per day” (Σ SP ÷ Σ members ÷ days). */
+const TD_SP_AVG_MEMBER_DAY_WINDOW = 10;
+
+function tdSumOkTeams(subTeams, pick) {
+  return (subTeams || []).filter((t) => !t.error).reduce((s, t) => s + (Number(pick(t)) || 0), 0);
+}
+
+function renderTeamDiagramKpis(data) {
+  const el = document.getElementById('team-diagram-kpis');
+  if (!el) return;
+
+  const teams = data.sub_teams || [];
+  const ok = teams.filter((t) => !t.error);
+  if (!ok.length) {
+    el.innerHTML = '<p class="text-sm text-gray-400">No portfolio metrics — all sub-teams have Jira errors.</p>';
+    return;
+  }
+
+  const doneTotal = tdSumOkTeams(teams, (t) => t.done_total);
+  const totalTickets = tdSumOkTeams(teams, (t) => t.total);
+  const stDone = tdSumOkTeams(teams, (t) => (t.story_tasks_done != null ? t.story_tasks_done : t.done_stories));
+  const stTot = tdSumOkTeams(teams, (t) => (t.story_tasks_total != null ? t.story_tasks_total : t.total_stories));
+  const bugsDone = tdSumOkTeams(teams, (t) => t.done_bugs);
+  const bugsTot = tdSumOkTeams(teams, (t) => t.total_bugs);
+  const prodDone = tdSumOkTeams(teams, (t) => (t.prod_issues_done != null ? t.prod_issues_done : 0));
+  const prodTot = tdSumOkTeams(teams, (t) => t.prod_issues);
+  const ttc = tdSumOkTeams(teams, (t) => t.total_test_cases);
+  const atc = tdSumOkTeams(teams, (t) => t.automated_test_cases);
+  const testPct = ttc ? Math.round((atc / ttc) * 100) : 0;
+
+  let sumSP = 0;
+  let sumM = 0;
+  ok.forEach((t) => {
+    sumSP += Number(t.total_story_points) || 0;
+    sumM += Number(t.team_member_count) || 0;
+  });
+
+  let avgSpMain = `<span class="td-kpi-num-slate">—</span>`;
+  let avgSpCap =
+    'Enter team size on each sub-team · uses Σ story points (all returned ticket types) from Jira';
+  if (sumM > 0 && sumSP > 0) {
+    const avgSp = sumSP / sumM / TD_SP_AVG_MEMBER_DAY_WINDOW;
+    avgSpMain = `<span class="td-kpi-num-slate">${avgSp.toFixed(2)}</span><span class="td-kpi-den"> SP</span>`;
+    avgSpCap = `Σ SP ${sumSP.toFixed(1)} ÷ ${sumM} team member(s) ÷ ${TD_SP_AVG_MEMBER_DAY_WINDOW} calendar days`;
+  } else if (sumSP > 0 && sumM === 0) {
+    avgSpCap = 'Add team size on sub-teams to show avg story points per member per day';
+  }
+
+  function fracCard(cls, title, numCls, a, b, caption) {
+    return (
+      `<div class="td-kpi-card ${cls}">` +
+      `<div class="td-kpi-title">${title}</div>` +
+      `<div class="td-kpi-rule"></div>` +
+      `<div class="td-kpi-main"><span class="${numCls}">${a}</span><span class="td-kpi-den"> / ${b}</span></div>` +
+      `<div class="td-kpi-cap">${caption}</div></div>`
+    );
+  }
+
+  el.innerHTML =
+    fracCard('td-kpi-blue', 'Total tickets', 'td-kpi-num-blue', doneTotal, totalTickets, 'completed / total') +
+    fracCard('td-kpi-teal', 'Stories / Tasks / Sub-tasks', 'td-kpi-num-teal', stDone, stTot, 'completed / total') +
+    fracCard('td-kpi-red', 'Bugs', 'td-kpi-num-red', bugsDone, bugsTot, 'resolved / total') +
+    fracCard('td-kpi-amber', 'Production tickets', 'td-kpi-num-amber', prodDone, prodTot, 'completed / total') +
+    `<div class="td-kpi-card td-kpi-violet">` +
+    `<div class="td-kpi-title">Test automation</div>` +
+    `<div class="td-kpi-rule"></div>` +
+    `<div class="td-kpi-main"><span class="td-kpi-num-violet">${testPct}</span><span class="td-kpi-den">%</span></div>` +
+    `<div class="td-kpi-cap">automated / total test cases</div></div>` +
+    `<div class="td-kpi-card td-kpi-slate">` +
+    `<div class="td-kpi-title">Avg story points / member / day</div>` +
+    `<div class="td-kpi-rule"></div>` +
+    `<div class="td-kpi-main">${avgSpMain}</div>` +
+    `<div class="td-kpi-cap">${escHtml(avgSpCap)}</div></div>`;
+}
 
 // ---------------------------------------------------------------------------
 // SVG Diagram renderer
@@ -292,19 +1936,37 @@ function renderDiagram(data) {
   const subTeams = data.sub_teams || [];
   const n = subTeams.length;
 
-  // Aggregate totals for main circle
+  const sumOk = (pick) => subTeams.filter((t) => !t.error).reduce((s, t) => s + (Number(pick(t)) || 0), 0);
+
+  // Aggregate totals for main circle (exclude errored JQL rows)
   const agg = {
-    total_stories: subTeams.reduce((s, t) => s + (t.total_stories || 0), 0),
-    done_stories:  subTeams.reduce((s, t) => s + (t.done_stories  || 0), 0),
-    total_bugs:    subTeams.reduce((s, t) => s + (t.total_bugs    || 0), 0),
-    done_bugs:     subTeams.reduce((s, t) => s + (t.done_bugs     || 0), 0),
-    prod_issues:   subTeams.reduce((s, t) => s + (t.prod_issues   || 0), 0),
+    done_total: sumOk((t) => t.done_total),
+    total_tickets: sumOk((t) => t.total),
+    story_tasks_done: sumOk((t) => (t.story_tasks_done != null ? t.story_tasks_done : t.done_stories)),
+    story_tasks_total: sumOk((t) => (t.story_tasks_total != null ? t.story_tasks_total : t.total_stories)),
+    total_bugs: sumOk((t) => t.total_bugs),
+    done_bugs: sumOk((t) => t.done_bugs),
+    prod_done: sumOk((t) => (t.prod_issues_done != null ? t.prod_issues_done : 0)),
+    prod_total: sumOk((t) => t.prod_issues),
+    total_test_cases: sumOk((t) => t.total_test_cases),
+    automated_test_cases: sumOk((t) => t.automated_test_cases),
   };
+  agg.test_automation_pct = agg.total_test_cases
+    ? Math.round((agg.automated_test_cases / agg.total_test_cases) * 100)
+    : 0;
 
   // Layout constants
-  const NODE_R       = 82;
-  const MAIN_R       = 88;
-  const NODE_SPACING = 230;
+  const NODE_R       = 98;
+  const MAIN_R       = 96;
+  const wrapEl = document.getElementById('diagram-wrap');
+  const sectionEl = document.getElementById('diagram-section');
+  const cw = Math.max(
+    720,
+    (wrapEl && wrapEl.clientWidth) || (sectionEl && sectionEl.clientWidth)
+      || (typeof document !== 'undefined' && document.documentElement && document.documentElement.clientWidth)
+      || 1200,
+  );
+  const NODE_SPACING = Math.max(260, Math.floor((cw - 80) / Math.max(n, 1)));
   const PAD_TOP      = 30;   // top padding before main label
   const MAIN_NAME_Y  = PAD_TOP;
   const MAIN_Y       = MAIN_NAME_Y + 22 + MAIN_R;
@@ -312,8 +1974,15 @@ function renderDiagram(data) {
   const SUB_NAME_Y   = MAIN_Y + MAIN_R + CONNECTOR_GAP;
   const SUB_CY       = SUB_NAME_Y + 20 + NODE_R;
 
-  const totalW = Math.max(700, n * NODE_SPACING + 100);
-  const svgH   = SUB_CY + NODE_R + 28;
+  const totalW = Math.max(cw - 32, n * NODE_SPACING + 140);
+  const SUMMARY_GAP = 14;
+  const SUMMARY_TOP = SUB_CY + NODE_R + SUMMARY_GAP;
+  const COL_SUMMARY_H = Math.min(680, Math.max(540, Math.floor(NODE_SPACING * 1.82)));
+  const PANEL_GAP = 12;
+  const STORY_PANEL_H = Math.round(COL_SUMMARY_H * 0.52);
+  const PROD_PANEL_H = COL_SUMMARY_H - STORY_PANEL_H - PANEL_GAP;
+  const PROD_PANEL_TOP = SUMMARY_TOP + STORY_PANEL_H + PANEL_GAP;
+  const svgH = SUMMARY_TOP + COL_SUMMARY_H + 28;
   const mainX  = totalW / 2;
 
   svg.setAttribute('viewBox', `0 0 ${totalW} ${svgH}`);
@@ -338,14 +2007,16 @@ function renderDiagram(data) {
   mainG.appendChild(svgText(mainTeam, mainX, MAIN_NAME_Y, 'main-label', 'middle'));
   // Circle
   mainG.appendChild(makeSVG('circle', { class: 'main-circle', cx: mainX, cy: MAIN_Y, r: MAIN_R }));
-  // Aggregate metrics inside (light tints on dark navy)
-  const mY = MAIN_Y - 37;
-  mainG.appendChild(svgText('STORIES',     mainX, mY,       'main-metric-label', 'middle'));
-  mainG.appendChild(svgText(`${agg.done_stories}/${agg.total_stories}`, mainX, mY + 15, 'main-metric-val cm-stories', 'middle'));
-  mainG.appendChild(svgText('BUGS',        mainX, mY + 32,  'main-metric-label', 'middle'));
-  mainG.appendChild(svgText(`${agg.done_bugs}/${agg.total_bugs}`,       mainX, mY + 47, 'main-metric-val cm-bugs',    'middle'));
-  mainG.appendChild(svgText('PROD ISSUES', mainX, mY + 64,  'main-metric-label', 'middle'));
-  mainG.appendChild(svgText(`${agg.prod_issues}`,                       mainX, mY + 79, 'main-metric-val cm-prod',    'middle'));
+  // Aggregate metrics — portfolio rollups (matches KPI strip)
+  const mY = MAIN_Y - 52;
+  mainG.appendChild(svgText('TOTAL TICKETS', mainX, mY,       'main-metric-label', 'middle'));
+  mainG.appendChild(svgText(`${agg.done_total}/${agg.total_tickets}`, mainX, mY + 14, 'main-metric-val cm-stories', 'middle'));
+  mainG.appendChild(svgText('S / T / SUB',   mainX, mY + 30,  'main-metric-label', 'middle'));
+  mainG.appendChild(svgText(`${agg.story_tasks_done}/${agg.story_tasks_total}`, mainX, mY + 44, 'main-metric-val cm-stories', 'middle'));
+  mainG.appendChild(svgText('BUGS',          mainX, mY + 60,  'main-metric-label', 'middle'));
+  mainG.appendChild(svgText(`${agg.done_bugs}/${agg.total_bugs}`,       mainX, mY + 74, 'main-metric-val cm-bugs',    'middle'));
+  mainG.appendChild(svgText('PRODUCTION',    mainX, mY + 90,  'main-metric-label', 'middle'));
+  mainG.appendChild(svgText(`${agg.prod_done}/${agg.prod_total}`,       mainX, mY + 104, 'main-metric-val cm-prod',    'middle'));
   svg.appendChild(mainG);
 
   // ── Sub-team circles ──
@@ -371,17 +2042,204 @@ function renderDiagram(data) {
       g.appendChild(svgText('Error fetching', cx, cy - 10, 'metric-label', 'middle'));
       g.appendChild(svgText(truncate(st.error, 22), cx, cy + 8, 'metric-label', 'middle'));
     } else {
-      const mStart = cy - 37;
-      g.appendChild(svgText('STORIES',     cx, mStart,       'metric-label', 'middle'));
-      g.appendChild(svgText(`${st.done_stories}/${st.total_stories}`, cx, mStart + 15, 'metric-val c-stories', 'middle'));
-      g.appendChild(svgText('BUGS',        cx, mStart + 32,  'metric-label', 'middle'));
-      g.appendChild(svgText(`${st.done_bugs}/${st.total_bugs}`,       cx, mStart + 47, 'metric-val c-bugs',    'middle'));
-      g.appendChild(svgText('PROD ISSUES', cx, mStart + 64,  'metric-label', 'middle'));
-      g.appendChild(svgText(`${st.prod_issues}`,                      cx, mStart + 79, 'metric-val c-prod',    'middle'));
+      const mStart = cy - 58;
+      const step = 13;
+      let y = mStart;
+      const dt = st.done_total != null ? st.done_total : 0;
+      const tot = st.total || 0;
+      const std = st.story_tasks_done != null ? st.story_tasks_done : st.done_stories;
+      const stv = st.story_tasks_total != null ? st.story_tasks_total : st.total_stories;
+      const pd = st.prod_issues_done != null ? st.prod_issues_done : 0;
+      const pt = st.prod_issues || 0;
+      const ttc = st.total_test_cases || 0;
+      const atc = st.automated_test_cases || 0;
+      const tpct = st.test_automation_pct != null ? st.test_automation_pct : (ttc ? Math.round(atc / ttc * 100) : 0);
+
+      g.appendChild(svgText('TICKETS', cx, y, 'metric-label', 'middle')); y += step;
+      g.appendChild(svgText(`${dt}/${tot}`, cx, y, 'metric-val c-stories', 'middle')); y += step;
+      g.appendChild(svgText('S / T / SUB', cx, y, 'metric-label', 'middle')); y += step;
+      g.appendChild(svgText(`${std}/${stv}`, cx, y, 'metric-val c-stories', 'middle')); y += step;
+      g.appendChild(svgText('BUGS', cx, y, 'metric-label', 'middle')); y += step;
+      g.appendChild(svgText(`${st.done_bugs}/${st.total_bugs}`, cx, y, 'metric-val c-bugs', 'middle')); y += step;
+      g.appendChild(svgText('PRODUCTION', cx, y, 'metric-label', 'middle')); y += step;
+      g.appendChild(svgText(`${pd}/${pt}`, cx, y, 'metric-val c-prod', 'middle')); y += step;
+      g.appendChild(svgText('TEST CASES', cx, y, 'metric-label', 'middle')); y += step;
+      g.appendChild(svgText(`${atc}/${ttc} · ${tpct}% auto`, cx, y, 'metric-val c-tests', 'middle'));
     }
 
     svg.appendChild(g);
   });
+
+  subTeams.forEach((st, i) => {
+    const cx = getSubX(i, n, totalW, NODE_SPACING);
+    svg.appendChild(makeSVG('line', {
+      class: 'connector',
+      x1: cx,
+      y1: SUB_CY + NODE_R,
+      x2: cx,
+      y2: SUMMARY_TOP,
+    }));
+  });
+
+  subTeams.forEach((st, i) => {
+    const cx = getSubX(i, n, totalW, NODE_SPACING);
+    const boxW = Math.min(NODE_SPACING - 20, 400);
+    const boxX = cx - boxW / 2;
+    svg.appendChild(makeSVG('rect', {
+      class: 'summary-panel-bg',
+      x: boxX,
+      y: SUMMARY_TOP,
+      width: boxW,
+      height: STORY_PANEL_H,
+      rx: 10,
+      ry: 10,
+    }));
+    svg.appendChild(makeStorySummaryForeignObject(st, i, boxX, SUMMARY_TOP, boxW, STORY_PANEL_H));
+    svg.appendChild(makeSVG('line', {
+      class: 'connector',
+      x1: cx,
+      y1: SUMMARY_TOP + STORY_PANEL_H,
+      x2: cx,
+      y2: PROD_PANEL_TOP,
+    }));
+    svg.appendChild(makeSVG('rect', {
+      class: 'summary-panel-bg',
+      x: boxX,
+      y: PROD_PANEL_TOP,
+      width: boxW,
+      height: PROD_PANEL_H,
+      rx: 10,
+      ry: 10,
+    }));
+    svg.appendChild(makeProdBugsSummaryForeignObject(st, i, boxX, PROD_PANEL_TOP, boxW, PROD_PANEL_H));
+  });
+}
+
+function bulletItems(ai, key) {
+  const raw = ai && ai[key];
+  if (!Array.isArray(raw)) return [];
+  return raw.map((x) => String(x).trim()).filter(Boolean);
+}
+
+function bulletsUlLinked(items) {
+  if (!items.length) return '<ul class="td-svg-ai-ul"><li style="color:#94a3b8;">—</li></ul>';
+  return `<ul class="td-svg-ai-ul">${items.map((t) => bulletLiHtml(t)).join('')}</ul>`;
+}
+
+function storyPanelMetaActionsHtml(ai) {
+  let inner = '';
+  if (ai.error) {
+    inner = `<span class="warn">${escHtml(ai.error)}</span>`;
+  } else if (ai.cache_miss) {
+    inner = '<span class="warn">No cache — run Generate once without “cache only”.</span>';
+  } else if (ai.from_cache) {
+    inner = '<span class="cached">From cache</span><span class="td-svg-ai-meta-sep">·</span><span class="td-svg-ai-meta-note">same text as last saved run</span>';
+  } else {
+    inner =
+      '<span class="live" title="Summary was just requested from Claude">Fresh Claude summary</span>' +
+      '<span class="td-svg-ai-meta-sep">·</span>' +
+      '<span class="td-svg-ai-meta-note">not loaded from cache</span>';
+  }
+  return `<div class="td-svg-ai-actions"><div class="td-svg-ai-meta td-svg-ai-meta-footer">${inner}</div></div>`;
+}
+
+/** Upper panel: story tickets + overall rollup only */
+function storyPanelInnerHtml(st, colIdx) {
+  const ai = st.ai || {};
+  const gradId = `tdStoryBot${colIdx}`;
+
+  const meta = storyPanelMetaActionsHtml(ai);
+
+  const head =
+    `<div class="td-svg-claude-head">` +
+    `<span class="td-svg-bot-wrap">${claudeBotSvgMarkup(gradId)}</span>` +
+    `<div class="td-svg-claude-head-text">` +
+    `<div class="td-svg-claude-title">Claude summary</div>` +
+    `<div class="td-svg-claude-sub">Rollup of story delivery for this sub-team</div>` +
+    `</div></div>`;
+
+  const sb = bulletItems(ai, 'stories_bullets');
+  const ob = bulletItems(ai, 'overall_bullets');
+
+  const storiesBlock =
+    sb.length > 0
+      ? '<details class="td-svg-stories-details">' +
+        '<summary><span class="td-svg-expand-icon" aria-hidden="true">▸</span>' +
+        '<div class="td-svg-stories-summary-text">' +
+        '<span class="td-svg-stories-summary-main">Per-story summaries</span>' +
+        '<span class="td-svg-stories-summary-hint">Ticket-level bullets with Jira keys</span>' +
+        '</div></summary>' +
+        '<div class="td-svg-stories-inner">' +
+        '<div class="td-svg-ai-h first">Stories</div>' +
+        bulletsUlLinked(sb) +
+        '</div></details>'
+      : '';
+
+  const overallBlock =
+    '<section class="td-svg-ai-section td-svg-ai-section-overall" aria-label="Overall rollup">' +
+    '<div class="td-svg-ai-section-head"><span class="td-svg-ai-badge">Overall</span></div>' +
+    bulletsUlLinked(ob) +
+    '</section>';
+
+  return head + overallBlock + meta + storiesBlock;
+}
+
+/** Lower panel: prod & bugs — Overall first; ticket list + cache meta at bottom (matches story panel pattern) */
+function prodBugsPanelInnerHtml(st, colIdx) {
+  const ai = st.ai || {};
+  const head =
+    `<div class="td-svg-prod-head">` +
+    `<span class="td-svg-bug-wrap"><i class="fas fa-bug" aria-hidden="true"></i></span>` +
+    `<div class="td-svg-claude-head-text">` +
+    `<div class="td-svg-prod-title">Production issues &amp; bugs</div>` +
+    `<div class="td-svg-claude-sub">Prod platform items and bug-type tickets from the same JQL</div>` +
+    `</div></div>`;
+
+  const meta = storyPanelMetaActionsHtml(ai);
+
+  const pb = bulletItems(ai, 'prod_bullets');
+
+  const rows = Array.isArray(st.prod_bug_rows) ? st.prod_bug_rows : [];
+
+  const ticketBlock =
+    rows.length > 0
+      ? '<details class="td-svg-stories-details">' +
+        '<summary><span class="td-svg-expand-icon" aria-hidden="true">▸</span>' +
+        '<div class="td-svg-stories-summary-text">' +
+        '<span class="td-svg-stories-summary-main">Ticket-level detail</span>' +
+        '<span class="td-svg-stories-summary-hint">Keys, summaries, and status (prod + bugs)</span>' +
+        '</div></summary>' +
+        '<div class="td-svg-stories-inner">' +
+        '<div class="td-svg-ai-h first">Tickets</div>' +
+        `<ul class="td-svg-prod-ticket-ul">${rows.map((r) => prodBugRowLiHtml(r)).join('')}</ul>` +
+        '</div></details>'
+      : '';
+
+  const overallBlock =
+    '<section class="td-svg-ai-section td-svg-ai-section-prod" aria-label="Production and bugs rollup">' +
+    '<div class="td-svg-ai-section-head"><span class="td-svg-ai-badge">Overall</span></div>' +
+    bulletsUlLinked(pb) +
+    '</section>';
+
+  return head + overallBlock + meta + ticketBlock;
+}
+
+function makeStorySummaryForeignObject(st, colIdx, x, y, w, h) {
+  const fo = makeSVG('foreignObject', { x, y, width: w, height: h });
+  const div = document.createElementNS('http://www.w3.org/1999/xhtml', 'div');
+  div.setAttribute('class', 'td-svg-ai-root');
+  div.innerHTML = storyPanelInnerHtml(st, colIdx);
+  fo.appendChild(div);
+  return fo;
+}
+
+function makeProdBugsSummaryForeignObject(st, colIdx, x, y, w, h) {
+  const fo = makeSVG('foreignObject', { x, y, width: w, height: h });
+  const div = document.createElementNS('http://www.w3.org/1999/xhtml', 'div');
+  div.setAttribute('class', 'td-svg-ai-root');
+  div.innerHTML = prodBugsPanelInnerHtml(st, colIdx);
+  fo.appendChild(div);
+  return fo;
 }
 
 function getSubX(i, n, totalW, spacing) {
@@ -420,25 +2278,46 @@ function renderTable(data) {
   const tbody = document.getElementById('summary-tbody');
   tbody.innerHTML = '';
   (data.sub_teams || []).forEach(st => {
-    const storiesPct = st.total_stories ? Math.round(st.done_stories / st.total_stories * 100) : 0;
+    const stDone = st.story_tasks_done != null ? st.story_tasks_done : st.done_stories;
+    const stTot = st.story_tasks_total != null ? st.story_tasks_total : st.total_stories;
+    const storiesPct = stTot ? Math.round(stDone / stTot * 100) : 0;
     const bugsPct = st.total_bugs ? Math.round(st.done_bugs / st.total_bugs * 100) : 0;
+    const ttc = st.total_test_cases || 0;
+    const atc = st.automated_test_cases || 0;
+    const testPct = ttc ? (st.test_automation_pct != null ? st.test_automation_pct : Math.round(atc / ttc * 100)) : 0;
     const tr = document.createElement('tr');
-    tr.innerHTML = `
+    const tmc = st.team_member_count;
+    const tsp = st.total_story_points;
+    const ecd = st.estimated_calendar_days;
+    const membersCell = tmc != null ? escHtml(String(tmc)) : '<span class="text-gray-600">—</span>';
+    const spCell = tsp != null ? escHtml(String(tsp)) : '<span class="text-gray-600">—</span>';
+    const daysCell = ecd != null ? escHtml(String(ecd)) : '<span class="text-gray-600">—</span>';
+
+    if (st.error) {
+      tr.innerHTML = `
       <td class="py-2.5 pr-4 font-medium text-white">${escHtml(st.name)}</td>
+      <td colspan="9" class="py-2.5 px-3 text-red-400 text-xs italic">${escHtml(st.error)}</td>`;
+    } else {
+      tr.innerHTML = `
+      <td class="py-2.5 pr-4 font-medium text-white">${escHtml(st.name)}</td>
+      <td class="py-2.5 px-2 text-center text-gray-300 whitespace-nowrap">${membersCell}</td>
+      <td class="py-2.5 px-2 text-center text-cyan-300 font-medium whitespace-nowrap">${spCell}</td>
+      <td class="py-2.5 px-2 text-center text-amber-300 whitespace-nowrap">${daysCell}</td>
       <td class="py-2.5 px-3 text-center text-gray-300">${st.total}</td>
       <td class="py-2.5 px-3 text-center">
-        <span class="text-green-400 font-semibold">${st.done_stories}/${st.total_stories}</span>
+        <span class="text-green-400 font-semibold">${stDone}/${stTot}</span>
         <span class="text-gray-500 text-xs ml-1">${storiesPct}%</span>
       </td>
       <td class="py-2.5 px-3 text-center">
         <span class="text-orange-400 font-semibold">${st.done_bugs}/${st.total_bugs}</span>
         <span class="text-gray-500 text-xs ml-1">${bugsPct}%</span>
       </td>
+      <td class="py-2.5 px-3 text-center">
+        <span class="text-violet-400 font-semibold">${atc}/${ttc}</span>
+        <span class="text-gray-500 text-xs ml-1">${testPct}%</span>
+      </td>
       <td class="py-2.5 px-3 text-center ${st.prod_issues > 0 ? 'text-red-400 font-semibold' : 'text-gray-400'}">${st.prod_issues}</td>
       <td class="py-2.5 pl-3 text-gray-500 text-xs font-mono max-w-xs truncate" title="${escHtml(st.jql)}">${escHtml(st.jql)}</td>`;
-    if (st.error) {
-      tr.querySelector('td').insertAdjacentHTML('afterend',
-        `<td colspan="4" class="py-2.5 px-3 text-red-400 text-xs italic">${escHtml(st.error)}</td>`);
     }
     tbody.appendChild(tr);
   });

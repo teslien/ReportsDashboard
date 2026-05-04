@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 import io
 import re
 import json
+import hashlib
 import os
 import requests
 import base64
@@ -212,6 +213,8 @@ def sprint_tracker_write_required(action="edit"):
             if not current_user.is_authenticated:
                 return jsonify({"error": "Authentication required"}), 401
             if not current_user.can_view_page("sprint_tracker"):
+                if str(request.path or "").startswith("/api/"):
+                    return jsonify({"error": "You do not have access to sprint tracker."}), 403
                 return render_template("403.html"), 403
             if _sprint_tracker_action_allowed(action):
                 return f(*args, **kwargs)
@@ -746,6 +749,15 @@ def init_db():
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
         )
+    ''')
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS team_diagram_ai_cache (
+            cache_key CHAR(64) NOT NULL PRIMARY KEY,
+            sub_team_name VARCHAR(512) NOT NULL,
+            response_json LONGTEXT NOT NULL,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ''')
 
     # Seed Default Header Title if empty
@@ -1526,15 +1538,42 @@ def _extract_sprint_values(raw_value):
         out.append({"id": sprint_id, "name": sprint_name})
     return out
 
-def _is_done_like_status(status_name, status_category):
-    done_statuses = {
-        "DONE", "RESOLVED", "DEPLOYED", "STAGED", "READY FOR QA",
-        "READY FOR STAGING", "READY FOR INTERNAL DEMO", "CLOSED",
-        "NOT A BUG", "UNABLE TO REPRODUCE"
+# Lowercase Jira status *names* treated as completed (plus statusCategory "done" below).
+_JIRA_COMPLETED_STATUS_NAMES_LOWER = frozenset(
+    {
+        "done",
+        "resolved",
+        "closed",
+        "ready for qa",
+        "deployed",
+        "ready for staging",
+        "ready for internal demo",
+        "qa in progress",
+        "not a bug",
+        "unable to reproduce",
+        # Common variants still seen in workflows
+        "staged",
+        "fixed",
+        "complete",
+        "completed",
+        "released",
+        "won't fix",
+        "wont fix",
     }
-    name = (status_name or "").strip().upper()
-    category = (status_category or "").strip().lower()
-    return category == "done" or name in done_statuses
+)
+
+
+def _is_done_like_status(status_name, status_category=None):
+    """
+    True if the issue counts as completed for throughput metrics.
+    Uses Jira statusCategory key when provided; otherwise status name only.
+    """
+    if status_category is not None:
+        cat = str(status_category).strip().lower()
+        if cat == "done":
+            return True
+    key = (status_name or "").strip().lower()
+    return key in _JIRA_COMPLETED_STATUS_NAMES_LOWER
 
 def _is_bug_type(issue_type_name):
     return (issue_type_name or "").strip().lower() == "bug"
@@ -1550,9 +1589,30 @@ def _issue_type_bucket(issue_type_name):
     return "Other"
 
 
-_CUSTOMER_RESOLUTION_MILESTONE_STATUSES = frozenset(
-    s.lower() for s in ("Resolved", "Done", "Ready for QA")
-)
+def _is_test_case_issue_type(issue_type_name):
+    """Treat Zephyr/Xray-style test issues as test cases for team diagram metrics."""
+    k = (issue_type_name or "").strip().lower()
+    if not k:
+        return False
+    if k in ("test", "test case", "zephyr test", "test execution"):
+        return True
+    if "test case" in k:
+        return True
+    return False
+
+
+def _jira_issue_is_automated_test(issue_type_name, fields_obj):
+    """Automation: issue type name mentions automated, or any label contains 'automated'."""
+    k = (issue_type_name or "").strip().lower()
+    if "automated" in k:
+        return True
+    for lab in (fields_obj or {}).get("labels") or []:
+        if "automated" in str(lab).lower():
+            return True
+    return False
+
+
+_CUSTOMER_RESOLUTION_MILESTONE_STATUSES = _JIRA_COMPLETED_STATUS_NAMES_LOWER
 
 
 def _reported_by_customer_jql_clause():
@@ -1568,8 +1628,15 @@ _DEFAULT_CUSTOMER_DONE_STATUSES = (
     "Deployed",
     "Ready for Staging",
     "Ready for Internal Demo",
+    "QA In Progress",
     "Not a Bug",
     "Unable to Reproduce",
+    "Staged",
+    "Fixed",
+    "Complete",
+    "Completed",
+    "Released",
+    "Won't Fix",
 )
 
 
@@ -1637,7 +1704,7 @@ def _team_name_from_jira_fields(fields_obj):
 
 def _first_customer_resolution_milestone_at(issue, fields_obj):
     """
-    First time the issue entered Resolved, Done, or Ready for QA (from changelog).
+    First time the issue entered a completed status (from changelog); see _JIRA_COMPLETED_STATUS_NAMES_LOWER.
     Falls back to resolutiondate if no matching status transition is present.
     """
     histories = (issue.get("changelog") or {}).get("histories") or []
@@ -3182,18 +3249,15 @@ def sprint_stats():
             
         all_issues = res.get("issues", [])
         
-        # 3. Calculate Stats
-        # A ticket is considered "done" if its status category is 'done' 
-        # OR if it's in a status that implies development is complete (like Ready for QA)
-        done_statuses = ["DONE", "RESOLVED", "DEPLOYED", "STAGED", "READY FOR QA", "READY FOR STAGING", "READY FOR INTERNAL DEMO", "CLOSED", "NOT A BUG", "UNABLE TO REPRODUCE"]
-        
+        # 3. Calculate Stats — completed = Jira statusCategory "done" or named terminal / QA-ready statuses
         done_issues = []
         active_issues = []
         for i in all_issues:
-            status_name = i["fields"]["status"]["name"].upper()
-            status_cat = i["fields"]["status"]["statusCategory"]["key"].lower()
-            
-            if status_cat == "done" or status_name in done_statuses:
+            st = i["fields"]["status"]
+            status_name = (st.get("name") or "").strip()
+            status_cat = (st.get("statusCategory") or {}).get("key") or ""
+
+            if _is_done_like_status(status_name, status_cat):
                 done_issues.append(i)
             else:
                 active_issues.append(i)
@@ -3227,10 +3291,11 @@ def sprint_stats():
                      }
                 
                 if aid in performance:
-                    status_name = i["fields"]["status"]["name"].upper()
-                    status_cat = i["fields"]["status"]["statusCategory"]["key"].lower()
-                    
-                    if status_cat == "done" or status_name in done_statuses:
+                    st = i["fields"]["status"]
+                    status_name = (st.get("name") or "").strip()
+                    status_cat = (st.get("statusCategory") or {}).get("key") or ""
+
+                    if _is_done_like_status(status_name, status_cat):
                         performance[aid]["solved"] += 1
                     else:
                         performance[aid]["active"] += 1
@@ -5965,7 +6030,7 @@ def _first_done_transition_at(issue, fields_obj):
             if item.get("field") != "status":
                 continue
             to_s = item.get("toString") or ""
-            if _is_done_like_status(to_s, "done"):
+            if _is_done_like_status(to_s, None):
                 hits.append(ts)
     if hits:
         return min(hits)
@@ -8324,27 +8389,26 @@ def sprint_tracker_generate_theme_from_tickets():
 
 
 def _fetch_jira_issues_from_jql(jql_query):
+    """Paginated Jira search for sprint-tracker previews (handles nextPageToken + startAt)."""
     jira_headers = dict(HEADERS)
     if "Authorization" not in jira_headers:
         raise ValueError("Jira credentials are not configured. Please set them in Settings.")
-    jira_domain = str(JIRA_DOMAIN)
+    jira_domain = str(JIRA_DOMAIN).rstrip("/")
+    fields = "summary,status,description,labels,customfield_10077,customfield_10014,issuetype,parent"
     all_issues = []
+    seen_keys = set()
     start_at = 0
-    page_size = 100
-    while True:
-        params = {
-            "jql": jql_query,
-            "startAt": start_at,
-            "maxResults": page_size,
-            "fields": "summary,status,description,labels,customfield_10077,customfield_10014,issuetype,parent",
-        }
-        resp = requests.get(
-            f"{jira_domain}/rest/api/3/search/jql",
-            headers=jira_headers,
-            params=params,
-            timeout=45,
-        )
-        # Compatibility fallback for older Jira APIs/workspaces
+    next_page_token = None
+    search_url = f"{jira_domain}/rest/api/3/search/jql"
+
+    for _page in range(120):
+        params = {"jql": jql_query, "maxResults": 100, "fields": fields}
+        if next_page_token:
+            params["nextPageToken"] = next_page_token
+        else:
+            params["startAt"] = start_at
+
+        resp = requests.get(search_url, headers=jira_headers, params=params, timeout=45)
         if resp.status_code in (404, 405):
             resp = requests.get(
                 f"{jira_domain}/rest/api/3/search",
@@ -8353,15 +8417,51 @@ def _fetch_jira_issues_from_jql(jql_query):
                 timeout=45,
             )
         if not resp.ok:
-            raise ValueError(f"Jira search failed: {resp.status_code} {resp.text[:180]}")
-        data = resp.json()
+            raise ValueError(f"Jira search failed: {resp.status_code} {resp.text[:280]}")
+
+        try:
+            data = resp.json()
+        except ValueError as e:
+            raise ValueError(f"Invalid JSON from Jira search: {e}") from e
+
         issues = data.get("issues") or []
-        all_issues.extend(issues)
-        total = data.get("total", len(all_issues))
-        start_at += len(issues)
-        if not issues or start_at >= total:
+        if not issues:
             break
+
+        new_count = 0
+        for issue in issues:
+            ik = issue.get("key")
+            if ik and ik not in seen_keys:
+                seen_keys.add(ik)
+                all_issues.append(issue)
+                new_count += 1
+
+        if new_count == 0:
+            break
+
+        next_page_token = data.get("nextPageToken")
+        if next_page_token:
+            continue
+
+        if len(issues) < 100:
+            break
+
+        total = data.get("total")
+        start_at += len(issues)
+        if isinstance(total, int) and start_at >= total:
+            break
+        if total is None and len(issues) < 100:
+            break
+
     return all_issues
+
+
+def _normalize_jira_epic_link(raw):
+    if raw is None:
+        return ""
+    if isinstance(raw, dict):
+        return str(raw.get("key") or raw.get("id") or "").strip()
+    return str(raw).strip()
 
 
 def _resolve_epic_summary(issue, jira_domain, jira_headers, epic_cache):
@@ -8370,18 +8470,18 @@ def _resolve_epic_summary(issue, jira_domain, jira_headers, epic_cache):
     if issue_type == "epic":
         return fields.get("summary") or issue.get("key") or "_no_epic"
 
-    epic_key = fields.get("customfield_10014")
+    epic_key = _normalize_jira_epic_link(fields.get("customfield_10014"))
     if not epic_key and isinstance(fields.get("parent"), dict):
         parent = fields.get("parent") or {}
         p_fields = parent.get("fields") or {}
         p_type = ((p_fields.get("issuetype") or {}).get("name") or "").strip().lower()
         if p_type == "epic":
             return p_fields.get("summary") or parent.get("key") or "_no_epic"
-        epic_key = parent.get("key")
+        epic_key = _normalize_jira_epic_link(parent.get("key"))
 
     if not epic_key:
         return "_no_epic"
-    epic_key = str(epic_key).strip()
+    epic_key = epic_key.strip()
     if not epic_key:
         return "_no_epic"
     if epic_key in epic_cache:
@@ -8404,6 +8504,11 @@ def _resolve_epic_summary(issue, jira_domain, jira_headers, epic_cache):
 
 
 def _generate_themes_with_claude(grouped, anthropic_key):
+    try:
+        groups_blob = json.dumps(grouped, ensure_ascii=False)
+    except (TypeError, ValueError) as ser_exc:
+        print(f"Sprint tracker Claude prompt serialization error: {ser_exc}")
+        return {}
     prompt = (
         "You are preparing sprint tracker themes from Jira ticket groups.\n"
         "For EACH group return:\n"
@@ -8413,7 +8518,7 @@ def _generate_themes_with_claude(grouped, anthropic_key):
         "- bullets: exactly 2 bullets, each under 12 words (if only 1 ticket, 1 bullet allowed)\n"
         "Return ONLY valid JSON:\n"
         "{ \"themes\": [ { \"group_key\": \"...\", \"theme_key\": \"...\", \"epic_name\": \"...\", \"sentence\": \"...\", \"bullets\": [\"...\"] } ] }\n"
-        f"Groups:\n{json.dumps(grouped, ensure_ascii=False)}"
+        f"Groups:\n{groups_blob}"
     )
     try:
         resp = requests.post(
@@ -8462,7 +8567,7 @@ def _generate_themes_with_claude(grouped, anthropic_key):
 @page_permission_required("sprint_tracker")
 @sprint_tracker_write_required("create")
 def sprint_tracker_jql_preview():
-    payload = request.json or {}
+    payload = request.get_json(silent=True) or {}
     jql = (payload.get("jql") or "").strip()
     if not jql:
         return jsonify({"error": "JQL is required"}), 400
@@ -8476,84 +8581,93 @@ def sprint_tracker_jql_preview():
     jira_domain = str(JIRA_DOMAIN)
 
     try:
-        issues = _fetch_jira_issues_from_jql(jql)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
-    if not issues:
-        return jsonify({"error": "No issues found for the provided JQL"}), 400
+        try:
+            issues = _fetch_jira_issues_from_jql(jql)
+        except ValueError as ve:
+            return jsonify({"error": str(ve)}), 400
+        if not issues:
+            return jsonify({"error": "No issues found for the provided JQL"}), 400
 
-    epic_cache = {}
-    grouped = {}
-    for issue in issues:
-        fields = issue.get("fields") or {}
-        labels = [str(l).strip() for l in (fields.get("labels") or []) if str(l).strip()]
-        lb = any(str(l).strip().lower() == "launch_blocker" for l in labels)
-        field_customers = _extract_jira_customers(fields.get("customfield_10077"))
-        label_customers = _customers_from_labels(labels)
-        customers = _merge_customers(field_customers, label_customers)
-        epic_summary = _resolve_epic_summary(issue, jira_domain, jira_headers, epic_cache)
-        group_key = epic_summary if epic_summary else "_no_epic"
-        grouped.setdefault(group_key, []).append({
-            "ticket_key": issue.get("key"),
-            "summary": fields.get("summary") or "",
-            "status": ((fields.get("status") or {}).get("name")) or "Open",
-            "labels": labels,
-            "description": _adf_to_text(fields.get("description")).strip()[:2500],
-            "customers": customers,
-            "lb": lb,
+        epic_cache = {}
+        grouped = {}
+        for issue in issues:
+            try:
+                fields = issue.get("fields") or {}
+                labels = [str(l).strip() for l in (fields.get("labels") or []) if str(l).strip()]
+                lb = any(str(l).strip().lower() == "launch_blocker" for l in labels)
+                field_customers = _extract_jira_customers(fields.get("customfield_10077"))
+                label_customers = _customers_from_labels(labels)
+                customers = _merge_customers(field_customers, label_customers)
+                epic_summary = _resolve_epic_summary(issue, jira_domain, jira_headers, epic_cache)
+                group_key = epic_summary if epic_summary else "_no_epic"
+                grouped.setdefault(group_key, []).append({
+                    "ticket_key": issue.get("key"),
+                    "summary": fields.get("summary") or "",
+                    "status": ((fields.get("status") or {}).get("name")) or "Open",
+                    "labels": labels,
+                    "description": _adf_to_text(fields.get("description")).strip()[:2500],
+                    "customers": customers,
+                    "lb": lb,
+                })
+            except Exception as row_exc:
+                key = issue.get("key") or "?"
+                return jsonify({"error": f"Failed processing issue {key}: {row_exc}"}), 400
+
+        claude_groups = []
+        for group_key, tickets in grouped.items():
+            claude_groups.append({
+                "group_key": group_key,
+                "epic_summary": group_key,
+                "ticket_count": len(tickets),
+                "tickets": [{"key": t["ticket_key"], "summary": t["summary"], "description": t["description"]} for t in tickets],
+            })
+
+        generated = _generate_themes_with_claude(claude_groups, anthropic_key)
+
+        themes = []
+        for idx, (group_key, tickets) in enumerate(grouped.items()):
+            g = generated.get(group_key) or {}
+            fallback_key = re.sub(r"[^a-z0-9]+", "-", group_key.lower()).strip("-") or f"theme-{idx+1}"
+            fallback_sentence = (group_key if group_key != "_no_epic" else "General improvements").strip()
+            bullet_seed = [t["summary"] for t in tickets if t.get("summary")]
+            fallback_bullets = bullet_seed[:2] if len(tickets) > 1 else bullet_seed[:1]
+            themes.append({
+                "theme_key": g.get("theme_key") or fallback_key,
+                "epic_name": g.get("epic_name") or (group_key if group_key != "_no_epic" else "No Epic"),
+                "sentence": g.get("sentence") or fallback_sentence,
+                "bullets": (g.get("bullets") or fallback_bullets)[:3],
+                "tickets": [{
+                    "ticket_key": t["ticket_key"],
+                    "summary": t["summary"],
+                    "status": t["status"],
+                    "customers": t["customers"],
+                    "lb": t["lb"],
+                } for t in tickets],
+            })
+
+        top = sorted(themes, key=lambda th: len(th.get("tickets") or []), reverse=True)[:3]
+        top_sentences = [str(t.get("sentence") or "").strip().lower().rstrip(".") for t in top if str(t.get("sentence") or "").strip()]
+        if not top_sentences:
+            inferred_goal = "Ship sprint commitments from selected Jira scope"
+        elif len(top_sentences) == 1:
+            inferred_goal = f"Ship {top_sentences[0]}"
+        elif len(top_sentences) == 2:
+            inferred_goal = f"Ship {top_sentences[0]} and {top_sentences[1]}"
+        else:
+            inferred_goal = f"Ship {top_sentences[0]}, {top_sentences[1]}, and {top_sentences[2]}"
+
+        return jsonify({
+            "success": True,
+            "jql": jql,
+            "ticket_count": len(issues),
+            "theme_count": len(themes),
+            "sprint_goal": inferred_goal,
+            "themes": themes,
         })
-
-    claude_groups = []
-    for group_key, tickets in grouped.items():
-        claude_groups.append({
-            "group_key": group_key,
-            "epic_summary": group_key,
-            "ticket_count": len(tickets),
-            "tickets": [{"key": t["ticket_key"], "summary": t["summary"], "description": t["description"]} for t in tickets],
-        })
-
-    generated = _generate_themes_with_claude(claude_groups, anthropic_key)
-
-    themes = []
-    for idx, (group_key, tickets) in enumerate(grouped.items()):
-        g = generated.get(group_key) or {}
-        fallback_key = re.sub(r"[^a-z0-9]+", "-", group_key.lower()).strip("-") or f"theme-{idx+1}"
-        fallback_sentence = (group_key if group_key != "_no_epic" else "General improvements").strip()
-        bullet_seed = [t["summary"] for t in tickets if t.get("summary")]
-        fallback_bullets = bullet_seed[:2] if len(tickets) > 1 else bullet_seed[:1]
-        themes.append({
-            "theme_key": g.get("theme_key") or fallback_key,
-            "epic_name": g.get("epic_name") or (group_key if group_key != "_no_epic" else "No Epic"),
-            "sentence": g.get("sentence") or fallback_sentence,
-            "bullets": (g.get("bullets") or fallback_bullets)[:3],
-            "tickets": [{
-                "ticket_key": t["ticket_key"],
-                "summary": t["summary"],
-                "status": t["status"],
-                "customers": t["customers"],
-                "lb": t["lb"],
-            } for t in tickets],
-        })
-
-    top = sorted(themes, key=lambda th: len(th.get("tickets") or []), reverse=True)[:3]
-    top_sentences = [str(t.get("sentence") or "").strip().lower().rstrip(".") for t in top if str(t.get("sentence") or "").strip()]
-    if not top_sentences:
-        inferred_goal = "Ship sprint commitments from selected Jira scope"
-    elif len(top_sentences) == 1:
-        inferred_goal = f"Ship {top_sentences[0]}"
-    elif len(top_sentences) == 2:
-        inferred_goal = f"Ship {top_sentences[0]} and {top_sentences[1]}"
-    else:
-        inferred_goal = f"Ship {top_sentences[0]}, {top_sentences[1]}, and {top_sentences[2]}"
-
-    return jsonify({
-        "success": True,
-        "jql": jql,
-        "ticket_count": len(issues),
-        "theme_count": len(themes),
-        "sprint_goal": inferred_goal,
-        "themes": themes,
-    })
+    except Exception as exc:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": "Sprint preview failed unexpectedly.", "detail": str(exc)}), 500
 
 
 @app.route("/api/sprint_tracker/sprints/from_generated", methods=["POST"])
@@ -8637,6 +8751,296 @@ def sprint_tracker_create_sprint_from_generated():
 # Team Diagram Report
 # ---------------------------------------------------------------------------
 
+def _team_diagram_coerce_story_points(raw):
+    """Numeric story points from Jira custom field (often customfield_10016); missing → 0."""
+    if raw is None:
+        return 0.0
+    if isinstance(raw, bool):
+        return 0.0
+    if isinstance(raw, (int, float)):
+        return float(raw)
+    if isinstance(raw, str) and raw.strip():
+        try:
+            return float(raw.strip())
+        except ValueError:
+            return 0.0
+    return 0.0
+
+
+def _team_diagram_normalize_bullet_line(s):
+    """Strip leading list markers and orphaned ':' left when UI strips PROJ-123 from 'PROJ-123: …'."""
+    t = (s or "").strip()
+    if not t:
+        return ""
+    for _ in range(6):
+        prev = t
+        t = re.sub(r"^[\s•·\u2022]+", "", t)
+        t = re.sub(r"^[\-\u2013\u2014]\s*", "", t)
+        t = re.sub(r"^\d+[.)]\s*", "", t)
+        t = re.sub(r"^:\s*", "", t)
+        t = t.strip()
+        if t == prev:
+            break
+    return t
+
+
+def _team_diagram_ai_cache_key(jql, sub_team_name):
+    raw = f"{(jql or '').strip()}\n{(sub_team_name or '').strip()}\nai_pack_v4_prod_story_ticket_refs"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _team_diagram_ai_normalize_client_blob(d):
+    """Ensure bullet arrays exist; map legacy prose fields if needed."""
+    if not isinstance(d, dict):
+        return {}
+
+    def _clean_list(key_new, key_legacy):
+        v = d.get(key_new)
+        if isinstance(v, list):
+            out = [_team_diagram_normalize_bullet_line(str(x).strip()) for x in v if x is not None and str(x).strip()]
+            out = [x for x in out if x][:14]
+            if out:
+                return out
+        s = (d.get(key_legacy) or "").strip()
+        if not s:
+            return []
+        lines = [_team_diagram_normalize_bullet_line(ln.strip().lstrip("-•*\t ")) for ln in re.split(r"[\n\r]+", s) if ln.strip()]
+        lines = [x for x in lines if x][:14]
+        if len(lines) > 1:
+            return lines
+        one = _team_diagram_normalize_bullet_line(s[:1200])
+        return [one] if one else []
+
+    m = dict(d)
+    m["stories_bullets"] = _clean_list("stories_bullets", "stories_summary")
+    m["prod_bullets"] = _clean_list("prod_bullets", "prod_issues_summary")
+    m["overall_bullets"] = _clean_list("overall_bullets", "overall_summary")
+    return m
+
+
+def _team_diagram_ai_cache_get(cache_key):
+    conn, cursor = get_db_connection(dictionary=True)
+    if not conn:
+        return None
+    try:
+        cursor.execute(
+            "SELECT response_json FROM team_diagram_ai_cache WHERE cache_key = %s",
+            (cache_key,),
+        )
+        row = cursor.fetchone()
+        if row and row.get("response_json"):
+            return json.loads(row["response_json"])
+    except Exception as e:
+        print(f"team_diagram_ai_cache_get: {e}")
+    finally:
+        conn.close()
+    return None
+
+
+def _team_diagram_ai_pack_for_store(blob):
+    """Persist only stable summary fields (no runtime flags)."""
+    if not isinstance(blob, dict):
+        return {}
+    allow = (
+        "stories_bullets",
+        "prod_bullets",
+        "overall_bullets",
+        "story_keys_highlighted",
+        "prod_keys_highlighted",
+    )
+    return {k: blob[k] for k in allow if k in blob}
+
+
+def _team_diagram_ai_cache_put(cache_key, sub_team_name, data_obj):
+    conn, cursor = get_db_connection()
+    if not conn:
+        return False
+    try:
+        blob = json.dumps(_team_diagram_ai_pack_for_store(data_obj), ensure_ascii=False)
+        cursor.execute(
+            """INSERT INTO team_diagram_ai_cache (cache_key, sub_team_name, response_json)
+               VALUES (%s, %s, %s)
+               ON DUPLICATE KEY UPDATE sub_team_name = VALUES(sub_team_name),
+                 response_json = VALUES(response_json)""",
+            (cache_key, (sub_team_name or "")[:512], blob),
+        )
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"team_diagram_ai_cache_put: {e}")
+        conn.rollback()
+    finally:
+        conn.close()
+    return False
+
+
+def _team_diagram_claude_summarize(sub_team_name, main_team, story_issues, prod_issues, bug_issues, anthropic_key, model):
+    sj = json.dumps(story_issues[:55], ensure_ascii=False)
+    pj = json.dumps(prod_issues[:55], ensure_ascii=False)
+    bj = json.dumps(bug_issues[:65], ensure_ascii=False)
+    prompt = (
+        f'You summarize engineering work for sub-team "{sub_team_name}" under main team "{main_team}".\n'
+        "Three JSON arrays follow:\n"
+        "(1) Stories — Story / User Story issues.\n"
+        "(2) Production-flagged — issues with production platform checked (may include bugs, tasks, etc.).\n"
+        "(3) Bugs — all Bug-type issues from the same query (may overlap production list).\n\n"
+        f"Stories:\n{sj}\n\nProduction-flagged:\n{pj}\n\nBugs:\n{bj}\n\n"
+        "Return ONLY valid JSON (no markdown fences) with exactly these keys:\n"
+        "{\n"
+        '  "stories_bullets": ["Plain sentence about story work; cite ticket as (ABC-123) at end when referring to a specific story"],\n'
+        '  "overall_bullets": ["2-5 bullets: executive rollup of STORY delivery only"],\n'
+        '  "prod_bullets": ["Same style as stories_bullets: plain sentence, cite ticket as (ABC-123) at end when referring to a prod or bug issue"],\n'
+        '  "story_keys_highlighted": ["KEY1"],\n'
+        '  "prod_keys_highlighted": ["KEY2"]\n'
+        "}\n"
+        "Rules:\n"
+        "- stories_bullets: 4-10 items when stories exist; else one bullet noting none. "
+        "When a bullet ties to a specific story from the Stories JSON, end that bullet with (KEY) like prod_bullets.\n"
+        "- overall_bullets: themes across stories only (not bugs).\n"
+        "- prod_bullets: cover production-flagged work AND non-story bugs (dedupe overlaps). "
+        "4-12 items when there is any prod or bug data; if both lists empty use one bullet stating none.\n"
+        "- prod_bullets MUST cite Jira keys the same way as stories_bullets: put the issue key in parentheses at the end "
+        'of the sentence or clause for each bullet that ties to a specific ticket (e.g. "... export edge case (TIM-27800)"). '
+        "Include keys from the Production-flagged and Bugs JSON lists so readers can match summaries to tickets.\n"
+        "- Each bullet one line, plain text, no markdown.\n"
+        '- Do not start bullets with issue keys or \"KEY:\" — that produces stray colons when keys are linked at the end.\n'
+        "- story_keys_highlighted: up to 10 story keys that matter.\n"
+        "- prod_keys_highlighted: up to 12 keys mixing prod-flagged and bug keys that matter most."
+    )
+    try:
+        res = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "Content-Type": "application/json",
+                "x-api-key": anthropic_key,
+                "anthropic-version": "2023-06-01",
+            },
+            json={
+                "model": model,
+                "max_tokens": 2048,
+                "messages": [{"role": "user", "content": prompt}],
+            },
+            timeout=120,
+        )
+        if not res.ok:
+            return None, f"Claude HTTP {res.status_code}"
+        body = res.json()
+        raw = (body.get("content") or [{}])[0].get("text", "").strip()
+        raw = raw.strip("`").strip()
+        if raw.lower().startswith("json"):
+            raw = raw[4:].lstrip()
+        data = json.loads(raw)
+        if not isinstance(data, dict):
+            return None, "Invalid JSON shape"
+        def _coerce_bullets(v):
+            if isinstance(v, list):
+                out = [_team_diagram_normalize_bullet_line(str(x).strip()) for x in v if x is not None and str(x).strip()]
+                return [x for x in out if x][:14]
+            if isinstance(v, str) and v.strip():
+                one = _team_diagram_normalize_bullet_line(v.strip())
+                return [one] if one else []
+            return []
+
+        out = {
+            "stories_bullets": _coerce_bullets(data.get("stories_bullets")),
+            "prod_bullets": _coerce_bullets(data.get("prod_bullets")),
+            "overall_bullets": _coerce_bullets(data.get("overall_bullets")),
+            "story_keys_highlighted": data.get("story_keys_highlighted") or [],
+            "prod_keys_highlighted": data.get("prod_keys_highlighted") or [],
+        }
+        # Accept legacy prose-only responses
+        if not out["stories_bullets"]:
+            out["stories_bullets"] = _coerce_bullets(data.get("stories_summary"))
+        if not out["prod_bullets"]:
+            out["prod_bullets"] = _coerce_bullets(data.get("prod_issues_summary"))
+        if not out["overall_bullets"]:
+            out["overall_bullets"] = _coerce_bullets(data.get("overall_summary"))
+        if not isinstance(out["story_keys_highlighted"], list):
+            out["story_keys_highlighted"] = []
+        if not isinstance(out["prod_keys_highlighted"], list):
+            out["prod_keys_highlighted"] = []
+        out["story_keys_highlighted"] = [str(x).strip() for x in out["story_keys_highlighted"][:10] if x]
+        out["prod_keys_highlighted"] = [str(x).strip() for x in out["prod_keys_highlighted"][:10] if x]
+        return out, None
+    except json.JSONDecodeError as e:
+        return None, f"JSON parse error: {e}"
+    except Exception as e:
+        return None, str(e)
+
+
+def _team_diagram_resolve_ai(main_team, sub_team_name, jql, story_issues, prod_issues, bug_issues, ai_cache_only, anthropic_key, model):
+    cache_key = _team_diagram_ai_cache_key(jql, sub_team_name)
+    cached = _team_diagram_ai_cache_get(cache_key)
+    if cached and isinstance(cached, dict):
+        merged = _team_diagram_ai_normalize_client_blob(dict(cached))
+        merged["from_cache"] = True
+        merged["cache_key"] = cache_key
+        return merged
+
+    if ai_cache_only:
+        return _team_diagram_ai_normalize_client_blob(
+            {
+                "stories_bullets": [],
+                "prod_bullets": [],
+                "overall_bullets": [],
+                "story_keys_highlighted": [],
+                "prod_keys_highlighted": [],
+                "from_cache": False,
+                "cache_miss": True,
+                "cache_key": cache_key,
+                "error": "No cached AI summary yet. Run Generate once without 'AI summaries: cache only'.",
+            }
+        )
+
+    if not anthropic_key:
+        return _team_diagram_ai_normalize_client_blob(
+            {
+                "stories_bullets": [],
+                "prod_bullets": [],
+                "overall_bullets": [],
+                "story_keys_highlighted": [],
+                "prod_keys_highlighted": [],
+                "from_cache": False,
+                "cache_key": cache_key,
+                "error": "Anthropic API key not configured in Settings.",
+            }
+        )
+
+    if not story_issues and not prod_issues and not bug_issues:
+        empty = {
+            "stories_bullets": ["No Story-type tickets returned by this JQL."],
+            "prod_bullets": ["No production-flagged or Bug-type tickets in this result set."],
+            "overall_bullets": ["No tickets in this result set to summarize."],
+            "story_keys_highlighted": [],
+            "prod_keys_highlighted": [],
+            "from_cache": False,
+            "cache_key": cache_key,
+        }
+        _team_diagram_ai_cache_put(cache_key, sub_team_name, _team_diagram_ai_pack_for_store(empty))
+        return _team_diagram_ai_normalize_client_blob(empty)
+
+    parsed, err = _team_diagram_claude_summarize(
+        sub_team_name, main_team, story_issues, prod_issues, bug_issues, anthropic_key, model
+    )
+    if err or not parsed:
+        return _team_diagram_ai_normalize_client_blob(
+            {
+                "stories_bullets": [],
+                "prod_bullets": [],
+                "overall_bullets": [],
+                "story_keys_highlighted": [],
+                "prod_keys_highlighted": [],
+                "from_cache": False,
+                "cache_key": cache_key,
+                "error": err or "Claude failed",
+            }
+        )
+    parsed["from_cache"] = False
+    parsed["cache_key"] = cache_key
+    _team_diagram_ai_cache_put(cache_key, sub_team_name, parsed)
+    return _team_diagram_ai_normalize_client_blob(parsed)
+
+
 @app.route("/team_diagram")
 @admin_required
 def team_diagram_page():
@@ -8662,11 +9066,21 @@ def team_diagram_fetch():
 
     jira_domain = str(JIRA_DOMAIN)
     _plat_cf = _get_platform_checkboxes_field_id()
-    fields = "summary,status,issuetype"
+    fields = "summary,status,issuetype,labels,customfield_10016,customfield_10077"
     if _plat_cf:
         fields += f",{_plat_cf}"
 
-    _done_statuses = {"done", "closed", "resolved", "fixed", "complete", "completed", "released", "won't fix", "wont fix"}
+    def _opt_nonneg_int(v):
+        if v is None:
+            return None
+        try:
+            return max(0, int(v))
+        except (TypeError, ValueError):
+            return None
+
+    ai_model = str(payload.get("model") or "").strip() or "claude-sonnet-4-20250514"
+    ai_cache_only = bool(payload.get("ai_cache_only"))
+    anthropic_key_global = (_get_app_config_value("anthropic_api_key") or "").strip()
 
     results = []
     for st in sub_teams:
@@ -8726,13 +9140,34 @@ def team_diagram_fetch():
             start_at += 100
 
         total_stories = done_stories = total_bugs = done_bugs = prod_issues = 0
+        done_total = 0
+        story_tasks_total = story_tasks_done = 0
+        prod_issues_done = 0
+        total_test_cases = automated_test_cases = 0
+        total_story_points = 0.0
+        story_issues = []
+        prod_issues_ai = []
+        bug_issues_ai = []
+        customer_names_local = set()
         for issue in all_issues:
             f = issue.get("fields") or {}
-            itype = ((f.get("issuetype") or {}).get("name") or "").strip().lower()
-            status = ((f.get("status") or {}).get("name") or "").strip().lower()
-            is_done = status in _done_statuses
+            itype_raw = (f.get("issuetype") or {}).get("name") or ""
+            itype = itype_raw.strip().lower()
+            status_obj = f.get("status") or {}
+            status_disp = (status_obj.get("name") or "").strip()
+            status_category = ((status_obj.get("statusCategory") or {}).get("key") or "").strip()
+            is_done = _is_done_like_status(status_disp, status_category)
             _plat_raw = f.get(_plat_cf) if _plat_cf else None
             is_prod = _jira_platform_includes_production(_plat_raw)
+
+            if is_done:
+                done_total += 1
+
+            story_like = itype in ("story", "task", "sub-task", "subtask")
+            if story_like:
+                story_tasks_total += 1
+                if is_done:
+                    story_tasks_done += 1
 
             if itype == "story":
                 total_stories += 1
@@ -8744,141 +9179,148 @@ def team_diagram_fetch():
                     done_bugs += 1
             if is_prod:
                 prod_issues += 1
+                if is_done:
+                    prod_issues_done += 1
+            if _is_test_case_issue_type(itype_raw):
+                total_test_cases += 1
+                if _jira_issue_is_automated_test(itype_raw, f):
+                    automated_test_cases += 1
+
+            total_story_points += _team_diagram_coerce_story_points(f.get("customfield_10016"))
+
+            for cust in _extract_customer_values(f.get("customfield_10077")):
+                customer_names_local.add(cust)
+
+            ik = issue.get("key")
+            sum_txt = (f.get("summary") or "").strip()
+            if ik and _issue_type_bucket(itype_raw) == "Story":
+                story_issues.append({"key": ik, "summary": sum_txt[:240], "status": status_disp})
+            if ik and is_prod:
+                prod_issues_ai.append(
+                    {"key": ik, "summary": sum_txt[:240], "status": status_disp, "type": itype_raw}
+                )
+            if ik and _is_bug_type(itype_raw):
+                bug_issues_ai.append(
+                    {"key": ik, "summary": sum_txt[:240], "status": status_disp, "production": bool(is_prod)}
+                )
+
+        jira_ttc = total_test_cases
+
+        prod_bug_rows = []
+        _seen_pb = set()
+        for row in prod_issues_ai:
+            k = row.get("key")
+            if k and k not in _seen_pb:
+                _seen_pb.add(k)
+                prod_bug_rows.append(
+                    {
+                        "key": k,
+                        "summary": (row.get("summary") or "")[:280],
+                        "status": (row.get("status") or ""),
+                        "issue_type": (row.get("type") or ""),
+                        "prod_platform": True,
+                    }
+                )
+            if len(prod_bug_rows) >= 40:
+                break
+        if len(prod_bug_rows) < 40:
+            for row in bug_issues_ai:
+                k = row.get("key")
+                if k and k not in _seen_pb:
+                    _seen_pb.add(k)
+                    prod_bug_rows.append(
+                        {
+                            "key": k,
+                            "summary": (row.get("summary") or "")[:280],
+                            "status": (row.get("status") or ""),
+                            "issue_type": "Bug",
+                            "prod_platform": bool(row.get("production")),
+                        }
+                    )
+                if len(prod_bug_rows) >= 40:
+                    break
+
+        prod_bug_ticket_keys_ordered = [r["key"] for r in prod_bug_rows]
+
+        team_member_count = _opt_nonneg_int(st.get("team_member_count"))
+        total_story_points_r = round(total_story_points, 2)
+        estimated_calendar_days = None
+        if team_member_count is not None and team_member_count > 0:
+            estimated_calendar_days = round(total_story_points / float(team_member_count), 2)
+
+        manual_total_i = _opt_nonneg_int(st.get("test_cases_total"))
+        manual_auto_i = _opt_nonneg_int(st.get("test_cases_automated"))
+        use_manual_tests = manual_total_i is not None or manual_auto_i is not None
+        if use_manual_tests:
+            if manual_total_i is not None:
+                total_test_cases = manual_total_i
+            else:
+                total_test_cases = max(jira_ttc, manual_auto_i or 0)
+            if manual_auto_i is not None:
+                automated_test_cases = manual_auto_i
+            else:
+                automated_test_cases = 0
+            automated_test_cases = min(automated_test_cases, total_test_cases)
+
+        test_auto_pct = (
+            round(automated_test_cases / total_test_cases * 100) if total_test_cases else 0
+        )
+
+        ai_block = _team_diagram_resolve_ai(
+            main_team,
+            name,
+            jql,
+            story_issues,
+            prod_issues_ai,
+            bug_issues_ai,
+            ai_cache_only,
+            anthropic_key_global,
+            ai_model,
+        )
 
         results.append({
             "name": name,
             "jql": jql,
             "total": len(all_issues),
+            "done_total": done_total,
+            "story_tasks_total": story_tasks_total,
+            "story_tasks_done": story_tasks_done,
+            "team_member_count": team_member_count,
+            "total_story_points": total_story_points_r,
+            "estimated_calendar_days": estimated_calendar_days,
             "total_stories": total_stories,
             "done_stories": done_stories,
             "total_bugs": total_bugs,
             "done_bugs": done_bugs,
             "prod_issues": prod_issues,
+            "prod_issues_done": prod_issues_done,
+            "total_test_cases": total_test_cases,
+            "automated_test_cases": automated_test_cases,
+            "test_automation_pct": test_auto_pct,
+            "test_metrics_manual": use_manual_tests,
+            "story_ticket_keys": [x["key"] for x in story_issues[:24]],
+            "prod_ticket_keys": [x["key"] for x in prod_issues_ai[:24]],
+            "bug_ticket_keys": [x["key"] for x in bug_issues_ai[:28]],
+            "prod_bug_ticket_keys": prod_bug_ticket_keys_ordered[:32],
+            "prod_bug_rows": prod_bug_rows[:40],
+            "customer_names": sorted(customer_names_local, key=lambda x: str(x).lower()),
+            "ai": ai_block,
             "error": error_msg,
         })
 
-    return jsonify({"main_team": main_team, "sub_teams": results})
+    portfolio_customers = set()
+    for row in results:
+        for c in row.get("customer_names") or []:
+            portfolio_customers.add(c)
+    portfolio_customer_names = sorted(portfolio_customers, key=lambda x: str(x).lower())
 
-
-@app.route("/api/team_diagram/pdf", methods=["POST"])
-@admin_required
-def team_diagram_pdf():
-    """Generate a PDF report for the team diagram data."""
-    payload = request.get_json(silent=True) or {}
-    main_team = str(payload.get("main_team") or "").strip()
-    sub_teams = payload.get("sub_teams") or []
-
-    if not main_team:
-        return jsonify({"error": "main_team is required"}), 400
-
-    generated_at = datetime.now().strftime("%Y-%m-%d %H:%M")
-
-    # Build sub-team rows HTML
-    sub_rows_html = ""
-    for st in sub_teams:
-        name = (st.get("name") or "").replace("<", "&lt;").replace(">", "&gt;")
-        total = st.get("total", 0)
-        ts = st.get("total_stories", 0)
-        ds = st.get("done_stories", 0)
-        tb = st.get("total_bugs", 0)
-        db_ = st.get("done_bugs", 0)
-        pi = st.get("prod_issues", 0)
-        stories_pct = round(ds / ts * 100) if ts else 0
-        bugs_pct = round(db_ / tb * 100) if tb else 0
-        err = (st.get("error") or "").replace("<", "&lt;").replace(">", "&gt;")
-        err_html = f'<span style="color:#e53e3e;font-size:10px;">{err}</span>' if err else ""
-        sub_rows_html += f"""
-        <tr>
-          <td style="font-weight:600">{name}</td>
-          <td style="text-align:center">{total}</td>
-          <td style="text-align:center">{ds}/{ts} <span style="color:#64748b;font-size:10px;">({stories_pct}%)</span></td>
-          <td style="text-align:center">{db_}/{tb} <span style="color:#64748b;font-size:10px;">({bugs_pct}%)</span></td>
-          <td style="text-align:center">{pi}</td>
-          <td>{err_html if err else '<span style="color:#22c55e">&#10003;</span>'}</td>
-        </tr>"""
-
-    # Aggregate totals
-    agg_total = sum(st.get("total", 0) for st in sub_teams)
-    agg_ts = sum(st.get("total_stories", 0) for st in sub_teams)
-    agg_ds = sum(st.get("done_stories", 0) for st in sub_teams)
-    agg_tb = sum(st.get("total_bugs", 0) for st in sub_teams)
-    agg_db = sum(st.get("done_bugs", 0) for st in sub_teams)
-    agg_pi = sum(st.get("prod_issues", 0) for st in sub_teams)
-
-    html_content = f"""
-<html>
-<head>
-  <meta charset="utf-8"/>
-  <style>
-    body {{ font-family: Helvetica, Arial, sans-serif; font-size: 11px; color: #1f2937; margin: 24px; }}
-    h1 {{ font-size: 20px; margin: 0 0 4px; color: #1e3a5f; }}
-    .meta {{ color: #64748b; font-size: 10px; margin-bottom: 16px; }}
-    .kpi-row {{ display: table; width: 100%; margin-bottom: 16px; }}
-    .kpi {{ display: table-cell; border: 1px solid #dbe3ef; border-radius: 6px; padding: 8px 12px; margin: 0 4px; text-align: center; background: #f8fafc; }}
-    .kpi-label {{ font-size: 9px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; }}
-    .kpi-val {{ font-size: 18px; font-weight: bold; color: #1e3a5f; margin-top: 2px; }}
-    h2 {{ font-size: 13px; margin: 18px 0 8px; color: #334155; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }}
-    table {{ width: 100%; border-collapse: collapse; margin-top: 6px; }}
-    th {{ background: #f1f5f9; color: #334155; padding: 7px 8px; text-align: left; border: 1px solid #e2e8f0; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; }}
-    td {{ padding: 6px 8px; border: 1px solid #e2e8f0; vertical-align: middle; }}
-    tr:nth-child(even) td {{ background: #f8fafc; }}
-    .footer {{ margin-top: 24px; color: #94a3b8; font-size: 9px; text-align: right; }}
-    .main-team-box {{ background: #1e3a5f; color: white; padding: 10px 20px; border-radius: 8px; display: inline-block; font-size: 15px; font-weight: bold; margin-bottom: 16px; }}
-  </style>
-</head>
-<body>
-  <h1>Team Diagram Report</h1>
-  <div class="meta">Generated: {generated_at}</div>
-
-  <div class="main-team-box">{main_team.replace("<","&lt;").replace(">","&gt;")}</div>
-
-  <div class="kpi-row">
-    <div class="kpi"><div class="kpi-label">Sub-Teams</div><div class="kpi-val">{len(sub_teams)}</div></div>
-    <div class="kpi"><div class="kpi-label">Total Tickets</div><div class="kpi-val">{agg_total}</div></div>
-    <div class="kpi"><div class="kpi-label">Stories Done</div><div class="kpi-val">{agg_ds}/{agg_ts}</div></div>
-    <div class="kpi"><div class="kpi-label">Bugs Fixed</div><div class="kpi-val">{agg_db}/{agg_tb}</div></div>
-    <div class="kpi"><div class="kpi-label">Prod Issues</div><div class="kpi-val">{agg_pi}</div></div>
-  </div>
-
-  <h2>Sub-Team Breakdown</h2>
-  <table>
-    <thead>
-      <tr>
-        <th>Sub-Team</th>
-        <th style="text-align:center">Total Tickets</th>
-        <th style="text-align:center">Stories (Done/Total)</th>
-        <th style="text-align:center">Bugs (Fixed/Total)</th>
-        <th style="text-align:center">Prod Issues</th>
-        <th>Status</th>
-      </tr>
-    </thead>
-    <tbody>
-      {sub_rows_html}
-    </tbody>
-  </table>
-
-  <div class="footer">Team Diagram Report &mdash; {main_team.replace("<","&lt;").replace(">","&gt;")} &mdash; {generated_at}</div>
-</body>
-</html>"""
-
-    try:
-        from io import BytesIO
-        from xhtml2pdf import pisa
-        pdf_buf = BytesIO()
-        result = pisa.CreatePDF(html_content, dest=pdf_buf)
-        if result.err:
-            return jsonify({"error": "PDF generation failed"}), 500
-        pdf_buf.seek(0)
-        safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in main_team)
-        filename = f"team_diagram_{safe_name}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
-        return send_file(
-            pdf_buf,
-            mimetype="application/pdf",
-            as_attachment=True,
-            download_name=filename,
-        )
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    return jsonify(
+        {
+            "main_team": main_team,
+            "sub_teams": results,
+            "portfolio_customer_names": portfolio_customer_names,
+        }
+    )
 
 
 if __name__ == "__main__":
