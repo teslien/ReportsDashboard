@@ -660,7 +660,7 @@
   <!-- Header -->
   <div id="td-page-intro" class="mb-8">
     <h1 class="text-2xl font-bold text-white mb-1">Team Diagram Report</h1>
-    <p class="text-gray-400 text-sm">Under each sub-team: a <strong class="text-gray-300">story tickets</strong> Claude panel, then a linked panel below for <strong class="text-gray-300">production issues &amp; bugs</strong>. Keys link to Jira as <strong class="text-gray-300">(PROJ-123)</strong>. Enter <strong class="text-gray-300">team size</strong> per sub-team: we sum <strong class="text-gray-300">story points</strong> from Jira (<code class="text-gray-300">customfield_10016</code>), treat <strong class="text-gray-300">1 SP = 1 person-day</strong> for <strong class="text-gray-300">estimated days = Σ SP ÷ team size</strong> on each circle, and for the portfolio strip compute <strong class="text-gray-300">avg story points per member per day = Σ SP ÷ Σ team members ÷ 10</strong> calendar days. <strong class="text-gray-300">Cache only</strong> skips new Claude calls. Test case fields optional.</p>
+    <p class="text-gray-400 text-sm">Under each sub-team: a <strong class="text-gray-300">story tickets</strong> Claude panel, then a linked panel below for <strong class="text-gray-300">production issues &amp; bugs</strong>. Keys link to Jira as <strong class="text-gray-300">(PROJ-123)</strong>. <strong class="text-gray-300">Team size</strong> defaults to the count of <strong class="text-gray-300">distinct assignees</strong> on tickets returned by that row’s JQL (override anytime). <strong class="text-gray-300">Test cases</strong> are entered once for the <strong class="text-gray-300">main team</strong> (or left blank to use deduped test-issue counts from all sub-team JQL results). We sum <strong class="text-gray-300">story points</strong> from Jira (<code class="text-gray-300">customfield_10016</code>), treat <strong class="text-gray-300">1 SP = 1 person-day</strong> for <strong class="text-gray-300">estimated days = Σ SP ÷ team size</strong> on each circle, and for the portfolio strip compute <strong class="text-gray-300">avg story points per member per day = Σ SP ÷ Σ team members ÷ 10</strong> calendar days. <strong class="text-gray-300">Cache only</strong> skips new Claude calls.</p>
   </div>
 
   <!-- Config Card -->
@@ -672,6 +672,19 @@
       <label class="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Main Team Name</label>
       <input id="main-team-input" type="text" placeholder="e.g. Payroll"
         class="w-full bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+    </div>
+
+    <div class="mb-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div>
+        <label class="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Main team — test cases (total)</label>
+        <input id="main-team-test-total" type="number" min="0" step="1" placeholder="Blank = dedupe test issues from Jira"
+          class="w-full bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Main team — test cases (automated)</label>
+        <input id="main-team-test-auto" type="number" min="0" step="1" placeholder="Blank = from Jira automation hints"
+          class="w-full bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+      </div>
     </div>
 
     <!-- Sub Teams -->
@@ -765,7 +778,8 @@
 
   <!-- Summary Table -->
   <div id="table-section" class="hidden bg-gray-800 border border-gray-700 rounded-xl p-6">
-    <h2 class="text-base font-semibold text-white mb-4">Summary Table</h2>
+    <h2 class="text-base font-semibold text-white mb-1">Summary Table</h2>
+    <p id="summary-table-test-line" class="text-sm text-violet-300 mb-4 hidden" aria-live="polite"></p>
     <div class="overflow-x-auto">
       <table class="w-full text-sm">
         <thead>
@@ -777,7 +791,6 @@
             <th class="text-center py-2 px-3">Total Tickets</th>
             <th class="text-center py-2 px-3 leading-tight max-w-[7rem]">Stories / Tasks / Sub</th>
             <th class="text-center py-2 px-3">Bugs</th>
-            <th class="text-center py-2 px-3">Test Cases</th>
             <th class="text-center py-2 px-3">Prod Issues</th>
             <th class="text-left py-2 pl-3">JQL</th>
           </tr>
@@ -797,14 +810,12 @@
 // ---------------------------------------------------------------------------
 let rowCount = 0;
 
-function addSubTeamRow(name, jql, testTotal, testAuto, teamMembers) {
+function addSubTeamRow(name, jql, teamMembers) {
   rowCount++;
   const id = rowCount;
   const noMsg = document.getElementById('no-subteams-msg');
   if (noMsg) noMsg.classList.add('hidden');
 
-  const tt = testTotal != null && testTotal !== '' ? escHtml(String(testTotal)) : '';
-  const ta = testAuto != null && testAuto !== '' ? escHtml(String(testAuto)) : '';
   const tm = teamMembers != null && teamMembers !== '' ? escHtml(String(teamMembers)) : '';
 
   const row = document.createElement('div');
@@ -818,25 +829,11 @@ function addSubTeamRow(name, jql, testTotal, testAuto, teamMembers) {
       <textarea placeholder="JQL query (e.g. project = PAY AND sprint in openSprints())"
         rows="2"
         class="w-full bg-gray-800 border border-gray-600 rounded-md px-2.5 py-1.5 text-white text-sm resize-none focus:outline-none focus:border-blue-500 subteam-jql-input font-mono">${escHtml(jql || '')}</textarea>
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2">
-        <div>
-          <label class="block text-[10px] font-medium text-gray-500 uppercase tracking-wider mb-0.5">Team size</label>
-          <input type="number" min="1" step="1" placeholder="For SP÷days estimate"
-            value="${tm}"
-            class="w-full bg-gray-800 border border-gray-600 rounded-md px-2.5 py-1.5 text-white text-sm focus:outline-none focus:border-blue-500 subteam-team-members-input">
-        </div>
-        <div>
-          <label class="block text-[10px] font-medium text-gray-500 uppercase tracking-wider mb-0.5">Test cases (total)</label>
-          <input type="number" min="0" step="1" placeholder="Optional — from Jira if empty"
-            value="${tt}"
-            class="w-full bg-gray-800 border border-gray-600 rounded-md px-2.5 py-1.5 text-white text-sm focus:outline-none focus:border-blue-500 subteam-test-total-input">
-        </div>
-        <div>
-          <label class="block text-[10px] font-medium text-gray-500 uppercase tracking-wider mb-0.5">Test cases (automated)</label>
-          <input type="number" min="0" step="1" placeholder="Optional — from Jira if empty"
-            value="${ta}"
-            class="w-full bg-gray-800 border border-gray-600 rounded-md px-2.5 py-1.5 text-white text-sm focus:outline-none focus:border-blue-500 subteam-test-auto-input">
-        </div>
+      <div class="mt-2">
+        <label class="block text-[10px] font-medium text-gray-500 uppercase tracking-wider mb-0.5">Team size</label>
+        <input type="number" min="1" step="1" placeholder="Auto: distinct assignees after Generate"
+          value="${tm}"
+          class="w-full max-w-xs bg-gray-800 border border-gray-600 rounded-md px-2.5 py-1.5 text-white text-sm focus:outline-none focus:border-blue-500 subteam-team-members-input">
       </div>
     </div>
     <button type="button" onclick="removeRow(${id})"
@@ -964,62 +961,86 @@ function parseOptionalTeamMembers(val) {
 
 function getConfig() {
   const mainTeam = document.getElementById('main-team-input').value.trim();
+  const mainTestTotal = parseOptionalNonNegInt(document.getElementById('main-team-test-total')?.value);
+  const mainTestAuto = parseOptionalNonNegInt(document.getElementById('main-team-test-auto')?.value);
   const rows = document.querySelectorAll('#subteams-container .sub-team-row');
   const subTeams = [];
   rows.forEach(row => {
     const name = row.querySelector('.subteam-name-input').value.trim();
     const jql = row.querySelector('.subteam-jql-input').value.trim();
-    const testTotal = parseOptionalNonNegInt(row.querySelector('.subteam-test-total-input')?.value);
-    const testAuto = parseOptionalNonNegInt(row.querySelector('.subteam-test-auto-input')?.value);
     const teamMembers = parseOptionalTeamMembers(row.querySelector('.subteam-team-members-input')?.value);
     if (name || jql) {
       const entry = { name, jql };
       if (teamMembers !== null) entry.team_member_count = teamMembers;
-      if (testTotal !== null) entry.test_cases_total = testTotal;
-      if (testAuto !== null) entry.test_cases_automated = testAuto;
       subTeams.push(entry);
     }
   });
-  return { mainTeam, subTeams };
+  return { mainTeam, mainTestTotal, mainTestAuto, subTeams };
 }
 
-function tdRandomTeamSeed() {
-  const teamMembers = String(Math.floor(5 + Math.random() * 6));
-  const testTotal = Math.floor(55 + Math.random() * 95);
-  const autoHi = Math.max(10, Math.floor(testTotal * 0.58));
-  const testAuto = Math.max(8, Math.floor(10 + Math.random() * (autoHi - 9)));
-  return {
-    teamMembers,
-    testTotal: String(testTotal),
-    testAuto: String(Math.min(testAuto, testTotal - 6)),
-  };
+/** Portfolio-level test metrics (main team); not summed per sub-team row. */
+function tdMainTeamTestMetrics(data) {
+  const m = data && data.main_team_test_metrics;
+  if (!m) return { total: 0, automated: 0, pct: 0, source: '' };
+  const total = Number(m.total) || 0;
+  const automated = Number(m.automated) || 0;
+  const pct =
+    m.automation_pct != null
+      ? Number(m.automation_pct)
+      : total
+        ? Math.round((automated / total) * 100)
+        : 0;
+  return { total, automated, pct, source: m.source || '' };
 }
 
-// Seed with 3 pre-filled rows (sprint JQLs) + sample team size / test counts on load
+function tdSyncMainTeamTestInputsFromFetch(data) {
+  const raw = data && data.main_team_test_metrics;
+  const tIn = document.getElementById('main-team-test-total');
+  const aIn = document.getElementById('main-team-test-auto');
+  if (!raw || !tIn || !aIn) return;
+  tIn.value = raw.total != null ? String(raw.total) : '';
+  aIn.value = raw.automated != null ? String(raw.automated) : '';
+}
+
+/** After Generate Diagram, align inputs with server-side team size (manual or assignee-based). */
+function tdSyncTeamSizeInputsFromFetch(data) {
+  const rows = document.querySelectorAll('#subteams-container .sub-team-row');
+  const sts = data.sub_teams || [];
+  sts.forEach((st, i) => {
+    const row = rows[i];
+    if (!row || st.error) return;
+    const inp = row.querySelector('.subteam-team-members-input');
+    if (!inp) return;
+    const tc = st.team_member_count;
+    if (tc != null && Number(tc) >= 1) inp.value = String(tc);
+    else inp.value = '';
+  });
+}
+
+// Seed with 3 pre-filled rows (sprint JQLs); team size & main-team tests fill after Generate.
 document.addEventListener('DOMContentLoaded', () => {
   const seeds = [
     {
       name: 'Payroll (PR)',
-      jql: 'sprint = "PR 0501_26 Biweekly(Apr 24)" AND labels NOT IN (QuickWins, Reports-FocusTeam) ORDER BY Rank ASC',
+      jql: 'sprint = "PR 0501_26 Biweekly (8 May)" AND labels NOT IN (QuickWins, Reports-FocusTeam) ORDER BY Rank ASC',
     },
     {
       name: 'Reports-FocusTeam',
-      jql: 'sprint = "RPT 0501_26 Biweekly(Apr 24)" AND labels = Reports-FocusTeam ORDER BY Rank ASC',
+      jql: 'sprint = "RPT 0501_26 Biweekly(May 8)" AND labels = Reports-FocusTeam ORDER BY Rank ASC',
     },
     {
       name: 'QuickWins',
-      jql: 'sprint = "QW 0501_26 Biweekly (24 Apr)" AND labels = QuickWins ORDER BY Rank ASC',
+      jql: 'sprint = "QW 0501_26 Biweekly (8 May)" AND labels = QuickWins ORDER BY Rank ASC',
     },
   ];
   seeds.forEach((s) => {
-    const { teamMembers, testTotal, testAuto } = tdRandomTeamSeed();
-    addSubTeamRow(s.name, s.jql, testTotal, testAuto, teamMembers);
+    addSubTeamRow(s.name, s.jql, '');
   });
   checkNoSubteams();
 });
 
 document.getElementById('add-subteam-btn').addEventListener('click', () => {
-  addSubTeamRow('', '', '', '', '');
+  addSubTeamRow('', '', '');
 });
 
 // ---------------------------------------------------------------------------
@@ -1028,7 +1049,7 @@ document.getElementById('add-subteam-btn').addEventListener('click', () => {
 let lastResult = null;
 
 document.getElementById('fetch-btn').addEventListener('click', async () => {
-  const { mainTeam, subTeams } = getConfig();
+  const { mainTeam, mainTestTotal, mainTestAuto, subTeams } = getConfig();
   if (!mainTeam) { alert('Please enter a main team name.'); return; }
   const valid = subTeams.filter(st => st.name && st.jql);
   if (valid.length === 0) { alert('Please add at least one sub-team with a name and JQL.'); return; }
@@ -1046,6 +1067,8 @@ document.getElementById('fetch-btn').addEventListener('click', async () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         main_team: mainTeam,
+        main_team_test_cases_total: mainTestTotal,
+        main_team_test_cases_automated: mainTestAuto,
         sub_teams: valid,
         ai_cache_only: document.getElementById('ai-cache-only').checked,
       }),
@@ -1054,6 +1077,8 @@ document.getElementById('fetch-btn').addEventListener('click', async () => {
     if (!res.ok) { alert(data.error || 'Failed to fetch data.'); return; }
 
     lastResult = data;
+    tdSyncTeamSizeInputsFromFetch(data);
+    tdSyncMainTeamTestInputsFromFetch(data);
     document.getElementById('diagram-section').classList.remove('hidden');
     document.getElementById('table-section').classList.remove('hidden');
     requestAnimationFrame(() => {
@@ -1069,7 +1094,13 @@ document.getElementById('fetch-btn').addEventListener('click', async () => {
     document.getElementById('pdf-btn').disabled = false;
     document.getElementById('td-pres-btn').disabled = false;
     document.getElementById('diagram-timestamp').textContent = 'Generated: ' + new Date().toLocaleString();
-    status.textContent = `Fetched ${data.sub_teams.length} sub-team(s)`;
+    const sts = data.sub_teams || [];
+    const zeroCols = sts.filter((t) => !t.error && !(Number(t.total) > 0)).length;
+    let statusMsg = `Fetched ${sts.length} sub-team JQL(s); every column is queried separately.`;
+    if (zeroCols > 0) {
+      statusMsg += ` ${zeroCols} returned no Jira issues — open Advanced search in Jira, run that column’s JQL, and fix the sprint name or label filters until issues appear.`;
+    }
+    status.textContent = statusMsg;
   } catch (e) {
     alert('Error: ' + e.message);
   } finally {
@@ -1876,9 +1907,10 @@ function renderTeamDiagramKpis(data) {
   const bugsTot = tdSumOkTeams(teams, (t) => t.total_bugs);
   const prodDone = tdSumOkTeams(teams, (t) => (t.prod_issues_done != null ? t.prod_issues_done : 0));
   const prodTot = tdSumOkTeams(teams, (t) => t.prod_issues);
-  const ttc = tdSumOkTeams(teams, (t) => t.total_test_cases);
-  const atc = tdSumOkTeams(teams, (t) => t.automated_test_cases);
-  const testPct = ttc ? Math.round((atc / ttc) * 100) : 0;
+  const mtTests = tdMainTeamTestMetrics(data);
+  const ttc = mtTests.total;
+  const atc = mtTests.automated;
+  const testPct = mtTests.pct;
 
   let sumSP = 0;
   let sumM = 0;
@@ -1917,7 +1949,7 @@ function renderTeamDiagramKpis(data) {
     `<div class="td-kpi-title">Test automation</div>` +
     `<div class="td-kpi-rule"></div>` +
     `<div class="td-kpi-main"><span class="td-kpi-num-violet">${testPct}</span><span class="td-kpi-den">%</span></div>` +
-    `<div class="td-kpi-cap">automated / total test cases</div></div>` +
+    `<div class="td-kpi-cap">main team · automated / total</div></div>` +
     `<div class="td-kpi-card td-kpi-slate">` +
     `<div class="td-kpi-title">Avg story points / member / day</div>` +
     `<div class="td-kpi-rule"></div>` +
@@ -1938,6 +1970,8 @@ function renderDiagram(data) {
 
   const sumOk = (pick) => subTeams.filter((t) => !t.error).reduce((s, t) => s + (Number(pick(t)) || 0), 0);
 
+  const mtTests = tdMainTeamTestMetrics(data);
+
   // Aggregate totals for main circle (exclude errored JQL rows)
   const agg = {
     done_total: sumOk((t) => t.done_total),
@@ -1948,12 +1982,10 @@ function renderDiagram(data) {
     done_bugs: sumOk((t) => t.done_bugs),
     prod_done: sumOk((t) => (t.prod_issues_done != null ? t.prod_issues_done : 0)),
     prod_total: sumOk((t) => t.prod_issues),
-    total_test_cases: sumOk((t) => t.total_test_cases),
-    automated_test_cases: sumOk((t) => t.automated_test_cases),
+    total_test_cases: mtTests.total,
+    automated_test_cases: mtTests.automated,
+    test_automation_pct: mtTests.pct,
   };
-  agg.test_automation_pct = agg.total_test_cases
-    ? Math.round((agg.automated_test_cases / agg.total_test_cases) * 100)
-    : 0;
 
   // Layout constants
   const NODE_R       = 98;
@@ -2017,6 +2049,14 @@ function renderDiagram(data) {
   mainG.appendChild(svgText(`${agg.done_bugs}/${agg.total_bugs}`,       mainX, mY + 74, 'main-metric-val cm-bugs',    'middle'));
   mainG.appendChild(svgText('PRODUCTION',    mainX, mY + 90,  'main-metric-label', 'middle'));
   mainG.appendChild(svgText(`${agg.prod_done}/${agg.prod_total}`,       mainX, mY + 104, 'main-metric-val cm-prod',    'middle'));
+  mainG.appendChild(svgText('TEST CASES',     mainX, mY + 118, 'main-metric-label', 'middle'));
+  mainG.appendChild(svgText(
+    `${agg.automated_test_cases}/${agg.total_test_cases} · ${agg.test_automation_pct}% auto`,
+    mainX,
+    mY + 132,
+    'main-metric-val cm-tests',
+    'middle',
+  ));
   svg.appendChild(mainG);
 
   // ── Sub-team circles ──
@@ -2051,9 +2091,6 @@ function renderDiagram(data) {
       const stv = st.story_tasks_total != null ? st.story_tasks_total : st.total_stories;
       const pd = st.prod_issues_done != null ? st.prod_issues_done : 0;
       const pt = st.prod_issues || 0;
-      const ttc = st.total_test_cases || 0;
-      const atc = st.automated_test_cases || 0;
-      const tpct = st.test_automation_pct != null ? st.test_automation_pct : (ttc ? Math.round(atc / ttc * 100) : 0);
 
       g.appendChild(svgText('TICKETS', cx, y, 'metric-label', 'middle')); y += step;
       g.appendChild(svgText(`${dt}/${tot}`, cx, y, 'metric-val c-stories', 'middle')); y += step;
@@ -2062,9 +2099,7 @@ function renderDiagram(data) {
       g.appendChild(svgText('BUGS', cx, y, 'metric-label', 'middle')); y += step;
       g.appendChild(svgText(`${st.done_bugs}/${st.total_bugs}`, cx, y, 'metric-val c-bugs', 'middle')); y += step;
       g.appendChild(svgText('PRODUCTION', cx, y, 'metric-label', 'middle')); y += step;
-      g.appendChild(svgText(`${pd}/${pt}`, cx, y, 'metric-val c-prod', 'middle')); y += step;
-      g.appendChild(svgText('TEST CASES', cx, y, 'metric-label', 'middle')); y += step;
-      g.appendChild(svgText(`${atc}/${ttc} · ${tpct}% auto`, cx, y, 'metric-val c-tests', 'middle'));
+      g.appendChild(svgText(`${pd}/${pt}`, cx, y, 'metric-val c-prod', 'middle'));
     }
 
     svg.appendChild(g);
@@ -2274,6 +2309,21 @@ function truncate(str, max) {
 // ---------------------------------------------------------------------------
 // Summary Table
 // ---------------------------------------------------------------------------
+function tdUpdateSummaryTableTestLine(data) {
+  const el = document.getElementById('summary-table-test-line');
+  if (!el || !data) return;
+  const m = tdMainTeamTestMetrics(data);
+  if (!m.total) {
+    el.classList.add('hidden');
+    el.textContent = '';
+    return;
+  }
+  el.classList.remove('hidden');
+  const srcHint =
+    m.source === 'manual' ? 'manual main-team fields' : 'deduped test issues from all sub-team JQLs';
+  el.textContent = `Main team test cases: ${m.automated}/${m.total} (${m.pct}% automated) · ${srcHint}`;
+}
+
 function renderTable(data) {
   const tbody = document.getElementById('summary-tbody');
   tbody.innerHTML = '';
@@ -2282,9 +2332,6 @@ function renderTable(data) {
     const stTot = st.story_tasks_total != null ? st.story_tasks_total : st.total_stories;
     const storiesPct = stTot ? Math.round(stDone / stTot * 100) : 0;
     const bugsPct = st.total_bugs ? Math.round(st.done_bugs / st.total_bugs * 100) : 0;
-    const ttc = st.total_test_cases || 0;
-    const atc = st.automated_test_cases || 0;
-    const testPct = ttc ? (st.test_automation_pct != null ? st.test_automation_pct : Math.round(atc / ttc * 100)) : 0;
     const tr = document.createElement('tr');
     const tmc = st.team_member_count;
     const tsp = st.total_story_points;
@@ -2296,7 +2343,7 @@ function renderTable(data) {
     if (st.error) {
       tr.innerHTML = `
       <td class="py-2.5 pr-4 font-medium text-white">${escHtml(st.name)}</td>
-      <td colspan="9" class="py-2.5 px-3 text-red-400 text-xs italic">${escHtml(st.error)}</td>`;
+      <td colspan="8" class="py-2.5 px-3 text-red-400 text-xs italic">${escHtml(st.error)}</td>`;
     } else {
       tr.innerHTML = `
       <td class="py-2.5 pr-4 font-medium text-white">${escHtml(st.name)}</td>
@@ -2312,15 +2359,12 @@ function renderTable(data) {
         <span class="text-orange-400 font-semibold">${st.done_bugs}/${st.total_bugs}</span>
         <span class="text-gray-500 text-xs ml-1">${bugsPct}%</span>
       </td>
-      <td class="py-2.5 px-3 text-center">
-        <span class="text-violet-400 font-semibold">${atc}/${ttc}</span>
-        <span class="text-gray-500 text-xs ml-1">${testPct}%</span>
-      </td>
       <td class="py-2.5 px-3 text-center ${st.prod_issues > 0 ? 'text-red-400 font-semibold' : 'text-gray-400'}">${st.prod_issues}</td>
       <td class="py-2.5 pl-3 text-gray-500 text-xs font-mono max-w-xs truncate" title="${escHtml(st.jql)}">${escHtml(st.jql)}</td>`;
     }
     tbody.appendChild(tr);
   });
+  tdUpdateSummaryTableTestLine(data);
 }
 </script>
 {% endblock %}

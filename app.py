@@ -8810,6 +8810,44 @@ def sprint_tracker_create_sprint_from_generated():
 # Team Diagram Report
 # ---------------------------------------------------------------------------
 
+def _team_diagram_assignee_dedupe_key(fields_obj):
+    """Stable unique key per assignee (accountId when present). Ignores unassigned."""
+    a = (fields_obj or {}).get("assignee")
+    if not a:
+        return None
+    if isinstance(a, dict):
+        aid = (a.get("accountId") or "").strip()
+        if aid:
+            return aid
+        dn = (a.get("displayName") or "").strip()
+        if dn:
+            return f"name:{dn.lower()}"
+        em = (a.get("emailAddress") or "").strip()
+        if em:
+            return f"email:{em.lower()}"
+        return None
+    s = str(a).strip().lower()
+    return s or None
+
+
+def _team_diagram_assignee_display_name(fields_obj):
+    """Human-readable assignee label for API/UI."""
+    a = (fields_obj or {}).get("assignee")
+    if not a:
+        return None
+    if isinstance(a, dict):
+        dn = (a.get("displayName") or "").strip()
+        if dn:
+            return dn
+        em = (a.get("emailAddress") or "").strip()
+        if em:
+            return em
+        aid = (a.get("accountId") or "").strip()
+        return aid or None
+    s = str(a).strip()
+    return s or None
+
+
 def _team_diagram_coerce_story_points(raw):
     """Numeric story points from Jira custom field (often customfield_10016); missing → 0."""
     if raw is None:
@@ -9125,7 +9163,7 @@ def team_diagram_fetch():
 
     jira_domain = str(JIRA_DOMAIN)
     _plat_cf = _get_platform_checkboxes_field_id()
-    fields = "summary,status,issuetype,labels,customfield_10016,customfield_10077"
+    fields = "summary,status,issuetype,labels,customfield_10016,customfield_10077,assignee"
     if _plat_cf:
         fields += f",{_plat_cf}"
 
@@ -9140,6 +9178,11 @@ def team_diagram_fetch():
     ai_model = str(payload.get("model") or "").strip() or "claude-sonnet-4-20250514"
     ai_cache_only = bool(payload.get("ai_cache_only"))
     anthropic_key_global = (_get_app_config_value("anthropic_api_key") or "").strip()
+
+    main_tm_total = _opt_nonneg_int(payload.get("main_team_test_cases_total"))
+    main_tm_auto = _opt_nonneg_int(payload.get("main_team_test_cases_automated"))
+    # Dedupe test-case-type issues by key across all sub-team JQL results (overlap-safe).
+    portfolio_test_by_key = {}
 
     results = []
     for st in sub_teams:
@@ -9202,14 +9245,17 @@ def team_diagram_fetch():
         done_total = 0
         story_tasks_total = story_tasks_done = 0
         prod_issues_done = 0
-        total_test_cases = automated_test_cases = 0
         total_story_points = 0.0
         story_issues = []
         prod_issues_ai = []
         bug_issues_ai = []
         customer_names_local = set()
+        assignee_by_key = {}
         for issue in all_issues:
             f = issue.get("fields") or {}
+            ak = _team_diagram_assignee_dedupe_key(f)
+            if ak and ak not in assignee_by_key:
+                assignee_by_key[ak] = _team_diagram_assignee_display_name(f) or ak
             itype_raw = (f.get("issuetype") or {}).get("name") or ""
             itype = itype_raw.strip().lower()
             status_obj = f.get("status") or {}
@@ -9241,9 +9287,14 @@ def team_diagram_fetch():
                 if is_done:
                     prod_issues_done += 1
             if _is_test_case_issue_type(itype_raw):
-                total_test_cases += 1
-                if _jira_issue_is_automated_test(itype_raw, f):
-                    automated_test_cases += 1
+                ik_tc = issue.get("key")
+                if ik_tc:
+                    auto_tc = _jira_issue_is_automated_test(itype_raw, f)
+                    prev_tc = portfolio_test_by_key.get(ik_tc)
+                    if prev_tc is None:
+                        portfolio_test_by_key[ik_tc] = auto_tc
+                    else:
+                        portfolio_test_by_key[ik_tc] = prev_tc or auto_tc
 
             total_story_points += _team_diagram_coerce_story_points(f.get("customfield_10016"))
 
@@ -9262,8 +9313,6 @@ def team_diagram_fetch():
                 bug_issues_ai.append(
                     {"key": ik, "summary": sum_txt[:240], "status": status_disp, "production": bool(is_prod)}
                 )
-
-        jira_ttc = total_test_cases
 
         prod_bug_rows = []
         _seen_pb = set()
@@ -9301,29 +9350,20 @@ def team_diagram_fetch():
 
         prod_bug_ticket_keys_ordered = [r["key"] for r in prod_bug_rows]
 
-        team_member_count = _opt_nonneg_int(st.get("team_member_count"))
+        assignee_unique_count = len(assignee_by_key)
+        assignee_names_sorted = sorted(assignee_by_key.values(), key=lambda x: str(x).lower())[:80]
+        manual_tm = _opt_nonneg_int(st.get("team_member_count"))
+        from_assignees_tm = assignee_unique_count if assignee_unique_count > 0 else None
+        team_member_count = manual_tm if manual_tm is not None else from_assignees_tm
+        team_size_source = (
+            "manual"
+            if manual_tm is not None
+            else ("assignees" if from_assignees_tm is not None else None)
+        )
         total_story_points_r = round(total_story_points, 2)
         estimated_calendar_days = None
         if team_member_count is not None and team_member_count > 0:
             estimated_calendar_days = round(total_story_points / float(team_member_count), 2)
-
-        manual_total_i = _opt_nonneg_int(st.get("test_cases_total"))
-        manual_auto_i = _opt_nonneg_int(st.get("test_cases_automated"))
-        use_manual_tests = manual_total_i is not None or manual_auto_i is not None
-        if use_manual_tests:
-            if manual_total_i is not None:
-                total_test_cases = manual_total_i
-            else:
-                total_test_cases = max(jira_ttc, manual_auto_i or 0)
-            if manual_auto_i is not None:
-                automated_test_cases = manual_auto_i
-            else:
-                automated_test_cases = 0
-            automated_test_cases = min(automated_test_cases, total_test_cases)
-
-        test_auto_pct = (
-            round(automated_test_cases / total_test_cases * 100) if total_test_cases else 0
-        )
 
         ai_block = _team_diagram_resolve_ai(
             main_team,
@@ -9345,6 +9385,9 @@ def team_diagram_fetch():
             "story_tasks_total": story_tasks_total,
             "story_tasks_done": story_tasks_done,
             "team_member_count": team_member_count,
+            "team_size_source": team_size_source,
+            "assignee_unique_count": assignee_unique_count,
+            "assignee_names": assignee_names_sorted,
             "total_story_points": total_story_points_r,
             "estimated_calendar_days": estimated_calendar_days,
             "total_stories": total_stories,
@@ -9353,10 +9396,6 @@ def team_diagram_fetch():
             "done_bugs": done_bugs,
             "prod_issues": prod_issues,
             "prod_issues_done": prod_issues_done,
-            "total_test_cases": total_test_cases,
-            "automated_test_cases": automated_test_cases,
-            "test_automation_pct": test_auto_pct,
-            "test_metrics_manual": use_manual_tests,
             "story_ticket_keys": [x["key"] for x in story_issues[:24]],
             "prod_ticket_keys": [x["key"] for x in prod_issues_ai[:24]],
             "bug_ticket_keys": [x["key"] for x in bug_issues_ai[:28]],
@@ -9373,11 +9412,34 @@ def team_diagram_fetch():
             portfolio_customers.add(c)
     portfolio_customer_names = sorted(portfolio_customers, key=lambda x: str(x).lower())
 
+    jira_pt_total = len(portfolio_test_by_key)
+    jira_pt_auto = sum(1 for v in portfolio_test_by_key.values() if v)
+    if main_tm_total is not None:
+        portfolio_total = main_tm_total
+    else:
+        portfolio_total = jira_pt_total
+    if main_tm_auto is not None:
+        portfolio_auto = min(main_tm_auto, portfolio_total) if portfolio_total else 0
+    else:
+        portfolio_auto = min(jira_pt_auto, portfolio_total) if portfolio_total else 0
+    portfolio_pct = round(portfolio_auto / portfolio_total * 100) if portfolio_total else 0
+    mt_test_src = (
+        "manual"
+        if (main_tm_total is not None or main_tm_auto is not None)
+        else ("jira" if jira_pt_total else "none")
+    )
+
     return jsonify(
         {
             "main_team": main_team,
             "sub_teams": results,
             "portfolio_customer_names": portfolio_customer_names,
+            "main_team_test_metrics": {
+                "total": portfolio_total,
+                "automated": portfolio_auto,
+                "automation_pct": portfolio_pct,
+                "source": mt_test_src,
+            },
         }
     )
 
