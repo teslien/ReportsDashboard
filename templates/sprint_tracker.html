@@ -86,6 +86,84 @@
   .st-shell .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid #c7d2fe; border-top-color: white; border-radius: 50%; animation: st-spin 0.6s linear infinite; }
   @keyframes st-spin { to { transform: rotate(360deg); } }
   .st-shell .saved-badge { font-size: 11px; color: #94a3b8; margin-left: 6px; }
+
+  /* Error / success toast banner */
+  #st-toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(16px);
+    z-index: 9999;
+    min-width: 320px;
+    max-width: calc(100vw - 32px);
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    box-shadow: 0 6px 24px rgba(15, 23, 42, 0.18);
+    padding: 0;
+    overflow: hidden;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+  }
+  #st-toast.visible {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateX(-50%) translateY(0);
+  }
+  #st-toast-bar {
+    height: 4px;
+    width: 100%;
+  }
+  #st-toast-bar.error { background: #dc2626; }
+  #st-toast-bar.ok    { background: #16a34a; }
+  #st-toast-body {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 14px;
+  }
+  #st-toast-icon {
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 800;
+  }
+  #st-toast-icon.error { background: #fee2e2; color: #dc2626; }
+  #st-toast-icon.ok    { background: #dcfce7; color: #16a34a; }
+  #st-toast-text {
+    flex: 1;
+    min-width: 0;
+  }
+  #st-toast-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #0f172a;
+    margin-bottom: 2px;
+  }
+  #st-toast-detail {
+    font-size: 12px;
+    color: #475569;
+    line-height: 1.45;
+    word-break: break-word;
+  }
+  #st-toast-close {
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    color: #94a3b8;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    padding: 2px 0 0 4px;
+    transition: color 0.1s;
+  }
+  #st-toast-close:hover { color: #334155; }
   .st-shell .theme-sentence { font-size: 13px; font-weight: 500; color: #1e293b; line-height: 1.4; }
   .st-shell .bullet-list { list-style: none; padding: 0; margin: 0; }
   .st-shell .bullet-list li { font-size: 12px; color: #475569; line-height: 1.5; padding-left: 12px; position: relative; margin-bottom: 3px; }
@@ -131,6 +209,20 @@
 <div class="st-shell">
   <div id="st-app" class="wrapper"></div>
 </div>
+
+<!-- Global error / success toast -->
+<div id="st-toast" role="alert" aria-live="assertive" aria-atomic="true">
+  <div id="st-toast-bar" class="error"></div>
+  <div id="st-toast-body">
+    <div id="st-toast-icon" class="error">✕</div>
+    <div id="st-toast-text">
+      <div id="st-toast-title">Error</div>
+      <div id="st-toast-detail"></div>
+    </div>
+    <button id="st-toast-close" aria-label="Dismiss">✕</button>
+  </div>
+</div>
+
 <div id="st-dialog-backdrop" class="st-dialog-backdrop">
   <div class="st-dialog" role="dialog" aria-modal="true" aria-labelledby="st-dialog-title">
     <div class="st-dialog-header">
@@ -262,6 +354,36 @@
     overlay.classList.toggle("open", !!open);
   }
 
+  // ─── Toast ─────────────────────────────────────────────────
+  let _toastTimer = null;
+  function showToast(type, title, detail, durationMs) {
+    const toast   = document.getElementById("st-toast");
+    const bar     = document.getElementById("st-toast-bar");
+    const icon    = document.getElementById("st-toast-icon");
+    const ttl     = document.getElementById("st-toast-title");
+    const det     = document.getElementById("st-toast-detail");
+    if (!toast) return;
+    bar.className  = type;   // "error" or "ok"
+    icon.className = type;
+    icon.textContent = type === "ok" ? "✓" : "✕";
+    ttl.textContent  = title;
+    det.textContent  = detail || "";
+    det.style.display = detail ? "" : "none";
+    toast.classList.add("visible");
+    if (_toastTimer) clearTimeout(_toastTimer);
+    const dur = durationMs ?? (type === "error" ? 0 : 3500);
+    if (dur > 0) _toastTimer = setTimeout(() => toast.classList.remove("visible"), dur);
+  }
+  document.addEventListener("DOMContentLoaded", () => {
+    const btn = document.getElementById("st-toast-close");
+    if (btn) btn.addEventListener("click", () => {
+      const t = document.getElementById("st-toast");
+      if (t) t.classList.remove("visible");
+      if (_toastTimer) clearTimeout(_toastTimer);
+    });
+  });
+
+  // ─── API helper ────────────────────────────────────────────
   async function api(path, opts={}) {
     const finalOpts = Object.assign({
       method: "GET",
@@ -278,9 +400,21 @@
     try {
       const res = await fetch(path, finalOpts);
       if (!res.ok) {
-        let msg = "Request failed";
-        try { const d = await res.json(); msg = d.error || msg; } catch(_) {}
-        throw new Error(msg);
+        let msg = `Request failed (${res.status})`;
+        let detail = "";
+        try {
+          const d = await res.json();
+          if (d.error)  msg    = d.error;
+          if (d.detail) detail = d.detail;
+        } catch(_) {
+          try {
+            const txt = await res.text();
+            if (txt && txt.length < 400) detail = txt;
+          } catch(__) {}
+        }
+        const err = new Error(msg);
+        err.detail = detail;
+        throw err;
       }
       return res.json();
     } finally {
@@ -485,7 +619,7 @@
             method: "PUT", body: JSON.stringify({ sprint_goal: val, goal_edited: !!val })
           });
           markSaved();
-        } catch(e) { flashError(e.message); }
+        } catch(e) { flashError(e.message, e.detail); }
       });
     }
 
@@ -660,7 +794,7 @@
         renderTab();
       }
       markSaved();
-    } catch(err) { flashError(err.message); }
+    } catch(err) { flashError(err.message, err.detail); }
   }
 
   async function onToggleLB(themeId) {
@@ -673,7 +807,7 @@
     try {
       await api(`/api/sprint_tracker/themes/${themeId}`, { method: "PUT", body: JSON.stringify({ lb_override: next }) });
       renderTab();
-    } catch(e) { flashError(e.message); }
+    } catch(e) { flashError(e.message, e.detail); }
   }
 
   async function onDeleteTheme(themeId) {
@@ -690,7 +824,7 @@
       const sprint = activeSprint();
       sprint.themes = sprint.themes.filter(t => t.id !== themeId);
       renderTab();
-    } catch(e) { flashError(e.message); }
+    } catch(e) { flashError(e.message, e.detail); }
   }
 
   async function onDeleteNote(themeId) {
@@ -716,7 +850,7 @@
       renderTab();
       markSaved();
     } catch (e) {
-      flashError(e.message);
+      flashError(e.message, e.detail);
     }
   }
 
@@ -744,7 +878,7 @@
       renderTab();
       markSaved();
     } catch (e) {
-      flashError(e.message);
+      flashError(e.message, e.detail);
     }
   }
 
@@ -762,7 +896,7 @@
       await api(`/api/sprint_tracker/sprints/${sprint.id}`, { method: "DELETE" });
       activeSprintId = null;
       await load();
-    } catch(e) { flashError(e.message); }
+    } catch(e) { flashError(e.message, e.detail); }
   }
 
   async function promptNewSprint() {
@@ -779,7 +913,7 @@
       const res = await api(`/api/sprint_tracker/sprints`, { method: "POST", body: JSON.stringify({ name }) });
       activeSprintId = res.id;
       await load();
-    } catch(e) { flashError(e.message); }
+    } catch(e) { flashError(e.message, e.detail); }
   }
 
   async function promptNewTheme() {
@@ -805,7 +939,7 @@
         body: JSON.stringify({ sprint_id: sprint.id, theme_key: key, epic_name: epic, sentence, bullets: [] })
       });
       await load();
-    } catch(e) { flashError(e.message); }
+    } catch(e) { flashError(e.message, e.detail); }
   }
 
   async function promptNewSprintFromJql() {
@@ -874,7 +1008,7 @@
       await load();
       flashOk(`Created sprint "${finalSprintName}" from JQL`);
     } catch (e) {
-      flashError(e.message);
+      flashError(e.message, e.detail);
     }
   }
 
@@ -895,7 +1029,7 @@
     try {
       await api(`/api/sprint_tracker/themes/${themeId}`, { method: "PUT", body: JSON.stringify({ bullets }) });
       renderTab();
-    } catch(e) { flashError(e.message); }
+    } catch(e) { flashError(e.message, e.detail); }
   };
 
   window.stAddTicket = async function(themeId) {
@@ -918,7 +1052,7 @@
         body: JSON.stringify({ theme_id: themeId, ticket_key: key, summary, status: "Open", customers: [], lb: false })
       });
       await load();
-    } catch(e) { flashError(e.message); }
+    } catch(e) { flashError(e.message, e.detail); }
   };
 
   window.stDeleteTicket = async function(ticketId) {
@@ -935,7 +1069,7 @@
       await load();
       flashOk("Ticket removed");
     } catch (e) {
-      flashError(e.message);
+      flashError(e.message, e.detail);
     }
   };
 
@@ -1060,7 +1194,7 @@
       await load();
       flashOk(`Created row with ${tickets.length} tickets`);
     } catch (e) {
-      flashError(e.message);
+      flashError(e.message, e.detail);
     }
   }
 
@@ -1078,7 +1212,7 @@
     try {
       await api(`/api/sprint_tracker/themes/${themeId}`, { method: "PUT", body: JSON.stringify({ bullets }) });
       markSaved();
-    } catch(err) { flashError(err.message); }
+    } catch(err) { flashError(err.message, err.detail); }
   }, true);
 
   async function onRewriteTicket(ticketId) {
@@ -1094,7 +1228,7 @@
       });
       await load();
       flashOk(`Rewrote ${res.description_bullets?.length || 0} bullets`);
-    } catch(e) { flashError(e.message); }
+    } catch(e) { flashError(e.message, e.detail); }
   }
 
   async function onSyncFromJql() {
@@ -1235,7 +1369,7 @@
             body: JSON.stringify({ theme_ids: newIds, divider_index: sprint.divider_index })
           });
           markSaved();
-        } catch(err) { flashError(err.message); }
+        } catch(err) { flashError(err.message, err.detail); }
         renderTab();
       });
       tr.addEventListener("dragend", () => { clearDragIndicators(); if (dragSrc) dragSrc.classList.remove("dragging-row"); dragSrc = null; });
@@ -1253,15 +1387,18 @@
     el.textContent = `Saved ${t.getHours()}:${String(t.getMinutes()).padStart(2,'0')}`;
     el.style.color = "#16a34a";
   }
-  function flashError(msg) {
-    const el = document.getElementById("st-saved"); if (!el) return;
-    el.textContent = `Error: ${msg}`;
-    el.style.color = "#dc2626";
+  function flashError(msg, detail) {
+    // Also update the small saved badge for inline context
+    const el = document.getElementById("st-saved");
+    if (el) { el.textContent = "Error"; el.style.color = "#dc2626"; }
+    const det = detail || (msg && msg.detail) || "";
+    const text = (typeof msg === "object" && msg instanceof Error) ? msg.message : String(msg || "Unknown error");
+    showToast("error", text, det);
   }
   function flashOk(msg) {
-    const el = document.getElementById("st-saved"); if (!el) return;
-    el.textContent = msg;
-    el.style.color = "#16a34a";
+    const el = document.getElementById("st-saved");
+    if (el) { el.textContent = msg; el.style.color = "#16a34a"; }
+    showToast("ok", msg, "", 3500);
   }
 
   // ─── Init ─────────────────────────────────────────────────
