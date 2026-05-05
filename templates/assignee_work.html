@@ -2077,7 +2077,9 @@
                 const add = Number.isFinite(sp) ? sp : 0;
                 map.set(name, (map.get(name) || 0) + add);
             }
-            const rows = Array.from(map.entries()).sort((a, b) => b[1] - a[1]);
+            const rows = Array.from(map.entries())
+                .filter(([, sp]) => Number(sp) > 0)
+                .sort((a, b) => b[1] - a[1]);
             const total = rows.reduce((s, r) => s + r[1], 0);
             const fmt = (n) => (Math.round(n * 100) / 100).toString();
 
