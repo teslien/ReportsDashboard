@@ -575,12 +575,32 @@
                     <span><span class="font-semibold text-white">Exclude sub-tasks</span><span class="block text-xs text-gray-500 mt-0.5">Jira fetch and PDF omit Sub-task / Subtask types.</span></span>
                 </label>
                 <label class="flex items-start gap-3 cursor-pointer text-sm text-gray-200">
+                    <input type="checkbox" id="awCbHideOpenReadyDevCurrent" class="mt-1 rounded border-gray-600 bg-gray-800" />
+                    <span><span class="font-semibold text-white">Hide Open / Ready for Dev (current sprint tables)</span><span class="block text-xs text-gray-500 mt-0.5">Removes Open and Ready for Dev items from current sprint tables only (not next sprint).</span></span>
+                </label>
+                <label class="flex items-start gap-3 cursor-pointer text-sm text-gray-200">
                     <input type="checkbox" id="awCbAiStoriesOnly" class="mt-1 rounded border-gray-600 bg-gray-800" />
                     <span><span class="font-semibold text-white">AI summary: stories only</span><span class="block text-xs text-gray-500 mt-0.5">Uses the same sprint Jira query as the PDF (not the date-range search grid). Story / User Story only when checked.</span></span>
                 </label>
                 <label class="flex items-start gap-3 cursor-pointer text-sm text-gray-200">
+                    <input type="checkbox" id="awCbNoAiSummary" class="mt-1 rounded border-gray-600 bg-gray-800" />
+                    <span><span class="font-semibold text-white">No AI summary</span><span class="block text-xs text-gray-500 mt-0.5">Skip all Claude requests and generate PDF with data tables only.</span></span>
+                </label>
+                <label class="flex items-start gap-3 cursor-pointer text-sm text-gray-200">
+                    <input type="checkbox" id="awCbHideProductionMetrics" class="mt-1 rounded border-gray-600 bg-gray-800" />
+                    <span><span class="font-semibold text-white">Hide production ticket count</span><span class="block text-xs text-gray-500 mt-0.5">Removes production count card and hides production row in completion chart.</span></span>
+                </label>
+                <label class="flex items-start gap-3 cursor-pointer text-sm text-gray-200">
+                    <input type="checkbox" id="awCbHideTotalTicketsCard" class="mt-1 rounded border-gray-600 bg-gray-800" />
+                    <span><span class="font-semibold text-white">Hide total tickets count card</span><span class="block text-xs text-gray-500 mt-0.5">Removes the TOTAL TICKETS summary card from PDF sections.</span></span>
+                </label>
+                <label class="flex items-start gap-3 cursor-pointer text-sm text-gray-200">
                     <input type="checkbox" id="awCbOnlyStories" class="mt-1 rounded border-gray-600 bg-gray-800" />
-                    <span><span class="font-semibold text-white">Only stories (report fetch)</span><span class="block text-xs text-gray-500 mt-0.5">All report JQL fetches are restricted to Story / User Story only; task and bug breakdown sections are skipped.</span></span>
+                    <span><span class="font-semibold text-white">Separate Stories / Tasks / Bugs</span><span class="block text-xs text-gray-500 mt-0.5">Keep full sprint data, but show separate scores and separate tables for Stories, Tasks, and Bugs.</span></span>
+                </label>
+                <label class="flex items-start gap-3 cursor-pointer text-sm text-gray-200">
+                    <input type="checkbox" id="awCbHideTaskCardTable" class="mt-1 rounded border-gray-600 bg-gray-800" />
+                    <span><span class="font-semibold text-white">Hide tasks card and table</span><span class="block text-xs text-gray-500 mt-0.5">When split view is enabled, removes TASKS summary card and TASKS tables.</span></span>
                 </label>
                 <label class="flex items-start gap-3 cursor-pointer text-sm text-gray-200">
                     <input type="checkbox" id="awCbBreakdown" checked class="mt-1 rounded border-gray-600 bg-gray-800" />
@@ -725,6 +745,13 @@
         function projectHeader(xhr) {
             const pk = (localStorage.getItem("project_key") || projectKey || "").trim().toUpperCase();
             if (pk) xhr.setRequestHeader("X-Project-Key", pk);
+        }
+
+        function awProjectHeaders() {
+            const headers = { 'Content-Type': 'application/json' };
+            const pk = (localStorage.getItem('project_key') || projectKey || '').trim().toUpperCase();
+            if (pk) headers['X-Project-Key'] = pk;
+            return headers;
         }
 
         $(document).ready(function () {
@@ -896,6 +923,10 @@
             return DONE_STATUSES.has(String(issue?.status || '').trim().toLowerCase());
         }
 
+        function isDoneStatusValue(status) {
+            return DONE_STATUSES.has(String(status || '').trim().toLowerCase());
+        }
+
         function isEpic(issue) {
             return normalizeType(issue) === 'epic';
         }
@@ -903,6 +934,11 @@
         function isWorkItem(issue) {
             const t = normalizeType(issue);
             return t === 'story' || t === 'task' || t === 'sub-task' || t === 'subtask';
+        }
+
+        function isTaskIssue(issue) {
+            const t = normalizeType(issue);
+            return t === 'task' || t === 'sub-task' || t === 'subtask';
         }
 
         /** Story-type issues only (for KPI + PDF summary card — excludes Task / Sub-task). */
@@ -925,6 +961,19 @@
             return list;
         }
 
+        function isOpenOrReadyForDev(issue) {
+            const st = String(issue?.status || '').trim().toLowerCase();
+            return st === 'open' || st === 'ready for dev' || st === 'ready for development';
+        }
+
+        function applyCurrentSprintTableFilters(issues, pdfOpts) {
+            let list = [...(issues || [])];
+            if (pdfOpts && pdfOpts.hideOpenReadyDevCurrent) {
+                list = list.filter(i => !isOpenOrReadyForDev(i));
+            }
+            return list;
+        }
+
         function isBug(issue) {
             return normalizeType(issue) === 'bug';
         }
@@ -934,9 +983,10 @@
             return issue?.platform_production === true;
         }
 
-        /** Assignee SP table: count Story/User Story issues plus any ticket flagged platform production. */
+        /** Assignee SP table: completed Story/Task issues plus completed platform-production tickets. */
         function issueIncludedInAssigneeSpTable(issue) {
-            return isStoryIssue(issue) || isProductionPlatform(issue);
+            if (!issue || !isDone(issue)) return false;
+            return isStoryIssue(issue) || isTaskIssue(issue) || isProductionPlatform(issue);
         }
 
         /** PDF “ALL TICKETS” tables: Story → Task (+sub-task) → Bug → everything else; then completed rows first. */
@@ -961,9 +1011,9 @@
         }
 
         function isInProgressIssue(issue) {
-            if (!issue || isDone(issue)) return false;
-            const s = String(issue.status || '').trim().toLowerCase();
-            return /progress|review|qa|staging|ready/.test(s);
+            if (!issue || isDone(issue) || !isStoryIssue(issue)) return false;
+            const st = String(issue.status || '').trim().toLowerCase();
+            return st === 'in progress' || st === 'in development';
         }
 
         const AW_DONUT_COLORS = [
@@ -1424,7 +1474,68 @@
                     6: { cellWidth: 26 },
                     7: { cellWidth: 28 }
                 },
-                margin: { left: 14, right: 14 }
+                margin: { left: 14, right: 14 },
+                didParseCell(data) {
+                    if (data.section !== 'body') return;
+                    const row = tableRows[data.row.index];
+                    if (row && isDoneStatusValue(row[3])) {
+                        data.cell.styles.fillColor = [220, 252, 231]; // light green
+                    }
+                }
+            });
+            return doc.lastAutoTable.finalY + 8;
+        }
+
+        /** Split-mode table with Assignee + Story Points and a total SP footer row. */
+        function renderTypeTableWithStoryPoints(doc, issues, startY, accentRgb) {
+            const [r, g, b] = accentRgb || [55, 65, 81];
+            const rows = (issues || []).map(i => ([
+                i.key || '',
+                i.type || '',
+                (i.summary || '').slice(0, 110),
+                i.status || '',
+                i.assignee || 'Unassigned',
+                i.priority || '',
+                Number.isFinite(Number(i.story_points))
+                    ? (Math.round(Number(i.story_points) * 100) / 100).toString()
+                    : '0',
+            ]));
+            const totalSp = (issues || []).reduce((s, i) => {
+                const v = Number(i.story_points);
+                return s + (Number.isFinite(v) ? v : 0);
+            }, 0);
+            const totalSpTxt = (Math.round(totalSp * 100) / 100).toString();
+            const tableRows = rows.length ? rows : [['—', '—', 'No tickets in this section', '—', '—', '—', '0']];
+            tableRows.push(['', '', '', '', '', 'TOTAL SP', totalSpTxt]);
+            doc.autoTable({
+                startY,
+                head: [['Key', 'Type', 'Summary', 'Status', 'Assignee', 'Priority', 'Story Points']],
+                body: tableRows,
+                theme: 'grid',
+                styles: { fontSize: 7.2, cellPadding: 2.3, overflow: 'linebreak', font: 'helvetica', textColor: [20, 20, 20] },
+                headStyles: { fillColor: [r, g, b], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 7.3, cellPadding: 2.7 },
+                alternateRowStyles: { fillColor: [244, 248, 252] },
+                columnStyles: {
+                    0: { cellWidth: 22, fontStyle: 'bold', textColor: [r, g, b] },
+                    1: { cellWidth: 18 },
+                    2: { cellWidth: 98 },
+                    3: { cellWidth: 24 },
+                    4: { cellWidth: 26 },
+                    5: { cellWidth: 20 },
+                    6: { cellWidth: 18, halign: 'right', fontStyle: 'bold' },
+                },
+                margin: { left: 14, right: 14 },
+                didParseCell(data) {
+                    if (data.section === 'body' && data.row.index === tableRows.length - 1) {
+                        data.cell.styles.fontStyle = 'bold';
+                        data.cell.styles.fillColor = [238, 242, 255];
+                    } else if (data.section === 'body') {
+                        const issue = (issues || [])[data.row.index];
+                        if (issue && isDone(issue)) {
+                            data.cell.styles.fillColor = [220, 252, 231]; // light green
+                        }
+                    }
+                },
             });
             return doc.lastAutoTable.finalY + 8;
         }
@@ -1442,7 +1553,27 @@
                 { label: workCardLabel,                done: m.workDone,       total: m.work,       subLabel: 'completed / total', accent: [6, 148, 162],   bg: [236, 254, 255] },
                 { label: 'BUGS',                       done: m.bugsDone,       total: m.bugs,       subLabel: 'resolved / total',  accent: [185, 28, 28],   bg: [254, 242, 242] },
                 { label: 'PRODUCTION TICKETS',         done: m.productionDone, total: m.production, subLabel: 'completed / total', accent: [180, 120, 10],  bg: [255, 251, 235] }
-            ].filter(c => !(pdfOpts && pdfOpts.onlyStories && c.label === 'BUGS'));
+            ];
+            if (pdfOpts && pdfOpts.splitWorkSections) {
+                if (!(pdfOpts && pdfOpts.hideTaskCardTable)) {
+                    cards.splice(2, 0, {
+                        label: 'TASKS',
+                        done: m.tasksDone || 0,
+                        total: m.tasks || 0,
+                        subLabel: 'completed / total',
+                        accent: [8, 145, 178],
+                        bg: [236, 254, 255],
+                    });
+                }
+            }
+            if (pdfOpts && pdfOpts.hideProductionMetrics) {
+                const idx = cards.findIndex(c => c.label === 'PRODUCTION TICKETS');
+                if (idx >= 0) cards.splice(idx, 1);
+            }
+            if (pdfOpts && pdfOpts.hideTotalTicketsCard) {
+                const idx = cards.findIndex(c => c.label === 'TOTAL TICKETS');
+                if (idx >= 0) cards.splice(idx, 1);
+            }
             const cardW = (pageW - margin * 2 - gap * (cards.length - 1)) / Math.max(cards.length, 1);
             let x = margin;
             for (const c of cards) {
@@ -1637,6 +1768,81 @@
             ctx.lineWidth = 1;
             ctx.strokeRect(0.5, 0.5, W - 1, H - 1);
 
+            return canvas.toDataURL('image/png');
+        }
+
+        /**
+         * Split completion dashboard by type for sprint page:
+         * Stories, Tasks, Bugs each show done/total and independent percentage.
+         */
+        function canvasCompletionByTypeToDataUrl(tickets, opts) {
+            if (!tickets || !tickets.length) return null;
+            const DPR = 3;
+            const W = 500, H = 156;
+            const canvas = document.createElement('canvas');
+            canvas.width = W * DPR; canvas.height = H * DPR;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return null;
+            ctx.scale(DPR, DPR);
+
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, W, H);
+
+            const stories = tickets.filter(isStoryIssue);
+            const tasks = tickets.filter(isTaskIssue);
+            const bugs = tickets.filter(isBug);
+            const prod = tickets.filter(isProductionPlatform);
+            const rows = [
+                { label: 'Stories', done: stories.filter(isDone).length, total: stories.length, color: '#0ea5a5' },
+                { label: 'Tasks', done: tasks.filter(isDone).length, total: tasks.length, color: '#0891b2' },
+                { label: 'Bugs', done: bugs.filter(isDone).length, total: bugs.length, color: '#dc2626' },
+                { label: 'Production', done: prod.filter(isDone).length, total: prod.length, color: '#a16207' },
+            ];
+            if (opts && opts.hideProductionMetrics) {
+                const idx = rows.findIndex(r => r.label === 'Production');
+                if (idx >= 0) rows.splice(idx, 1);
+            }
+
+            ctx.fillStyle = '#111827';
+            ctx.font = 'bold 10px sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillText('Completion by Type', 14, 16);
+
+            const BAR_X = 140;
+            const BAR_W = W - BAR_X - 56;
+            const ROW_H = 31;
+            rows.forEach((r, i) => {
+                const y = 28 + i * ROW_H;
+                const pct = r.total > 0 ? Math.round((r.done / r.total) * 100) : 0;
+                const fillW = Math.round((pct / 100) * BAR_W);
+
+                ctx.fillStyle = '#374151';
+                ctx.font = 'bold 8.5px sans-serif';
+                ctx.fillText(r.label, 14, y + 9);
+                ctx.fillStyle = '#6b7280';
+                ctx.font = '8px sans-serif';
+                ctx.fillText(`${r.done} / ${r.total}`, 14, y + 22);
+
+                ctx.fillStyle = '#f1f5f9';
+                ctx.beginPath();
+                ctx.roundRect(BAR_X, y + 2, BAR_W, 12, 5);
+                ctx.fill();
+
+                if (fillW > 0) {
+                    ctx.fillStyle = r.color;
+                    ctx.beginPath();
+                    ctx.roundRect(BAR_X, y + 2, fillW, 12, 5);
+                    ctx.fill();
+                }
+
+                ctx.fillStyle = '#111827';
+                ctx.font = 'bold 8.5px sans-serif';
+                ctx.fillText(`${pct}%`, BAR_X + BAR_W + 8, y + 12);
+            });
+
+            ctx.strokeStyle = '#e5e7eb';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(0.5, 0.5, W - 1, H - 1);
             return canvas.toDataURL('image/png');
         }
 
@@ -1857,7 +2063,13 @@
         }
 
         function renderAssigneeStoryPointsTable(doc, issues, startY, MARGIN, pageW) {
-            const filtered = (issues || []).filter(issueIncludedInAssigneeSpTable);
+            const dedup = new Map();
+            for (const it of (issues || [])) {
+                const k = String(it?.key || '').trim();
+                if (!k) continue;
+                if (!dedup.has(k)) dedup.set(k, it);
+            }
+            const filtered = Array.from(dedup.values()).filter(issueIncludedInAssigneeSpTable);
             const map = new Map();
             for (const i of filtered) {
                 const name = String(i.assignee || 'Unassigned');
@@ -1883,7 +2095,7 @@
             doc.setFontSize(6.5);
             doc.setTextColor(100, 100, 100);
             const spCaption = doc.splitTextToSize(
-                'Includes Σ story points from Story / User Story tickets and from tickets flagged platform production (other types excluded).',
+                'Includes completed tickets only: Story, Task, and platform-production; duplicate keys removed before summing.',
                 pageW - MARGIN * 2 - 8
             );
             spCaption.forEach((line) => {
@@ -1917,24 +2129,52 @@
         }
 
         /* ── Sprint-picker modal helpers ── */
-        function generatePdfReport() {
+        let awModalSprintList = [];
+
+        async function awFetchModalSprints() {
+            try {
+                const res = await fetch('/api/sprints?q=', {
+                    method: 'GET',
+                    headers: awProjectHeaders(),
+                });
+                if (!res.ok) return [];
+                const data = await res.json();
+                let list = [];
+                if (Array.isArray(data)) list = data;
+                else if (data && Array.isArray(data.sprints)) list = data.sprints;
+                else if (data && Array.isArray(data.values)) list = data.values;
+
+                // Prefer all active sprints; if none are labeled active, keep all names.
+                const active = list.filter(s => String(s?.state || '').toLowerCase() === 'active');
+                const source = active.length ? active : list;
+                const names = [...new Set(source.map(s => String(s?.name || '').trim()).filter(Boolean))];
+                return names.sort((a, b) => a.localeCompare(b));
+            } catch (e) {
+                console.warn('Modal sprint fetch failed:', e);
+                return [];
+            }
+        }
+
+        async function generatePdfReport() {
             if (!latestResults.length) return;
 
-            // Populate sprint dropdown from loaded tickets
+            // Populate sprint dropdown from Jira sprints; fallback to loaded tickets.
             const nonEpicsSel = latestResults.filter(i => !isEpic(i));
-            const allSprints = [...new Set(nonEpicsSel.flatMap(i => (i.sprints || [])))].sort();
+            const fallbackSprints = [...new Set(nonEpicsSel.flatMap(i => (i.sprints || [])))].sort();
+            const fetchedSprints = await awFetchModalSprints();
+            awModalSprintList = fetchedSprints.length ? fetchedSprints : fallbackSprints;
             const pick = document.getElementById('awSprintPick');
             pick.innerHTML = '';
             const optAll = document.createElement('option');
             optAll.value = '__all__'; optAll.textContent = 'All sprints (no sprint-level AI)';
             pick.appendChild(optAll);
-            allSprints.forEach(s => {
+            awModalSprintList.forEach(s => {
                 const o = document.createElement('option');
                 o.value = s; o.textContent = s;
                 pick.appendChild(o);
             });
             // pre-select last sprint if available
-            if (allSprints.length) pick.value = allSprints[allSprints.length - 1];
+            if (awModalSprintList.length) pick.value = awModalSprintList[awModalSprintList.length - 1];
             awSyncModalOnlySprintState();
             document.getElementById('awCbNextWeekPlan').checked = false;
             awToggleNextSprintPick();
@@ -1958,7 +2198,9 @@
                 return;
             }
             const curr = document.getElementById('awSprintPick')?.value || '__all__';
-            const all = [...new Set((latestResults || []).filter(i => !isEpic(i)).flatMap(i => i.sprints || []))].sort();
+            const all = (awModalSprintList && awModalSprintList.length)
+                ? awModalSprintList
+                : [...new Set((latestResults || []).filter(i => !isEpic(i)).flatMap(i => i.sprints || []))].sort();
             const opts = all.filter(s => s && s !== curr);
             pick.innerHTML = '';
             opts.forEach(sp => {
@@ -1981,17 +2223,20 @@
             const pdfOpts = {
                 onlySprintReport: sprintVal !== '__all__' && document.getElementById('awCbOnlySprint')?.checked,
                 excludeSubtasks: !!document.getElementById('awCbExcludeSubtasks')?.checked,
+                hideOpenReadyDevCurrent: !!document.getElementById('awCbHideOpenReadyDevCurrent')?.checked,
                 aiStoriesOnly: !!document.getElementById('awCbAiStoriesOnly')?.checked,
-                onlyStories: !!document.getElementById('awCbOnlyStories')?.checked,
+                noAiSummary: !!document.getElementById('awCbNoAiSummary')?.checked,
+                hideProductionMetrics: !!document.getElementById('awCbHideProductionMetrics')?.checked,
+                hideTotalTicketsCard: !!document.getElementById('awCbHideTotalTicketsCard')?.checked,
+                hideTaskCardTable: !!document.getElementById('awCbHideTaskCardTable')?.checked,
+                splitWorkSections: !!document.getElementById('awCbOnlyStories')?.checked,
                 breakdownTables: document.getElementById('awCbBreakdown')?.checked !== false,
                 assigneeSpTable: !!document.getElementById('awCbAssigneeSp')?.checked,
                 includeNextWeekPlan: !!document.getElementById('awCbNextWeekPlan')?.checked,
             };
 
-            if (pdfOpts.onlyStories) {
-                // Stories-only mode implies stories-only AI and no task/bug breakdown sections.
-                pdfOpts.aiStoriesOnly = true;
-                pdfOpts.breakdownTables = false;
+            if (pdfOpts.noAiSummary) {
+                pdfOpts.aiStoriesOnly = false;
             }
 
             document.getElementById('awModalActions').classList.add('hidden');
@@ -2014,7 +2259,6 @@
                         body: JSON.stringify({
                             sprint_name: sprintVal,
                             exclude_subtasks: pdfOpts.excludeSubtasks,
-                            only_stories: pdfOpts.onlyStories,
                         })
                     });
                     if (jqlRes.ok) {
@@ -2031,7 +2275,9 @@
                     sprintTicketsForAi = sprintTicketsForAi.filter(i => isStoryIssue(i));
                 }
 
-                if (!sprintTicketsForAi.length) {
+                if (pdfOpts.noAiSummary) {
+                    aiSummary = null;
+                } else if (!sprintTicketsForAi.length) {
                     const reasonFetch = !allSprintIssues || !allSprintIssues.length;
                     aiSummary = {
                         overall_bullets: [
@@ -2060,7 +2306,7 @@
                             body: JSON.stringify({
                                 sprint: sprintVal,
                                 tickets: sprintTicketsForAi,
-                                stories_only: pdfOpts.aiStoriesOnly || pdfOpts.onlyStories,
+                                stories_only: pdfOpts.aiStoriesOnly,
                             })
                         });
                         if (aiRes.ok) aiSummary = await aiRes.json();
@@ -2079,28 +2325,31 @@
                             body: JSON.stringify({
                                 sprint_name: nextSprint,
                                 exclude_subtasks: pdfOpts.excludeSubtasks,
-                                only_stories: pdfOpts.onlyStories,
-                            })
+                                })
                         });
                         if (nxRes.ok) {
                             const nxData = await nxRes.json();
                             let nxIssues = nxData.issues || [];
                             if (pdfOpts.aiStoriesOnly || pdfOpts.onlyStories) nxIssues = nxIssues.filter(isStoryIssue);
                             if (nxIssues.length) {
-                                statusEl.textContent = 'Asking AI for next sprint plan…';
-                                const nxAi = await fetch('/api/assignee_work_ai_summary', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({
-                                        sprint: nextSprint,
-                                        tickets: nxIssues,
-                                        stories_only: pdfOpts.aiStoriesOnly || pdfOpts.onlyStories,
-                                        planning_mode: true,
-                                    })
-                                });
-                                if (nxAi.ok) {
-                                    const nxSum = await nxAi.json();
-                                    nextWeekPlan = { sprint: nextSprint, issues: nxIssues, summary: nxSum };
+                                if (pdfOpts.noAiSummary) {
+                                    nextWeekPlan = { sprint: nextSprint, issues: nxIssues, summary: null };
+                                } else {
+                                    statusEl.textContent = 'Asking AI for next sprint plan…';
+                                    const nxAi = await fetch('/api/assignee_work_ai_summary', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                            sprint: nextSprint,
+                                            tickets: nxIssues,
+                                            stories_only: pdfOpts.aiStoriesOnly,
+                                            planning_mode: true,
+                                        })
+                                    });
+                                    if (nxAi.ok) {
+                                        const nxSum = await nxAi.json();
+                                        nextWeekPlan = { sprint: nextSprint, issues: nxIssues, summary: nxSum };
+                                    }
                                 }
                             }
                         }
@@ -2112,39 +2361,6 @@
             await new Promise(r => setTimeout(r, 60));
 
             let reportBaseIssues = null;
-            if (pdfOpts.onlyStories) {
-                try {
-                    statusEl.textContent = 'Fetching stories-only report dataset…';
-                    const fromDate = $('#fromDate').val();
-                    const toDate = $('#toDate').val();
-                    const labelRaw = $('#labelInput').val().trim();
-                    const labels = labelRaw ? labelRaw.split(',').map(x => x.trim()).filter(Boolean) : [];
-                    const sprintId = $('#sprintSelect').val();
-                    const assigneeIds = $('#assigneeSelect').val() || [];
-                    const baseRes = await fetch('/api/assignee_work', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-Project-Key': (localStorage.getItem('project_key') || projectKey || '').trim().toUpperCase()
-                        },
-                        body: JSON.stringify({
-                            from_date: fromDate,
-                            to_date: toDate,
-                            labels,
-                            sprint_id: sprintId || null,
-                            assignee_ids: assigneeIds,
-                            only_stories: true,
-                            exclude_subtasks: pdfOpts.excludeSubtasks,
-                        })
-                    });
-                    if (baseRes.ok) {
-                        const baseData = await baseRes.json();
-                        reportBaseIssues = baseData.issues || [];
-                    }
-                } catch (e) {
-                    console.warn('Stories-only base fetch failed:', e);
-                }
-            }
 
             closeSprintModal();
             _buildPdf(reportTitle, sprintVal === '__all__' ? null : sprintVal, aiSummary, allSprintIssues, pdfOpts, reportBaseIssues, nextWeekPlan);
@@ -2166,14 +2382,12 @@
             const toLabel   = fmtDate(toDate);
             const genLabel  = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
-            const brStoriesBanner = pdfOpts.onlyStories
-                ? 'STORIES'
-                : (pdfOpts.excludeSubtasks ? 'STORIES · TASKS' : 'STORIES · TASKS · SUB-TASKS');
+            const brStoriesBanner = pdfOpts.excludeSubtasks ? 'STORIES · TASKS' : 'STORIES · TASKS · SUB-TASKS';
 
             // Date-range tickets (epics out; optional sub-tasks out).
-            const baseIssues = Array.isArray(reportBaseIssues) ? reportBaseIssues : latestResults;
-            const allNonEpics  = applyPdfFilters(baseIssues, pdfOpts);
+            const allNonEpics  = applyPdfFilters(latestResults, pdfOpts);
             const allStories   = allNonEpics.filter(isStoryIssue);
+            const allTasks     = allNonEpics.filter(isTaskIssue);
             const allWork      = allNonEpics.filter(isWorkItem);
             const allBugs      = allNonEpics.filter(isBug);
             const allProd      = allNonEpics.filter(isProductionPlatform);
@@ -2342,18 +2556,23 @@
                 }
 
                 const nonEpicSprintIssues = applyPdfFilters(allSprintIssues || sprintTickets, pdfOpts);
-                y = _drawTicketQuickList(doc, nonEpicSprintIssues, y, MARGIN, pageW, 28);
-
-                const nspWork = nonEpicSprintIssues.filter(isWorkItem);
+                const currentSprintTableIssues = applyCurrentSprintTableFilters(nonEpicSprintIssues, pdfOpts);
                 const nspStories = nonEpicSprintIssues.filter(isStoryIssue);
+                const nspTasks = nonEpicSprintIssues.filter(isTaskIssue);
                 const nspBugs = nonEpicSprintIssues.filter(isBug);
                 const nspProd = nonEpicSprintIssues.filter(isProductionPlatform);
+                const nspWorkTables = currentSprintTableIssues.filter(isWorkItem);
+                const nspStoriesTables = currentSprintTableIssues.filter(isStoryIssue);
+                const nspTasksTables = currentSprintTableIssues.filter(isTaskIssue);
+                const nspBugsTables = currentSprintTableIssues.filter(isBug);
+                const nspProdTables = currentSprintTableIssues.filter(isProductionPlatform);
 
                 /* ── Sprint summary cards ── */
                 y = _sectionBanner('SPRINT SNAPSHOT — ' + sprintName.toUpperCase(), [109, 40, 217], y);
                 y = drawPdfSummaryCards(doc, y, {
                     total: nonEpicSprintIssues.length, totalDone: nonEpicSprintIssues.filter(isDone).length,
                     work:  nspStories.length,           workDone:  nspStories.filter(isDone).length,
+                    tasks: nspTasks.length,             tasksDone: nspTasks.filter(isDone).length,
                     bugs:  nspBugs.length,               bugsDone:  nspBugs.filter(isDone).length,
                     production: nspProd.length,          productionDone: nspProd.filter(isDone).length,
                 }, pdfOpts);
@@ -2361,7 +2580,9 @@
                 y = ensurePdfY(doc, y, 8);
                 const compW = pageW - MARGIN * 2;
                 const compH = compW / (500 / 156);   // fixed 500×156 aspect
-                const compUrl = canvasCompletionChartToDataUrl(nonEpicSprintIssues);
+                const compUrl = pdfOpts.splitWorkSections
+                    ? canvasCompletionByTypeToDataUrl(nonEpicSprintIssues, pdfOpts)
+                    : canvasCompletionChartToDataUrl(nonEpicSprintIssues);
                 if (compUrl) {
                     y = ensurePdfY(doc, y, compH);
                     try { doc.addImage(compUrl, 'PNG', MARGIN, y, compW, compH); } catch (e) {}
@@ -2369,14 +2590,14 @@
                 }
 
                 /* ── All tickets in sprint (done first, green rows) ── */
-                if (nonEpicSprintIssues && nonEpicSprintIssues.length) {
+                if (!pdfOpts.splitWorkSections && currentSprintTableIssues && currentSprintTableIssues.length) {
                     y = ensurePdfY(doc, y, 14);
                     y = _sectionBanner(
-                        `${sprintName}  —  ALL TICKETS (${nonEpicSprintIssues.length} total · completed rows highlighted)`,
+                        `${sprintName}  —  ALL TICKETS (${currentSprintTableIssues.length} total · completed rows highlighted)`,
                         [15, 23, 42], y
                     );
 
-                    const sortedSprint = sortIssuesForPdfAllTicketsTable(nonEpicSprintIssues);
+                    const sortedSprint = sortIssuesForPdfAllTicketsTable(currentSprintTableIssues);
 
                     const sprintTableRows = sortedSprint.map(i => [
                         i.key || '',
@@ -2421,17 +2642,31 @@
                 }
 
                 /* ── Sprint ticket type breakdown tables (full JQL data) ── */
-                if (pdfOpts.breakdownTables) {
-                    y = ensurePdfY(doc, y, 14);
-                    y = _sectionBanner(brStoriesBanner, SC.stories, y);
-                    y = renderReportTable(doc, '', toReportRows(nspWork), y, SC.stories);
-                    y = ensurePdfY(doc, y, 14);
-                    y = _sectionBanner('BUGS', SC.bugs, y);
-                    y = renderReportTable(doc, '', toReportRows(nspBugs), y, SC.bugs);
-                    if (nspProd.length) {
+                if (pdfOpts.breakdownTables || pdfOpts.splitWorkSections) {
+                    if (pdfOpts.splitWorkSections) {
+                        y = ensurePdfY(doc, y, 14);
+                        y = _sectionBanner(`STORIES (${nspStoriesTables.filter(isDone).length}/${nspStoriesTables.length})`, SC.stories, y);
+                        y = renderTypeTableWithStoryPoints(doc, nspStoriesTables, y, SC.stories);
+                        if (!pdfOpts.hideTaskCardTable) {
+                            y = ensurePdfY(doc, y, 14);
+                            y = _sectionBanner(`TASKS (${nspTasksTables.filter(isDone).length}/${nspTasksTables.length})`, [8, 145, 178], y);
+                            y = renderTypeTableWithStoryPoints(doc, nspTasksTables, y, [8, 145, 178]);
+                        }
+                        y = ensurePdfY(doc, y, 14);
+                        y = _sectionBanner(`BUGS (${nspBugsTables.filter(isDone).length}/${nspBugsTables.length})`, SC.bugs, y);
+                        y = renderTypeTableWithStoryPoints(doc, nspBugsTables, y, SC.bugs);
+                    } else {
+                        y = ensurePdfY(doc, y, 14);
+                        y = _sectionBanner(brStoriesBanner, SC.stories, y);
+                        y = renderReportTable(doc, '', toReportRows(nspWorkTables), y, SC.stories);
+                        y = ensurePdfY(doc, y, 14);
+                        y = _sectionBanner('BUGS', SC.bugs, y);
+                        y = renderReportTable(doc, '', toReportRows(nspBugsTables), y, SC.bugs);
+                    }
+                    if (nspProdTables.length) {
                         y = ensurePdfY(doc, y, 14);
                         y = _sectionBanner('PRODUCTION TICKETS', SC.production, y);
-                        y = renderReportTable(doc, '', toReportRows(nspProd), y, SC.production);
+                        y = renderTypeTableWithStoryPoints(doc, nspProdTables, y, SC.production);
                     }
                 }
 
@@ -2459,6 +2694,7 @@
                     y = drawPdfSummaryCards(doc, y, {
                         total: allNonEpics.length, totalDone: allNonEpics.filter(isDone).length,
                         work:  allStories.length,    workDone:  allStories.filter(isDone).length,
+                        tasks: allTasks.length,      tasksDone: allTasks.filter(isDone).length,
                         bugs:  allBugs.length,       bugsDone:  allBugs.filter(isDone).length,
                         production: allProd.length,  productionDone: allProd.filter(isDone).length,
                     }, pdfOpts);
@@ -2479,19 +2715,35 @@
                     }
 
                     y = ensurePdfY(doc, y, 14);
-                    y = _sectionBanner('ALL TICKETS — ALL SPRINTS (excl. epics)', SC.all, y);
-                    y = renderReportTable(doc, '', toReportRows(sortIssuesForPdfAllTicketsTable(allNonEpics)), y, SC.all);
-                    if (pdfOpts.breakdownTables) {
-                        y = ensurePdfY(doc, y, 14);
-                        y = _sectionBanner(brStoriesBanner + ' — ALL SPRINTS', SC.stories, y);
-                        y = renderReportTable(doc, '', toReportRows(allWork), y, SC.stories);
-                        y = ensurePdfY(doc, y, 14);
-                        y = _sectionBanner('BUGS — ALL SPRINTS', SC.bugs, y);
-                        y = renderReportTable(doc, '', toReportRows(allBugs), y, SC.bugs);
+                    if (!pdfOpts.splitWorkSections) {
+                        y = _sectionBanner('ALL TICKETS — ALL SPRINTS (excl. epics)', SC.all, y);
+                        y = renderReportTable(doc, '', toReportRows(sortIssuesForPdfAllTicketsTable(allNonEpics)), y, SC.all);
+                    }
+                    if (pdfOpts.breakdownTables || pdfOpts.splitWorkSections) {
+                        if (pdfOpts.splitWorkSections) {
+                            y = ensurePdfY(doc, y, 14);
+                            y = _sectionBanner(`STORIES — ALL SPRINTS (${allStories.filter(isDone).length}/${allStories.length})`, SC.stories, y);
+                            y = renderTypeTableWithStoryPoints(doc, allStories, y, SC.stories);
+                            if (!pdfOpts.hideTaskCardTable) {
+                                y = ensurePdfY(doc, y, 14);
+                                y = _sectionBanner(`TASKS — ALL SPRINTS (${allTasks.filter(isDone).length}/${allTasks.length})`, [8, 145, 178], y);
+                                y = renderTypeTableWithStoryPoints(doc, allTasks, y, [8, 145, 178]);
+                            }
+                            y = ensurePdfY(doc, y, 14);
+                            y = _sectionBanner(`BUGS — ALL SPRINTS (${allBugs.filter(isDone).length}/${allBugs.length})`, SC.bugs, y);
+                            y = renderTypeTableWithStoryPoints(doc, allBugs, y, SC.bugs);
+                        } else {
+                            y = ensurePdfY(doc, y, 14);
+                            y = _sectionBanner(brStoriesBanner + ' — ALL SPRINTS', SC.stories, y);
+                            y = renderReportTable(doc, '', toReportRows(allWork), y, SC.stories);
+                            y = ensurePdfY(doc, y, 14);
+                            y = _sectionBanner('BUGS — ALL SPRINTS', SC.bugs, y);
+                            y = renderReportTable(doc, '', toReportRows(allBugs), y, SC.bugs);
+                        }
                         if (allProd.length) {
                             y = ensurePdfY(doc, y, 14);
                             y = _sectionBanner('PRODUCTION TICKETS — ALL SPRINTS', SC.production, y);
-                            y = renderReportTable(doc, '', toReportRows(allProd), y, SC.production);
+                            y = renderTypeTableWithStoryPoints(doc, allProd, y, SC.production);
                         }
                     }
                 }
@@ -2504,6 +2756,7 @@
                 y = drawPdfSummaryCards(doc, y, {
                     total: allNonEpics.length, totalDone: allNonEpics.filter(isDone).length,
                     work:  allStories.length,    workDone:  allStories.filter(isDone).length,
+                    tasks: allTasks.length,      tasksDone: allTasks.filter(isDone).length,
                     bugs:  allBugs.length,       bugsDone:  allBugs.filter(isDone).length,
                     production: allProd.length,  productionDone: allProd.filter(isDone).length,
                 }, pdfOpts);
@@ -2524,38 +2777,63 @@
                 }
 
                 y = ensurePdfY(doc, y, 14);
-                y = _sectionBanner('ALL TICKETS (excl. epics)', SC.all, y);
-                y = renderReportTable(doc, '', toReportRows(sortIssuesForPdfAllTicketsTable(allNonEpics)), y, SC.all);
-                if (pdfOpts.breakdownTables) {
-                    y = ensurePdfY(doc, y, 14);
-                    y = _sectionBanner(brStoriesBanner, SC.stories, y);
-                    y = renderReportTable(doc, '', toReportRows(allWork), y, SC.stories);
-                    y = ensurePdfY(doc, y, 14);
-                    y = _sectionBanner('BUGS', SC.bugs, y);
-                    y = renderReportTable(doc, '', toReportRows(allBugs), y, SC.bugs);
+                if (!pdfOpts.splitWorkSections) {
+                    y = _sectionBanner('ALL TICKETS (excl. epics)', SC.all, y);
+                    y = renderReportTable(doc, '', toReportRows(sortIssuesForPdfAllTicketsTable(allNonEpics)), y, SC.all);
+                }
+                if (pdfOpts.breakdownTables || pdfOpts.splitWorkSections) {
+                    if (pdfOpts.splitWorkSections) {
+                        y = ensurePdfY(doc, y, 14);
+                        y = _sectionBanner(`STORIES (${allStories.filter(isDone).length}/${allStories.length})`, SC.stories, y);
+                        y = renderTypeTableWithStoryPoints(doc, allStories, y, SC.stories);
+                        if (!pdfOpts.hideTaskCardTable) {
+                            y = ensurePdfY(doc, y, 14);
+                            y = _sectionBanner(`TASKS (${allTasks.filter(isDone).length}/${allTasks.length})`, [8, 145, 178], y);
+                            y = renderTypeTableWithStoryPoints(doc, allTasks, y, [8, 145, 178]);
+                        }
+                        y = ensurePdfY(doc, y, 14);
+                        y = _sectionBanner(`BUGS (${allBugs.filter(isDone).length}/${allBugs.length})`, SC.bugs, y);
+                        y = renderTypeTableWithStoryPoints(doc, allBugs, y, SC.bugs);
+                    } else {
+                        y = ensurePdfY(doc, y, 14);
+                        y = _sectionBanner(brStoriesBanner, SC.stories, y);
+                        y = renderReportTable(doc, '', toReportRows(allWork), y, SC.stories);
+                        y = ensurePdfY(doc, y, 14);
+                        y = _sectionBanner('BUGS', SC.bugs, y);
+                        y = renderReportTable(doc, '', toReportRows(allBugs), y, SC.bugs);
+                    }
                     if (allProd.length) {
                         y = ensurePdfY(doc, y, 14);
                         y = _sectionBanner('PRODUCTION TICKETS', SC.production, y);
-                        y = renderReportTable(doc, '', toReportRows(allProd), y, SC.production);
+                        y = renderTypeTableWithStoryPoints(doc, allProd, y, SC.production);
                     }
                 }
             }
 
             if (pdfOpts.assigneeSpTable) {
                 const issuesForSp = sprintName
-                    ? applyPdfFilters(allSprintIssues || sprintTickets, pdfOpts)
+                    ? applyCurrentSprintTableFilters(applyPdfFilters(allSprintIssues || sprintTickets, pdfOpts), pdfOpts)
                     : allNonEpics;
                 y = renderAssigneeStoryPointsTable(doc, issuesForSp, y, MARGIN, pageW);
             }
 
-            if (nextWeekPlan && nextWeekPlan.summary) {
+            if (nextWeekPlan) {
                 y = ensurePdfY(doc, y, 18);
                 y = _sectionBanner(`NEXT WEEK PLAN — ${String(nextWeekPlan.sprint || '').toUpperCase()}`, [22, 101, 52], y);
 
-                // Keep the same visual pattern as sprint AI above (two-column AI summary card).
-                const nextOverall = (nextWeekPlan.summary.overall_bullets || []).slice(0, 8);
-                const nextProd = (nextWeekPlan.summary.production_bullets || []).slice(0, 6);
-                y = _drawAiBox(nextOverall, nextProd, y);
+                if (nextWeekPlan.summary) {
+                    // Keep the same visual pattern as sprint AI above (two-column AI summary card).
+                    const nextOverall = (nextWeekPlan.summary.overall_bullets || []).slice(0, 8);
+                    const nextProd = (nextWeekPlan.summary.production_bullets || []).slice(0, 6);
+                    y = _drawAiBox(nextOverall, nextProd, y);
+                } else {
+                    y = ensurePdfY(doc, y, 8);
+                    doc.setFont('helvetica', 'italic');
+                    doc.setFontSize(7);
+                    doc.setTextColor(100, 100, 100);
+                    doc.text('AI summary disabled by report option.', MARGIN, y);
+                    y += 5;
+                }
 
                 const nxIssues = sortIssuesForPdfAllTicketsTable(nextWeekPlan.issues || []);
                 y = ensurePdfY(doc, y, 12);
@@ -2605,7 +2883,9 @@
                     didParseCell(data) {
                         if (data.section === 'body') {
                             const issue = nxIssues[data.row.index];
-                            if (issue && isInProgressIssue(issue)) {
+                            if (issue && isDone(issue)) {
+                                data.cell.styles.fillColor = [220, 252, 231]; // light green for completed
+                            } else if (issue && isInProgressIssue(issue)) {
                                 data.cell.styles.fillColor = [219, 234, 254]; // light blue for in-progress
                             }
                         }
