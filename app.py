@@ -2785,7 +2785,7 @@ def sprint_dashboard_report_pdf():
     return send_file(output, as_attachment=True, download_name=filename, mimetype="application/pdf")
 
 
-def _claude_customer_dashboard_insights_json(summary, anthropic_api_key, model="claude-3-haiku-20240307"):
+def _claude_customer_dashboard_insights_json(summary, anthropic_api_key, model="claude-sonnet-4-20250514"):
     """
     Call Claude with a compact dashboard summary; return a list of insight dicts
     {area, finding, suggestion, priority} or None on failure.
@@ -3014,7 +3014,7 @@ def customer_dashboard_wordcloud():
     payload = request.get_json(silent=True) or {}
     tickets  = payload.get("tickets") or []
     context  = str(payload.get("context") or "this company").strip()
-    model    = payload.get("model") or "claude-3-haiku-20240307"
+    model    = payload.get("model") or "claude-sonnet-4-20250514"
 
     anthropic_key = (_get_app_config_value("anthropic_api_key") or "").strip()
     if not anthropic_key:
@@ -5950,7 +5950,7 @@ def team_report_ai_summary():
     team_name = str(payload.get("team_name") or "").strip()
     tickets = payload.get("tickets") or []
     report_title = str(payload.get("report_title") or "").strip()
-    model = payload.get("model") or "claude-3-haiku-20240307"
+    model = payload.get("model") or "claude-sonnet-4-20250514"
 
     anthropic_key = (_get_app_config_value("anthropic_api_key") or "").strip()
     if not anthropic_key:
@@ -6309,7 +6309,7 @@ def payroll_dashboard_ai_summary():
     sprint_name = str(payload.get("sprint_name") or "").strip()
     delivered = payload.get("delivered") or []
     spilled = payload.get("spilled") or []
-    model = payload.get("model") or "claude-3-haiku-20240307"
+    model = payload.get("model") or "claude-sonnet-4-20250514"
 
     anthropic_key = (_get_app_config_value("anthropic_api_key") or "").strip()
     if not anthropic_key:
@@ -6533,7 +6533,7 @@ def sprint_delivery_ai_summary():
     sprint_name = str(payload.get("sprint_name") or "").strip()
     delivered = payload.get("delivered") or []
     spilled = payload.get("spilled") or []
-    model = payload.get("model") or "claude-3-haiku-20240307"
+    model = payload.get("model") or "claude-sonnet-4-20250514"
 
     anthropic_key = (_get_app_config_value("anthropic_api_key") or "").strip()
     if not anthropic_key:
@@ -6852,7 +6852,7 @@ def assignee_work_ai_summary():
     data = request.get_json(silent=True) or {}
     sprint_name = str(data.get("sprint") or "").strip()
     tickets = data.get("tickets") or []
-    model = data.get("model") or "claude-3-haiku-20240307"
+    model = data.get("model") or "claude-sonnet-4-20250514"
     stories_only = bool(data.get("stories_only"))
     planning_mode = bool(data.get("planning_mode"))
 
@@ -7966,7 +7966,7 @@ def _get_app_config_value(key):
         conn.close()
 
 
-def _claude_rewrite_description(description_text, anthropic_api_key, model="claude-3-haiku-20240307"):
+def _claude_rewrite_description(description_text, anthropic_api_key, model="claude-sonnet-4-20250514"):
     """Rewrite a Jira description into max 3 concise bullets using Claude."""
     if not description_text or not anthropic_api_key:
         return []
@@ -8334,7 +8334,7 @@ def sprint_tracker_generate_theme_from_tickets():
     payload = request.json or {}
     ticket_keys = payload.get("ticket_keys") or []
     anthropic_key = (payload.get("anthropic_api_key") or "").strip() or _get_app_config_value("anthropic_api_key")
-    model = payload.get("model") or "claude-3-haiku-20240307"
+    model = payload.get("model") or "claude-sonnet-4-20250514"
 
     if not isinstance(ticket_keys, list) or not ticket_keys:
         return jsonify({"error": "ticket_keys is required"}), 400
@@ -8655,7 +8655,7 @@ def _generate_themes_with_claude(grouped, anthropic_key):
                 "anthropic-version": "2023-06-01",
             },
             json={
-                "model": "claude-3-haiku-20240307",
+                "model": "claude-sonnet-4-20250514",
                 "max_tokens": 1800,
                 "messages": [{"role": "user", "content": prompt}],
             },
@@ -9446,7 +9446,7 @@ def team_diagram_fetch():
         except (TypeError, ValueError):
             return None
 
-    ai_model = str(payload.get("model") or "").strip() or "claude-3-haiku-20240307"
+    ai_model = str(payload.get("model") or "").strip() or "claude-sonnet-4-20250514"
     ai_cache_only = bool(payload.get("ai_cache_only"))
     anthropic_key_global = (_get_app_config_value("anthropic_api_key") or "").strip()
 
