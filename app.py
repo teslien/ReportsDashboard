@@ -1462,6 +1462,22 @@ def customer_closure_page():
     return render_template("customer_closure.html", project=PROJECT_KEY, show_navbar=False)
 
 
+_CUSTOMER_FIELD_PLACEHOLDER_VALUES_LOWER = frozenset(
+    {
+        "none",
+        "null",
+        "n/a",
+        "na",
+        "-",
+        "--",
+        "—",
+        "\u2014",
+        "unspecified",
+        "unknown",
+    }
+)
+
+
 def _extract_customer_values(raw_value):
     customers = []
     if isinstance(raw_value, list):
@@ -1484,6 +1500,8 @@ def _extract_customer_values(raw_value):
     for c in customers:
         k = c.lower()
         if k in seen:
+            continue
+        if k in _CUSTOMER_FIELD_PLACEHOLDER_VALUES_LOWER:
             continue
         seen.add(k)
         deduped.append(c)
@@ -1557,8 +1575,6 @@ _JIRA_COMPLETED_STATUS_NAMES_LOWER = frozenset(
         "complete",
         "completed",
         "released",
-        "won't fix",
-        "wont fix",
     }
 )
 
@@ -1636,7 +1652,6 @@ _DEFAULT_CUSTOMER_DONE_STATUSES = (
     "Complete",
     "Completed",
     "Released",
-    "Won't Fix",
 )
 
 
@@ -6585,6 +6600,75 @@ def sprint_delivery_ai_summary():
 
 # ── Assignee Work ─────────────────────────────────────────────────────────────
 
+
+# Epics never pulled into Assignee Work — avoids hierarchy noise (team backlog themes vs sprint work).
+_ASSIGNEE_WORK_JQL_EXCLUDE_EPIC = 'issuetype != Epic'
+
+
+def _assignee_work_story_point_candidates(headers_dict):
+    try:
+        base = str(JIRA_DOMAIN or "").strip().rstrip("/")
+        if base:
+            return _team_diagram_merge_sp_field_candidates(base, headers_dict)
+    except Exception:
+        pass
+    return []
+
+
+def _assignee_work_jira_fields(headers_dict):
+    """Fields string + platform CF + story-points candidates for Assignee Work APIs."""
+    _base_aw_fields = "summary,status,assignee,priority,created,updated,issuetype,labels,customfield_10020"
+    _plat_cf = _get_platform_checkboxes_field_id()
+    parts = [_base_aw_fields]
+    if _plat_cf:
+        parts.append(_plat_cf)
+    for cf in _assignee_work_story_point_candidates(headers_dict):
+        if cf and cf not in parts:
+            parts.append(cf)
+    return ",".join(parts), _plat_cf
+
+
+def _assignee_work_issue_row(i, _plat_cf, sp_candidates):
+    import re as _re
+
+    f = i.get("fields", {}) or {}
+    raw_sprints = f.get("customfield_10020") or []
+    sprint_names = []
+    if isinstance(raw_sprints, list):
+        for s in raw_sprints:
+            if isinstance(s, dict):
+                nm = s.get("name")
+                if nm:
+                    sprint_names.append(nm)
+            elif isinstance(s, str):
+                m = _re.search(r"name=([^,\]]+)", s)
+                if m:
+                    sprint_names.append(m.group(1))
+
+    _plat_raw = f.get(_plat_cf) if _plat_cf else None
+    sp_val = 0.0
+    if sp_candidates:
+        try:
+            sp_val = float(_team_diagram_issue_story_points(f, sp_candidates))
+        except Exception:
+            sp_val = 0.0
+
+    return {
+        "key": i.get("key"),
+        "summary": f.get("summary"),
+        "status": (f.get("status") or {}).get("name"),
+        "assignee": (f.get("assignee") or {}).get("displayName") if f.get("assignee") else "Unassigned",
+        "priority": (f.get("priority") or {}).get("name"),
+        "type": (f.get("issuetype") or {}).get("name"),
+        "labels": f.get("labels") or [],
+        "sprints": sprint_names,
+        "created": f.get("created"),
+        "updated": f.get("updated"),
+        "platform_production": _jira_platform_includes_production(_plat_raw),
+        "story_points": round(sp_val, 2) if sp_val else 0.0,
+    }
+
+
 @app.route("/assignee_work")
 @page_permission_required("assignee_work")
 def assignee_work_page():
@@ -6594,7 +6678,7 @@ def assignee_work_page():
 @app.route("/api/assignee_work", methods=["POST"])
 def assignee_work_search():
     """Fetch Jira tickets filtered by date range (updated), optional labels,
-    sprint id, and assignee(s). Returns a flat JSON list suitable for the
+    sprint id, and assignee(s). Epics excluded at JQL level. Returns a flat JSON list suitable for the
     Assignee Work page table."""
     headers_dict = dict(HEADERS)
     project_key_str = str(PROJECT_KEY)
@@ -6640,12 +6724,19 @@ def assignee_work_search():
             quoted = ", ".join(f'"{l}"' for l in cleaned)
             jql_parts.append(f'labels in ({quoted})')
 
+    jql_parts.append(_ASSIGNEE_WORK_JQL_EXCLUDE_EPIC)
+
+    if bool(data.get("only_stories")):
+        jql_parts.append('issuetype in ("Story", "User Story")')
+
+    if bool(data.get("exclude_subtasks")):
+        jql_parts.append('issuetype not in ("Sub-task", "Subtask")')
+
     jql = " AND ".join(jql_parts) + " ORDER BY updated DESC"
 
     try:
-        _base_aw_fields = "summary,status,assignee,priority,created,updated,issuetype,labels,customfield_10020"
-        _plat_cf = _get_platform_checkboxes_field_id()
-        _fields = f"{_base_aw_fields},{_plat_cf}" if _plat_cf else _base_aw_fields
+        _fields, _plat_cf = _assignee_work_jira_fields(headers_dict)
+        sp_candidates = _assignee_work_story_point_candidates(headers_dict)
         params = {
             "jql": jql,
             "maxResults": 100,
@@ -6669,38 +6760,7 @@ def assignee_work_search():
 
         payload = res.json()
         issues = payload.get("issues", [])
-        formatted = []
-        for i in issues:
-            f = i.get("fields", {}) or {}
-            raw_sprints = f.get("customfield_10020") or []
-            sprint_names = []
-            if isinstance(raw_sprints, list):
-                for s in raw_sprints:
-                    if isinstance(s, dict):
-                        nm = s.get("name")
-                        if nm:
-                            sprint_names.append(nm)
-                    elif isinstance(s, str):
-                        # Legacy Jira returns a string blob; try to extract name=
-                        import re as _re
-                        m = _re.search(r"name=([^,\]]+)", s)
-                        if m:
-                            sprint_names.append(m.group(1))
-
-            _plat_raw = f.get(_plat_cf) if _plat_cf else None
-            formatted.append({
-                "key": i.get("key"),
-                "summary": f.get("summary"),
-                "status": (f.get("status") or {}).get("name"),
-                "assignee": (f.get("assignee") or {}).get("displayName") if f.get("assignee") else "Unassigned",
-                "priority": (f.get("priority") or {}).get("name"),
-                "type": (f.get("issuetype") or {}).get("name"),
-                "labels": f.get("labels") or [],
-                "sprints": sprint_names,
-                "created": f.get("created"),
-                "updated": f.get("updated"),
-                "platform_production": _jira_platform_includes_production(_plat_raw),
-            })
+        formatted = [_assignee_work_issue_row(i, _plat_cf, sp_candidates) for i in issues]
 
         return jsonify({
             "issues": formatted,
@@ -6716,7 +6776,7 @@ def assignee_work_search():
 @app.route("/api/assignee_work_by_sprint", methods=["POST"])
 def assignee_work_by_sprint():
     """Fetch ALL tickets for a named sprint (no date filter) using
-    JQL: project = X AND sprint = "sprint_name" ORDER BY updated DESC.
+    JQL: project = X AND sprint = "sprint_name" AND issuetype != Epic ORDER BY updated DESC.
     Returns the same flat issue format as /api/assignee_work."""
     headers_dict = dict(HEADERS)
     project_key_str = str(PROJECT_KEY)
@@ -6733,15 +6793,21 @@ def assignee_work_by_sprint():
 
     # Escape double quotes inside the sprint name
     safe_sprint = sprint_name.replace('"', '\\"')
-    jql = (
+    exclude_subtasks = bool(data.get("exclude_subtasks"))
+    only_stories = bool(data.get("only_stories"))
+    jql_core = (
         f'project = "{project_key_str}" AND sprint = "{safe_sprint}"'
-        ' ORDER BY updated DESC'
+        f' AND {_ASSIGNEE_WORK_JQL_EXCLUDE_EPIC}'
     )
+    if only_stories:
+        jql_core += ' AND issuetype in ("Story", "User Story")'
+    if exclude_subtasks:
+        jql_core += ' AND issuetype not in ("Sub-task", "Subtask")'
+    jql = jql_core + " ORDER BY updated DESC"
 
     try:
-        _base_aw_fields = "summary,status,assignee,priority,created,updated,issuetype,labels,customfield_10020"
-        _plat_cf = _get_platform_checkboxes_field_id()
-        _fields = f"{_base_aw_fields},{_plat_cf}" if _plat_cf else _base_aw_fields
+        _fields, _plat_cf = _assignee_work_jira_fields(headers_dict)
+        sp_candidates = _assignee_work_story_point_candidates(headers_dict)
         params = {"jql": jql, "maxResults": 200, "startAt": 0, "fields": _fields}
         res = requests.get(
             f"{JIRA_DOMAIN}/rest/api/3/search/jql",
@@ -6758,35 +6824,8 @@ def assignee_work_by_sprint():
             return jsonify({"error": msg, "jql": jql}), res.status_code
 
         payload = res.json()
-        issues  = payload.get("issues", [])
-        formatted = []
-        import re as _re
-        for i in issues:
-            f = i.get("fields") or {}
-            sprint_names = []
-            raw_sprints = f.get("customfield_10020") or []
-            if isinstance(raw_sprints, list):
-                for sp in raw_sprints:
-                    if isinstance(sp, dict):
-                        sprint_names.append(sp.get("name", ""))
-                    elif isinstance(sp, str):
-                        m = _re.search(r'name=([^,\]]+)', sp)
-                        if m:
-                            sprint_names.append(m.group(1))
-            _plat_raw = f.get(_plat_cf) if _plat_cf else None
-            formatted.append({
-                "key":      i.get("key"),
-                "summary":  f.get("summary"),
-                "status":   (f.get("status") or {}).get("name"),
-                "assignee": (f.get("assignee") or {}).get("displayName") if f.get("assignee") else "Unassigned",
-                "priority": (f.get("priority") or {}).get("name"),
-                "type":     (f.get("issuetype") or {}).get("name"),
-                "labels":   f.get("labels") or [],
-                "sprints":  sprint_names,
-                "created":  f.get("created"),
-                "updated":  f.get("updated"),
-                "platform_production": _jira_platform_includes_production(_plat_raw),
-            })
+        issues = payload.get("issues", [])
+        formatted = [_assignee_work_issue_row(i, _plat_cf, sp_candidates) for i in issues]
 
         return jsonify({"issues": formatted, "total": len(formatted), "jql": jql})
 
@@ -6808,6 +6847,8 @@ def assignee_work_ai_summary():
     sprint_name = str(data.get("sprint") or "").strip()
     tickets = data.get("tickets") or []
     model = data.get("model") or "claude-sonnet-4-20250514"
+    stories_only = bool(data.get("stories_only"))
+    planning_mode = bool(data.get("planning_mode"))
 
     anthropic_key = (_get_app_config_value("anthropic_api_key") or "").strip()
     if not anthropic_key:
@@ -6826,28 +6867,64 @@ def assignee_work_ai_summary():
             "production": t.get("platform_production", False),
         }
 
-    compact_tickets = [_compact(t) for t in tickets[:120]]  # cap to avoid token overflow
+    ticket_cap = 70 if planning_mode else 120
+    compact_tickets = [_compact(t) for t in tickets[:ticket_cap]]  # cap to avoid token overflow
     prod_tickets    = [t for t in compact_tickets if t["production"]]
     tickets_json    = json.dumps(compact_tickets, ensure_ascii=False)
     prod_json       = json.dumps(prod_tickets, ensure_ascii=False) if prod_tickets else "[]"
     sprint_label    = sprint_name or "the selected sprint"
 
-    overall_prompt = (
-        f"You are an engineering team analyst. Below is a JSON list of Jira tickets worked on during '{sprint_label}'.\n"
-        "Write a concise sprint accomplishment summary for this team — what was built, fixed, or shipped.\n"
-        "Return ONLY a JSON array of bullet-point strings (plain English, no markdown, 6-10 items), e.g.:\n"
-        '[\"Delivered X feature\",\"Fixed Y bug\"]\n\n'
-        f"Tickets:\n{tickets_json}"
+    scope_note = (
+        "\nImportant: Every item is a Story or User Story only — summarise delivery and outcomes from those stories; "
+        "do not assume tasks or bugs are included.\n"
+        if stories_only
+        else "\n"
     )
 
-    production_prompt = (
-        f"You are an engineering team analyst. Below is a JSON list of production-related Jira tickets from '{sprint_label}'.\n"
-        "Summarise what production issues were fixed or worked on — be specific and brief.\n"
-        "Return ONLY a JSON array of bullet-point strings (plain English, no markdown, 4-8 items), e.g.:\n"
-        '[\"Fixed critical payment crash on iOS\",\"Resolved DB timeout in reports API\"]\n\n'
-        "If the list is empty, return: [\"No production tickets in this sprint.\"]\n\n"
-        f"Production tickets:\n{prod_json}"
+    if planning_mode:
+        overall_prompt = (
+            f"You are an engineering planning analyst. Below is a JSON list of Jira tickets for '{sprint_label}'.\n"
+            + scope_note
+            + "Create a concise next-sprint execution summary: what the team is currently working on and what they need to complete next.\n"
+            "Use present/future tense (is doing, is implementing, will complete), not past tense.\n"
+            "Return ONLY a JSON array of bullet-point strings (plain English, no markdown, 6-10 items).\n\n"
+            f"Tickets:\n{tickets_json}"
+        )
+    else:
+        overall_prompt = (
+            f"You are an engineering team analyst. Below is a JSON list of Jira tickets worked on during '{sprint_label}'.\n"
+            + scope_note
+            + "Write a concise sprint accomplishment summary for this team — what was built, fixed, or shipped.\n"
+            "Return ONLY a JSON array of bullet-point strings (plain English, no markdown, 6-10 items), e.g.:\n"
+            "[\"Delivered X feature\",\"Fixed Y bug\"]\n\n"
+            f"Tickets:\n{tickets_json}"
+        )
+
+    prod_scope = (
+        "Every ticket below is a Story or User Story flagged as production-related.\n"
+        if stories_only
+        else ""
     )
+    if planning_mode:
+        production_prompt = (
+            f"You are an engineering planning analyst. Below is a JSON list of production-related Jira tickets for '{sprint_label}'.\n"
+            + prod_scope
+            + "Summarise production focus for the sprint: what is in progress now and what should be completed next.\n"
+            "Use present/future tense, not past tense.\n"
+            "Return ONLY a JSON array of bullet-point strings (plain English, no markdown, 4-8 items).\n"
+            "If the list is empty, return: [\"No production tickets currently planned for this sprint.\"]\n\n"
+            f"Production tickets:\n{prod_json}"
+        )
+    else:
+        production_prompt = (
+            f"You are an engineering team analyst. Below is a JSON list of production-related Jira tickets from '{sprint_label}'.\n"
+            + prod_scope
+            + "Summarise what production issues were fixed or worked on — be specific and brief.\n"
+            "Return ONLY a JSON array of bullet-point strings (plain English, no markdown, 4-8 items), e.g.:\n"
+            "[\"Fixed critical payment crash on iOS\",\"Resolved DB timeout in reports API\"]\n\n"
+            "If the list is empty, return: [\"No production tickets in this sprint.\"]\n\n"
+            f"Production tickets:\n{prod_json}"
+        )
 
     def _call_claude(prompt_text):
         try:
@@ -6866,7 +6943,8 @@ def assignee_work_ai_summary():
                 timeout=90,
             )
             if not res.ok:
-                return None, f"Claude HTTP {res.status_code}"
+                snippet = (res.text or "").strip().replace("\n", " ")[:260]
+                return None, f"Claude HTTP {res.status_code}: {snippet}"
             body = res.json()
             raw = (body.get("content") or [{}])[0].get("text", "").strip()
             # Strip possible markdown fences
@@ -8810,6 +8888,85 @@ def sprint_tracker_create_sprint_from_generated():
 # Team Diagram Report
 # ---------------------------------------------------------------------------
 
+_TEAM_DIAGRAM_SP_FIELD_CACHE = {"expires": 0.0, "jira_base": "", "ids": ()}
+
+
+def _team_diagram_discovered_story_point_field_ids(jira_domain, headers_dict):
+    """Use GET /rest/api/3/field to find Story Points custom fields (cached per Jira site)."""
+    cache = _TEAM_DIAGRAM_SP_FIELD_CACHE
+    base = (jira_domain or "").strip().rstrip("/")
+    now = time.time()
+    if cache.get("jira_base") == base and float(cache.get("expires") or 0) > now:
+        return list(cache.get("ids") or ())
+
+    found = []
+    try:
+        r = requests.get(f"{base}/rest/api/3/field", headers=headers_dict, timeout=25)
+        if r.status_code != 200:
+            print(f"team_diagram: GET /field status {r.status_code} {r.text[:180]}")
+        elif isinstance(r.json(), list):
+            for row in r.json():
+                if not isinstance(row, dict):
+                    continue
+                fid = str(row.get("id") or "").strip()
+                if not fid.startswith("customfield_"):
+                    continue
+                name = str(row.get("name") or "").strip().lower()
+                sch = row.get("schema") or {}
+                custom = str(sch.get("custom") or "").lower()
+                stype = str(sch.get("type") or "").lower()
+                if "lexo-rank" in custom or "gh-lexo-rank" in custom:
+                    continue
+                if re.search(
+                    r"jsw-story-points|gh-story-points|field-story-points|storypoints|greenhopper\.jira:jsw-story",
+                    custom,
+                    re.I,
+                ):
+                    found.append(fid)
+                    continue
+                if "story point" in name or name == "story points":
+                    found.append(fid)
+                    continue
+                if "point" in name and "story" in name and stype in ("number", "float"):
+                    found.append(fid)
+                    continue
+    except Exception as e:
+        print(f"team_diagram: field discovery failed: {e}")
+
+    dedup = list(dict.fromkeys(found))
+    ttl = 2700.0 if dedup else 120.0
+    cache["jira_base"] = base
+    cache["expires"] = now + ttl
+    cache["ids"] = tuple(dedup)
+    return dedup
+
+
+def _team_diagram_merge_sp_field_candidates(jira_domain, headers_dict):
+    """Config first, then Jira /field discovery, then common Cloud defaults."""
+    out = []
+    seen = set()
+    raw = (_get_app_config_value("jira_story_points_field") or "").strip()
+    if raw:
+        for part in raw.split(","):
+            p = part.strip().lower().replace(" ", "")
+            if not p:
+                continue
+            if not p.startswith("customfield_") and p.isdigit():
+                p = f"customfield_{p}"
+            if p not in seen:
+                seen.add(p)
+                out.append(p)
+    for fid in _team_diagram_discovered_story_point_field_ids(jira_domain, headers_dict):
+        if fid not in seen:
+            seen.add(fid)
+            out.append(fid)
+    for fb in ("customfield_10016", "customfield_10026", "customfield_10028"):
+        if fb not in seen:
+            seen.add(fb)
+            out.append(fb)
+    return out
+
+
 def _team_diagram_assignee_dedupe_key(fields_obj):
     """Stable unique key per assignee (accountId when present). Ignores unassigned."""
     a = (fields_obj or {}).get("assignee")
@@ -8848,19 +9005,107 @@ def _team_diagram_assignee_display_name(fields_obj):
     return s or None
 
 
+def _team_diagram_paginated_jira_search(jira_domain, headers_dict, jql, fields, timeout=30):
+    """Fetch all issues for a JQL via /rest/api/3/search/jql pagination. Returns (issues, error_message_or_None)."""
+    all_issues = []
+    seen_keys = set()
+    start_at = 0
+    next_page_token = None
+    page_safety = 0
+    error_msg = None
+
+    while page_safety < 80:
+        page_safety += 1
+        params = {"jql": jql, "maxResults": 100, "fields": fields}
+        if next_page_token:
+            params["nextPageToken"] = next_page_token
+        else:
+            params["startAt"] = start_at
+        try:
+            jira_res = requests.get(
+                f"{jira_domain}/rest/api/3/search/jql",
+                headers=headers_dict,
+                params=params,
+                timeout=timeout,
+            )
+        except Exception as e:
+            error_msg = str(e)
+            break
+
+        if jira_res.status_code != 200:
+            error_msg = f"Jira API error ({jira_res.status_code}): {jira_res.text[:200]}"
+            break
+
+        data = jira_res.json()
+        issues = data.get("issues", [])
+        if not issues:
+            break
+        new_count = 0
+        for issue in issues:
+            key = issue.get("key")
+            if not key or key in seen_keys:
+                continue
+            seen_keys.add(key)
+            all_issues.append(issue)
+            new_count += 1
+        if new_count == 0:
+            break
+        next_page_token = data.get("nextPageToken")
+        if next_page_token:
+            continue
+        if len(issues) < 100:
+            break
+        start_at += 100
+
+    return all_issues, error_msg
+
+
+def _team_diagram_issue_story_points(fields_dict, ordered_field_ids):
+    """Pick best story points among candidates: prefer first field with value > 0, else first present (incl. 0)."""
+    if not isinstance(fields_dict, dict) or not ordered_field_ids:
+        return 0.0
+    first_present = None
+    for fid in ordered_field_ids:
+        if fid not in fields_dict:
+            continue
+        raw = fields_dict.get(fid)
+        if raw is None:
+            continue
+        v = _team_diagram_coerce_story_points(raw)
+        if v > 0:
+            return v
+        if first_present is None:
+            first_present = v
+    return float(first_present) if first_present is not None else 0.0
+
+
 def _team_diagram_coerce_story_points(raw):
-    """Numeric story points from Jira custom field (often customfield_10016); missing → 0."""
+    """Numeric story points from Jira custom field; handles number, string, and option-shaped dicts."""
     if raw is None:
         return 0.0
     if isinstance(raw, bool):
         return 0.0
     if isinstance(raw, (int, float)):
-        return float(raw)
+        x = float(raw)
+        if x != x or x == float("inf") or x == float("-inf"):
+            return 0.0
+        return x
     if isinstance(raw, str) and raw.strip():
         try:
-            return float(raw.strip())
+            return float(raw.strip().replace(",", ""))
         except ValueError:
             return 0.0
+    if isinstance(raw, dict):
+        if raw.get("errorMessage"):
+            return 0.0
+        for k in ("value", "amount", "number"):
+            if k in raw:
+                return _team_diagram_coerce_story_points(raw.get(k))
+        nested = raw.get("storyPoints") or raw.get("estimate")
+        if nested is not None:
+            return _team_diagram_coerce_story_points(nested)
+    if isinstance(raw, list) and len(raw) == 1:
+        return _team_diagram_coerce_story_points(raw[0])
     return 0.0
 
 
@@ -9067,14 +9312,15 @@ def _team_diagram_claude_summarize(sub_team_name, main_team, story_issues, prod_
 
 def _team_diagram_resolve_ai(main_team, sub_team_name, jql, story_issues, prod_issues, bug_issues, ai_cache_only, anthropic_key, model):
     cache_key = _team_diagram_ai_cache_key(jql, sub_team_name)
-    cached = _team_diagram_ai_cache_get(cache_key)
-    if cached and isinstance(cached, dict):
-        merged = _team_diagram_ai_normalize_client_blob(dict(cached))
-        merged["from_cache"] = True
-        merged["cache_key"] = cache_key
-        return merged
 
+    # Cache-only mode: read stored summaries and never call Claude.
     if ai_cache_only:
+        cached = _team_diagram_ai_cache_get(cache_key)
+        if cached and isinstance(cached, dict):
+            merged = _team_diagram_ai_normalize_client_blob(dict(cached))
+            merged["from_cache"] = True
+            merged["cache_key"] = cache_key
+            return merged
         return _team_diagram_ai_normalize_client_blob(
             {
                 "stories_bullets": [],
@@ -9089,6 +9335,7 @@ def _team_diagram_resolve_ai(main_team, sub_team_name, jql, story_issues, prod_i
             }
         )
 
+    # Normal generate: always call Claude when possible; do not short-circuit from DB cache.
     if not anthropic_key:
         return _team_diagram_ai_normalize_client_blob(
             {
@@ -9151,6 +9398,8 @@ def team_diagram_fetch():
     payload = request.get_json(silent=True) or {}
     main_team = str(payload.get("main_team") or "").strip()
     sub_teams = payload.get("sub_teams") or []
+    qa_body = payload.get("qa_team")
+    qa_jql = str(qa_body.get("jql") or "").strip() if isinstance(qa_body, dict) else ""
 
     if not main_team:
         return jsonify({"error": "Main team name is required"}), 400
@@ -9163,9 +9412,14 @@ def team_diagram_fetch():
 
     jira_domain = str(JIRA_DOMAIN)
     _plat_cf = _get_platform_checkboxes_field_id()
-    fields = "summary,status,issuetype,labels,customfield_10016,customfield_10077,assignee"
-    if _plat_cf:
-        fields += f",{_plat_cf}"
+    _td_sp_candidates = _team_diagram_merge_sp_field_candidates(jira_domain, headers_dict)
+    _field_parts = ["summary", "status", "issuetype", "labels", "assignee", "customfield_10077"]
+    for cf in _td_sp_candidates:
+        if cf and cf not in _field_parts:
+            _field_parts.append(cf)
+    if _plat_cf and _plat_cf not in _field_parts:
+        _field_parts.append(_plat_cf)
+    fields = ",".join(_field_parts)
 
     def _opt_nonneg_int(v):
         if v is None:
@@ -9175,12 +9429,24 @@ def team_diagram_fetch():
         except (TypeError, ValueError):
             return None
 
+    def _opt_nonneg_float(v):
+        if v is None:
+            return None
+        try:
+            x = float(v)
+            if x < 0 or x != x:  # reject NaN
+                return None
+            return x
+        except (TypeError, ValueError):
+            return None
+
     ai_model = str(payload.get("model") or "").strip() or "claude-sonnet-4-20250514"
     ai_cache_only = bool(payload.get("ai_cache_only"))
     anthropic_key_global = (_get_app_config_value("anthropic_api_key") or "").strip()
 
     main_tm_total = _opt_nonneg_int(payload.get("main_team_test_cases_total"))
     main_tm_auto = _opt_nonneg_int(payload.get("main_team_test_cases_automated"))
+    _td_sp_day_window = 10  # calendar days; keep in sync with TD_SP_AVG_MEMBER_DAY_WINDOW in team_diagram.html
     # Dedupe test-case-type issues by key across all sub-team JQL results (overlap-safe).
     portfolio_test_by_key = {}
 
@@ -9246,6 +9512,9 @@ def team_diagram_fetch():
         story_tasks_total = story_tasks_done = 0
         prod_issues_done = 0
         total_story_points = 0.0
+        story_points_issue_count = 0
+        assignee_sp_by_key = defaultdict(float)
+        assignee_sp_label = {}
         story_issues = []
         prod_issues_ai = []
         bug_issues_ai = []
@@ -9274,7 +9543,7 @@ def team_diagram_fetch():
                 if is_done:
                     story_tasks_done += 1
 
-            if itype == "story":
+            if itype in ("story", "user story"):
                 total_stories += 1
                 if is_done:
                     done_stories += 1
@@ -9296,7 +9565,19 @@ def team_diagram_fetch():
                     else:
                         portfolio_test_by_key[ik_tc] = prev_tc or auto_tc
 
-            total_story_points += _team_diagram_coerce_story_points(f.get("customfield_10016"))
+            _sp_issue = _team_diagram_issue_story_points(f, _td_sp_candidates)
+            total_story_points += _sp_issue
+            if _sp_issue > 0:
+                story_points_issue_count += 1
+
+            if ak:
+                assignee_sp_by_key[ak] += _sp_issue
+                if ak not in assignee_sp_label:
+                    assignee_sp_label[ak] = _team_diagram_assignee_display_name(f) or ak
+            else:
+                _uk_sp = "__unassigned__"
+                assignee_sp_by_key[_uk_sp] += _sp_issue
+                assignee_sp_label.setdefault(_uk_sp, "Unassigned")
 
             for cust in _extract_customer_values(f.get("customfield_10077")):
                 customer_names_local.add(cust)
@@ -9350,6 +9631,17 @@ def team_diagram_fetch():
 
         prod_bug_ticket_keys_ordered = [r["key"] for r in prod_bug_rows]
 
+        if error_msg:
+            assignee_story_points_rows = []
+        else:
+            assignee_story_points_rows = [
+                {"assignee": assignee_sp_label[k], "story_points": round(float(assignee_sp_by_key[k]), 2)}
+                for k in assignee_sp_by_key
+            ]
+            assignee_story_points_rows.sort(
+                key=lambda r: (-float(r["story_points"]), str(r["assignee"]).lower())
+            )
+
         assignee_unique_count = len(assignee_by_key)
         assignee_names_sorted = sorted(assignee_by_key.values(), key=lambda x: str(x).lower())[:80]
         manual_tm = _opt_nonneg_int(st.get("team_member_count"))
@@ -9360,10 +9652,16 @@ def team_diagram_fetch():
             if manual_tm is not None
             else ("assignees" if from_assignees_tm is not None else None)
         )
-        total_story_points_r = round(total_story_points, 2)
+        manual_sp_total = _opt_nonneg_float(st.get("story_points_total"))
+        jira_story_points_sum = round(float(total_story_points), 2)
+        total_story_points_r = round(
+            manual_sp_total if manual_sp_total is not None else total_story_points,
+            2,
+        )
+        story_points_source = "manual" if manual_sp_total is not None else "jira"
         estimated_calendar_days = None
         if team_member_count is not None and team_member_count > 0:
-            estimated_calendar_days = round(total_story_points / float(team_member_count), 2)
+            estimated_calendar_days = round(total_story_points_r / float(team_member_count), 2)
 
         ai_block = _team_diagram_resolve_ai(
             main_team,
@@ -9388,7 +9686,11 @@ def team_diagram_fetch():
             "team_size_source": team_size_source,
             "assignee_unique_count": assignee_unique_count,
             "assignee_names": assignee_names_sorted,
+            "assignee_story_points": assignee_story_points_rows,
             "total_story_points": total_story_points_r,
+            "story_points_source": story_points_source,
+            "jira_story_points_sum": jira_story_points_sum,
+            "story_points_issue_count": story_points_issue_count,
             "estimated_calendar_days": estimated_calendar_days,
             "total_stories": total_stories,
             "done_stories": done_stories,
@@ -9405,6 +9707,51 @@ def team_diagram_fetch():
             "ai": ai_block,
             "error": error_msg,
         })
+
+    qa_team_out = None
+    if qa_jql:
+        qa_issues, qa_err = _team_diagram_paginated_jira_search(jira_domain, headers_dict, qa_jql, fields)
+        if qa_err:
+            qa_team_out = {
+                "label": "QA",
+                "jql": qa_jql,
+                "error": qa_err,
+                "total_issues": 0,
+                "total_bugs": 0,
+                "done_bugs": 0,
+                "test_cases_total": 0,
+                "test_cases_automated": 0,
+                "test_automation_pct": 0,
+            }
+        else:
+            qa_tb = qa_db = qa_ttc = qa_atc = 0
+            for issue in qa_issues:
+                f = issue.get("fields") or {}
+                itype_raw = (f.get("issuetype") or {}).get("name") or ""
+                status_obj = f.get("status") or {}
+                status_disp = (status_obj.get("name") or "").strip()
+                status_category = ((status_obj.get("statusCategory") or {}).get("key") or "").strip()
+                is_done = _is_done_like_status(status_disp, status_category)
+                if _is_bug_type(itype_raw):
+                    qa_tb += 1
+                    if is_done:
+                        qa_db += 1
+                if _is_test_case_issue_type(itype_raw):
+                    qa_ttc += 1
+                    if _jira_issue_is_automated_test(itype_raw, f):
+                        qa_atc += 1
+            qa_pct = round(qa_atc / qa_ttc * 100) if qa_ttc else 0
+            qa_team_out = {
+                "label": "QA",
+                "jql": qa_jql,
+                "error": None,
+                "total_issues": len(qa_issues),
+                "total_bugs": qa_tb,
+                "done_bugs": qa_db,
+                "test_cases_total": qa_ttc,
+                "test_cases_automated": qa_atc,
+                "test_automation_pct": qa_pct,
+            }
 
     portfolio_customers = set()
     for row in results:
@@ -9429,17 +9776,44 @@ def team_diagram_fetch():
         else ("jira" if jira_pt_total else "none")
     )
 
+    sum_portfolio_sp = sum(float(r.get("total_story_points") or 0) for r in results if not r.get("error"))
+    sum_portfolio_members = sum(int(r.get("team_member_count") or 0) for r in results if not r.get("error"))
+    computed_avg_sp_day = None
+    if sum_portfolio_members > 0 and sum_portfolio_sp > 0:
+        computed_avg_sp_day = round(sum_portfolio_sp / float(sum_portfolio_members) / float(_td_sp_day_window), 4)
+    sp_src = "computed" if computed_avg_sp_day is not None else "none"
+
+    completed_legend = (
+        "The first number in each X/Y ratio (tickets, stories, bugs, production) counts an issue as "
+        'completed when Jira statusCategory is "done", or when the status name matches one of the names below '
+        "(case-insensitive)."
+    )
+
     return jsonify(
         {
             "main_team": main_team,
+            "story_points_jira_field": (_td_sp_candidates[0] if _td_sp_candidates else "customfield_10016"),
+            "story_points_jira_fields": list(_td_sp_candidates),
             "sub_teams": results,
             "portfolio_customer_names": portfolio_customer_names,
+            "completed_metrics_legend": {
+                "description": completed_legend,
+                "status_names": sorted(_JIRA_COMPLETED_STATUS_NAMES_LOWER),
+            },
             "main_team_test_metrics": {
                 "total": portfolio_total,
                 "automated": portfolio_auto,
                 "automation_pct": portfolio_pct,
                 "source": mt_test_src,
             },
+            "main_team_sp_metrics": {
+                "avg_story_points_per_member_day": computed_avg_sp_day,
+                "portfolio_total_story_points": round(sum_portfolio_sp, 2),
+                "portfolio_team_members_sum": sum_portfolio_members,
+                "calendar_days_window": _td_sp_day_window,
+                "source": sp_src,
+            },
+            "qa_team": qa_team_out,
         }
     )
 

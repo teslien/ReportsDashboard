@@ -416,10 +416,10 @@
                         </div>
                         <div class="aw-kpi-sub">completed / total</div>
                     </div>
-                    <!-- Stories / Tasks -->
+                    <!-- Stories only (excludes Task / Sub-task types) -->
                     <div class="aw-kpi-card border-l-[3px] border-l-cyan-400">
                         <span class="aw-kpi-icon">📋</span>
-                        <div class="aw-kpi-label">Stories / Tasks / Sub-tasks</div>
+                        <div class="aw-kpi-label">Stories</div>
                         <div class="flex items-end gap-1 mt-0.5">
                             <span class="aw-kpi-value text-cyan-300 leading-none" id="aw-kpi-work-done">0</span>
                             <span class="text-gray-600 font-bold text-lg leading-none mb-0.5">/</span>
@@ -543,13 +543,13 @@
     <!-- Sprint-picker + AI Summary modal (shown before PDF generation) -->
     <div id="awSprintModal" class="hidden fixed inset-0 z-[9999] flex items-center justify-center p-4"
          style="background:rgba(0,0,0,0.72);backdrop-filter:blur(6px);">
-        <div class="bg-gray-900 border border-gray-700/60 rounded-3xl shadow-2xl w-full max-w-md p-7" style="min-width:340px;">
+        <div class="bg-gray-900 border border-gray-700/60 rounded-3xl shadow-2xl w-full max-w-md p-7 overflow-y-auto" style="min-width:340px; max-height:min(92vh, 900px);">
             <!-- Header -->
             <div class="flex items-center gap-3 mb-5">
                 <span class="text-3xl select-none">🤖</span>
                 <div>
                     <h2 class="text-lg font-bold text-white">Generate Report</h2>
-                    <p class="text-xs text-gray-400 mt-0.5">AI will summarise your sprint before building the PDF</p>
+                    <p class="text-xs text-gray-400 mt-0.5">Choose sprint & report sections — AI summary and ticket list run first in the PDF.</p>
                 </div>
             </div>
 
@@ -561,8 +561,46 @@
             <!-- Sprint select -->
             <label class="block text-xs font-semibold text-gray-400 mb-1 uppercase tracking-wide">Sprint to analyse</label>
             <select id="awSprintPick"
-                    class="w-full bg-gray-800 border border-gray-600/60 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500 mb-6">
+                    class="w-full bg-gray-800 border border-gray-600/60 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500 mb-4">
             </select>
+
+            <div class="space-y-3 mb-6 border border-gray-700/50 rounded-xl p-4 bg-gray-800/40">
+                <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Report options</p>
+                <label id="awLblOnlySprint" class="flex items-start gap-3 cursor-pointer text-sm text-gray-200">
+                    <input type="checkbox" id="awCbOnlySprint" class="mt-1 rounded border-gray-600 bg-gray-800" />
+                    <span><span class="font-semibold text-white">Sprint-only PDF</span><span class="block text-xs text-gray-500 mt-0.5">Skip the extra section that repeats all sprints across your date range.</span></span>
+                </label>
+                <label class="flex items-start gap-3 cursor-pointer text-sm text-gray-200">
+                    <input type="checkbox" id="awCbExcludeSubtasks" class="mt-1 rounded border-gray-600 bg-gray-800" />
+                    <span><span class="font-semibold text-white">Exclude sub-tasks</span><span class="block text-xs text-gray-500 mt-0.5">Jira fetch and PDF omit Sub-task / Subtask types.</span></span>
+                </label>
+                <label class="flex items-start gap-3 cursor-pointer text-sm text-gray-200">
+                    <input type="checkbox" id="awCbAiStoriesOnly" class="mt-1 rounded border-gray-600 bg-gray-800" />
+                    <span><span class="font-semibold text-white">AI summary: stories only</span><span class="block text-xs text-gray-500 mt-0.5">Uses the same sprint Jira query as the PDF (not the date-range search grid). Story / User Story only when checked.</span></span>
+                </label>
+                <label class="flex items-start gap-3 cursor-pointer text-sm text-gray-200">
+                    <input type="checkbox" id="awCbOnlyStories" class="mt-1 rounded border-gray-600 bg-gray-800" />
+                    <span><span class="font-semibold text-white">Only stories (report fetch)</span><span class="block text-xs text-gray-500 mt-0.5">All report JQL fetches are restricted to Story / User Story only; task and bug breakdown sections are skipped.</span></span>
+                </label>
+                <label class="flex items-start gap-3 cursor-pointer text-sm text-gray-200">
+                    <input type="checkbox" id="awCbBreakdown" checked class="mt-1 rounded border-gray-600 bg-gray-800" />
+                    <span><span class="font-semibold text-white">Include breakdown tables</span><span class="block text-xs text-gray-500 mt-0.5">Stories/tasks, bugs, and production ticket tables (in addition to the main lists).</span></span>
+                </label>
+                <label class="flex items-start gap-3 cursor-pointer text-sm text-gray-200">
+                    <input type="checkbox" id="awCbAssigneeSp" class="mt-1 rounded border-gray-600 bg-gray-800" />
+                    <span><span class="font-semibold text-white">Assignee story points table</span><span class="block text-xs text-gray-500 mt-0.5">Σ per assignee from <strong class="text-gray-400">Story / User Story</strong> and <strong class="text-gray-400">platform production</strong> tickets only; total row at the end.</span></span>
+                </label>
+                <label class="flex items-start gap-3 cursor-pointer text-sm text-gray-200">
+                    <input type="checkbox" id="awCbNextWeekPlan" class="mt-1 rounded border-gray-600 bg-gray-800" />
+                    <span><span class="font-semibold text-white">Include next-week plan + AI summary</span><span class="block text-xs text-gray-500 mt-0.5">Adds a section after story points using another sprint you choose below.</span></span>
+                </label>
+                <div id="awNextSprintWrap" class="hidden pl-6">
+                    <label class="block text-xs font-semibold text-gray-400 mb-1 uppercase tracking-wide">Next sprint</label>
+                    <select id="awSprintPickNext"
+                            class="w-full bg-gray-800 border border-gray-600/60 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500">
+                    </select>
+                </div>
+            </div>
 
             <!-- Generating state (hidden by default) -->
             <div id="awModalGenerating" class="hidden text-center py-4">
@@ -576,7 +614,7 @@
             </div>
 
             <!-- Buttons -->
-            <div id="awModalActions" class="flex gap-3 justify-end">
+            <div id="awModalActions" class="flex gap-3 justify-end sticky bottom-0 bg-gray-900 pt-3 mt-1 border-t border-gray-700/50">
                 <button type="button" onclick="closeSprintModal()"
                         class="px-5 py-2 text-sm font-semibold text-gray-300 bg-gray-800 hover:bg-gray-700 rounded-xl transition">
                     Cancel
@@ -867,6 +905,26 @@
             return t === 'story' || t === 'task' || t === 'sub-task' || t === 'subtask';
         }
 
+        /** Story-type issues only (for KPI + PDF summary card — excludes Task / Sub-task). */
+        function isStoryIssue(issue) {
+            const t = normalizeType(issue);
+            return t === 'story' || t === 'user story';
+        }
+
+        function isSubtaskIssue(issue) {
+            const t = normalizeType(issue);
+            return t === 'sub-task' || t === 'subtask';
+        }
+
+        /** Epics out; optional sub-tasks out for PDF / sprint fetch options */
+        function applyPdfFilters(issues, pdfOpts) {
+            let list = (issues || []).filter(i => !isEpic(i));
+            if (pdfOpts && pdfOpts.excludeSubtasks) {
+                list = list.filter(i => !isSubtaskIssue(i));
+            }
+            return list;
+        }
+
         function isBug(issue) {
             return normalizeType(issue) === 'bug';
         }
@@ -874,6 +932,38 @@
         /** Jira: "platform[checkboxes]" includes PRODUCTION (set by /api/assignee_work from Jira). */
         function isProductionPlatform(issue) {
             return issue?.platform_production === true;
+        }
+
+        /** Assignee SP table: count Story/User Story issues plus any ticket flagged platform production. */
+        function issueIncludedInAssigneeSpTable(issue) {
+            return isStoryIssue(issue) || isProductionPlatform(issue);
+        }
+
+        /** PDF “ALL TICKETS” tables: Story → Task (+sub-task) → Bug → everything else; then completed rows first. */
+        function pdfAllTicketsTypeRank(issue) {
+            const t = normalizeType(issue);
+            if (t === 'story' || t === 'user story') return 0;
+            if (t === 'task' || t === 'sub-task' || t === 'subtask') return 1;
+            if (t === 'bug') return 2;
+            return 3;
+        }
+
+        function sortIssuesForPdfAllTicketsTable(issues) {
+            return [...(issues || [])].sort((a, b) => {
+                const ra = pdfAllTicketsTypeRank(a);
+                const rb = pdfAllTicketsTypeRank(b);
+                if (ra !== rb) return ra - rb;
+                const aDone = isDone(a) ? 0 : 1;
+                const bDone = isDone(b) ? 0 : 1;
+                if (aDone !== bDone) return aDone - bDone;
+                return (a.status || '').localeCompare(b.status || '');
+            });
+        }
+
+        function isInProgressIssue(issue) {
+            if (!issue || isDone(issue)) return false;
+            const s = String(issue.status || '').trim().toLowerCase();
+            return /progress|review|qa|staging|ready/.test(s);
         }
 
         const AW_DONUT_COLORS = [
@@ -888,20 +978,20 @@
                 return;
             }
             const nonEpics    = issues.filter(i => !isEpic(i));
-            const workArr     = nonEpics.filter(isWorkItem);
+            const storyArr    = nonEpics.filter(isStoryIssue);
             const bugsArr     = nonEpics.filter(isBug);
             const prodArr     = nonEpics.filter(isProductionPlatform);
             const distinct    = new Set(nonEpics.map(primarySprintName)).size;
 
             const totalDone   = nonEpics.filter(isDone).length;
-            const workDone    = workArr.filter(isDone).length;
+            const storyDone   = storyArr.filter(isDone).length;
             const bugsDone    = bugsArr.filter(isDone).length;
             const prodDone    = prodArr.filter(isDone).length;
 
             document.getElementById('aw-kpi-total').textContent      = nonEpics.length.toLocaleString();
             document.getElementById('aw-kpi-total-done').textContent  = totalDone.toLocaleString();
-            document.getElementById('aw-kpi-work').textContent        = workArr.length.toLocaleString();
-            document.getElementById('aw-kpi-work-done').textContent   = workDone.toLocaleString();
+            document.getElementById('aw-kpi-work').textContent        = storyArr.length.toLocaleString();
+            document.getElementById('aw-kpi-work-done').textContent   = storyDone.toLocaleString();
             document.getElementById('aw-kpi-bugs').textContent        = bugsArr.length.toLocaleString();
             document.getElementById('aw-kpi-bugs-done').textContent   = bugsDone.toLocaleString();
             document.getElementById('aw-kpi-prod').textContent        = prodArr.length.toLocaleString();
@@ -1342,17 +1432,18 @@
         /**
          * Full-width summary cards — white bg, colored top bar + label + number per type.
          */
-        function drawPdfSummaryCards(doc, startY, m) {
+        function drawPdfSummaryCards(doc, startY, m, pdfOpts) {
             const pageW = doc.internal.pageSize.getWidth();
-            const margin = 14, gap = 3, n = 4;
-            const cardW = (pageW - margin * 2 - gap * (n - 1)) / n;
+            const margin = 14, gap = 3;
             const cardH = 32;
+            const workCardLabel = 'STORIES';
             const cards = [
                 { label: 'TOTAL TICKETS',              done: m.totalDone,      total: m.total,      subLabel: 'completed / total', accent: [30, 64, 175],   bg: [239, 246, 255] },
-                { label: 'STORIES / TASKS / SUB-TASKS',done: m.workDone,       total: m.work,       subLabel: 'completed / total', accent: [6, 148, 162],   bg: [236, 254, 255] },
+                { label: workCardLabel,                done: m.workDone,       total: m.work,       subLabel: 'completed / total', accent: [6, 148, 162],   bg: [236, 254, 255] },
                 { label: 'BUGS',                       done: m.bugsDone,       total: m.bugs,       subLabel: 'resolved / total',  accent: [185, 28, 28],   bg: [254, 242, 242] },
                 { label: 'PRODUCTION TICKETS',         done: m.productionDone, total: m.production, subLabel: 'completed / total', accent: [180, 120, 10],  bg: [255, 251, 235] }
-            ];
+            ].filter(c => !(pdfOpts && pdfOpts.onlyStories && c.label === 'BUGS'));
+            const cardW = (pageW - margin * 2 - gap * (cards.length - 1)) / Math.max(cards.length, 1);
             let x = margin;
             for (const c of cards) {
                 const [ar, ag, ab] = c.accent;
@@ -1714,6 +1805,117 @@
             }
         }
 
+        function awSyncModalOnlySprintState() {
+            const pick = document.getElementById('awSprintPick');
+            const cb = document.getElementById('awCbOnlySprint');
+            const lbl = document.getElementById('awLblOnlySprint');
+            if (!pick || !cb) return;
+            const dis = pick.value === '__all__';
+            cb.disabled = dis;
+            if (dis) cb.checked = false;
+            if (lbl) {
+                lbl.classList.toggle('opacity-50', dis);
+                lbl.classList.toggle('cursor-not-allowed', dis);
+            }
+        }
+
+        /** Readable numbered list after AI — keys + trimmed summary */
+        function _drawTicketQuickList(doc, issues, startY, MARGIN, pageW, limit) {
+            const lim = limit || 28;
+            const arr = [...(issues || [])];
+            if (!arr.length) return startY;
+            startY = ensurePdfY(doc, startY, 12);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(8);
+            doc.setTextColor(55, 65, 81);
+            doc.text('Sprint ticket list (quick view)', MARGIN, startY);
+            startY += 5;
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(6.8);
+            doc.setTextColor(35, 35, 35);
+            const slice = arr.slice(0, lim);
+            slice.forEach((t, idx) => {
+                const sum = String(t.summary || '').slice(0, 78);
+                const parts = doc.splitTextToSize(`${idx + 1}. ${t.key || ''} — ${sum}`, pageW - MARGIN * 2 - 4);
+                parts.forEach(ln => {
+                    startY = ensurePdfY(doc, startY, 4);
+                    doc.text(ln, MARGIN + 2, startY);
+                    startY += 3.9;
+                });
+            });
+            if (arr.length > lim) {
+                startY = ensurePdfY(doc, startY, 5);
+                doc.setFont('helvetica', 'italic');
+                doc.setFontSize(6.5);
+                doc.setTextColor(120, 120, 120);
+                doc.text(`+ ${arr.length - lim} more tickets in the detailed tables below.`, MARGIN + 2, startY);
+                startY += 5;
+                doc.setFont('helvetica', 'normal');
+                doc.setTextColor(0, 0, 0);
+            }
+            return startY + 3;
+        }
+
+        function renderAssigneeStoryPointsTable(doc, issues, startY, MARGIN, pageW) {
+            const filtered = (issues || []).filter(issueIncludedInAssigneeSpTable);
+            const map = new Map();
+            for (const i of filtered) {
+                const name = String(i.assignee || 'Unassigned');
+                const sp = Number(i.story_points);
+                const add = Number.isFinite(sp) ? sp : 0;
+                map.set(name, (map.get(name) || 0) + add);
+            }
+            const rows = Array.from(map.entries()).sort((a, b) => b[1] - a[1]);
+            const total = rows.reduce((s, r) => s + r[1], 0);
+            const fmt = (n) => (Math.round(n * 100) / 100).toString();
+
+            startY = ensurePdfY(doc, startY, 14);
+            const [r, g, b] = [79, 70, 229];
+            doc.setFillColor(r, g, b);
+            doc.rect(MARGIN, startY - 1, pageW - MARGIN * 2, 9, 'F');
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(9);
+            doc.setTextColor(255, 255, 255);
+            doc.text('ASSIGNEE STORY POINT CONTRIBUTION', MARGIN + 4, startY + 5.5);
+            doc.setTextColor(0, 0, 0);
+            startY += 11;
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(6.5);
+            doc.setTextColor(100, 100, 100);
+            const spCaption = doc.splitTextToSize(
+                'Includes Σ story points from Story / User Story tickets and from tickets flagged platform production (other types excluded).',
+                pageW - MARGIN * 2 - 8
+            );
+            spCaption.forEach((line) => {
+                doc.text(line, MARGIN + 4, startY);
+                startY += 3.6;
+            });
+            startY += 3;
+
+            const body = rows.length
+                ? rows.map(([a, sp]) => [a, fmt(sp)])
+                : [['—', '0']];
+            body.push(['TOTAL', fmt(total)]);
+
+            doc.autoTable({
+                startY: startY,
+                head: [['Assignee', 'Σ Story points']],
+                body,
+                theme: 'grid',
+                styles: { fontSize: 8, cellPadding: 2.8, font: 'helvetica', textColor: [25, 25, 25] },
+                headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: 'bold' },
+                columnStyles: { 0: { cellWidth: 110 }, 1: { cellWidth: 38, halign: 'right', fontStyle: 'bold' } },
+                margin: { left: MARGIN, right: MARGIN },
+                didParseCell(data) {
+                    if (data.section === 'body' && data.row.index === body.length - 1) {
+                        data.cell.styles.fontStyle = 'bold';
+                        data.cell.styles.fillColor = [238, 242, 255];
+                    }
+                },
+            });
+            return doc.lastAutoTable.finalY + 8;
+        }
+
         /* ── Sprint-picker modal helpers ── */
         function generatePdfReport() {
             if (!latestResults.length) return;
@@ -1733,12 +1935,40 @@
             });
             // pre-select last sprint if available
             if (allSprints.length) pick.value = allSprints[allSprints.length - 1];
+            awSyncModalOnlySprintState();
+            document.getElementById('awCbNextWeekPlan').checked = false;
+            awToggleNextSprintPick();
 
             // Reset modal state
             document.getElementById('awModalGenerating').classList.add('hidden');
             document.getElementById('awModalActions').classList.remove('hidden');
             document.getElementById('awSprintModal').classList.remove('hidden');
         }
+
+        document.getElementById('awSprintPick')?.addEventListener('change', awSyncModalOnlySprintState);
+
+
+        function awToggleNextSprintPick() {
+            const cb = document.getElementById('awCbNextWeekPlan');
+            const wrap = document.getElementById('awNextSprintWrap');
+            const pick = document.getElementById('awSprintPickNext');
+            if (!cb || !wrap || !pick) return;
+            if (!cb.checked) {
+                wrap.classList.add('hidden');
+                return;
+            }
+            const curr = document.getElementById('awSprintPick')?.value || '__all__';
+            const all = [...new Set((latestResults || []).filter(i => !isEpic(i)).flatMap(i => i.sprints || []))].sort();
+            const opts = all.filter(s => s && s !== curr);
+            pick.innerHTML = '';
+            opts.forEach(sp => {
+                const o = document.createElement('option');
+                o.value = sp; o.textContent = sp;
+                pick.appendChild(o);
+            });
+            wrap.classList.remove('hidden');
+        }
+        document.getElementById('awCbNextWeekPlan')?.addEventListener('change', awToggleNextSprintPick);
 
         function closeSprintModal() {
             document.getElementById('awSprintModal').classList.add('hidden');
@@ -1748,53 +1978,181 @@
             const reportTitle = String(document.getElementById('awReportTitle').value || '').trim() || 'Assignee Work Report';
             const sprintVal   = document.getElementById('awSprintPick').value || '__all__';
 
+            const pdfOpts = {
+                onlySprintReport: sprintVal !== '__all__' && document.getElementById('awCbOnlySprint')?.checked,
+                excludeSubtasks: !!document.getElementById('awCbExcludeSubtasks')?.checked,
+                aiStoriesOnly: !!document.getElementById('awCbAiStoriesOnly')?.checked,
+                onlyStories: !!document.getElementById('awCbOnlyStories')?.checked,
+                breakdownTables: document.getElementById('awCbBreakdown')?.checked !== false,
+                assigneeSpTable: !!document.getElementById('awCbAssigneeSp')?.checked,
+                includeNextWeekPlan: !!document.getElementById('awCbNextWeekPlan')?.checked,
+            };
+
+            if (pdfOpts.onlyStories) {
+                // Stories-only mode implies stories-only AI and no task/bug breakdown sections.
+                pdfOpts.aiStoriesOnly = true;
+                pdfOpts.breakdownTables = false;
+            }
+
             document.getElementById('awModalActions').classList.add('hidden');
             document.getElementById('awModalGenerating').classList.remove('hidden');
             const statusEl = document.getElementById('awModalStatus');
 
             let aiSummary       = null;
             let allSprintIssues = null;   // full JQL fetch for selected sprint
+            let nextWeekPlan = null;
 
             if (sprintVal !== '__all__') {
-                const sprintTickets = latestResults.filter(i =>
-                    Array.isArray(i.sprints) && i.sprints.includes(sprintVal)
-                );
-
-                // 1) AI summary
+                /* Sprint scope must match Jira (sprint = "…"), not date-filtered search rows +
+                   fragile i.sprints.includes(name). KPI counts use all search hits; AI/PDF sprint
+                   sections need the dedicated sprint API so Story/production tickets are included. */
                 try {
-                    statusEl.textContent = 'Asking AI for sprint insights…';
-                    const aiRes = await fetch('/api/assignee_work_ai_summary', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ sprint: sprintVal, tickets: sprintTickets })
-                    });
-                    if (aiRes.ok) aiSummary = await aiRes.json();
-                } catch (e) { console.warn('AI summary failed:', e); }
-
-                // 2) Full sprint JQL fetch (all tickets regardless of date range)
-                try {
-                    statusEl.textContent = 'Fetching all sprint tickets from Jira…';
+                    statusEl.textContent = 'Fetching sprint tickets from Jira…';
                     const jqlRes = await fetch('/api/assignee_work_by_sprint', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ sprint_name: sprintVal })
+                        body: JSON.stringify({
+                            sprint_name: sprintVal,
+                            exclude_subtasks: pdfOpts.excludeSubtasks,
+                            only_stories: pdfOpts.onlyStories,
+                        })
                     });
                     if (jqlRes.ok) {
                         const jqlData = await jqlRes.json();
-                        allSprintIssues = jqlData.issues || null;
+                        const raw = jqlData.issues || [];
+                        allSprintIssues = raw.length ? raw : null;
                     }
-                } catch (e) { console.warn('Sprint fetch failed:', e); }
+                } catch (e) {
+                    console.warn('Sprint fetch failed:', e);
+                }
+
+                let sprintTicketsForAi = (allSprintIssues || []).slice();
+                if (pdfOpts.aiStoriesOnly) {
+                    sprintTicketsForAi = sprintTicketsForAi.filter(i => isStoryIssue(i));
+                }
+
+                if (!sprintTicketsForAi.length) {
+                    const reasonFetch = !allSprintIssues || !allSprintIssues.length;
+                    aiSummary = {
+                        overall_bullets: [
+                            reasonFetch
+                                ? 'Could not load tickets for this sprint from Jira (or sprint is empty). AI summary skipped.'
+                                : pdfOpts.aiStoriesOnly
+                                    ? 'No Story / User Story issues in this sprint’s Jira results — AI summary skipped.'
+                                    : 'No tickets returned for this sprint from Jira — AI summary skipped.',
+                        ],
+                        production_bullets: [
+                            reasonFetch
+                                ? 'Sprint fetch unavailable — production bullets skipped.'
+                                : pdfOpts.aiStoriesOnly
+                                    ? 'No production-flagged Story / User Story tickets in this sprint.'
+                                    : 'No production-flagged tickets in this sprint.',
+                        ],
+                    };
+                } else {
+                    try {
+                        statusEl.textContent = pdfOpts.aiStoriesOnly
+                            ? 'Asking AI (stories only)…'
+                            : 'Asking AI for sprint insights…';
+                        const aiRes = await fetch('/api/assignee_work_ai_summary', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                sprint: sprintVal,
+                                tickets: sprintTicketsForAi,
+                                stories_only: pdfOpts.aiStoriesOnly || pdfOpts.onlyStories,
+                            })
+                        });
+                        if (aiRes.ok) aiSummary = await aiRes.json();
+                    } catch (e) { console.warn('AI summary failed:', e); }
+                }
+            }
+
+            if (pdfOpts.includeNextWeekPlan) {
+                const nextSprint = (document.getElementById('awSprintPickNext')?.value || '').trim();
+                if (nextSprint) {
+                    try {
+                        statusEl.textContent = 'Fetching next sprint tickets…';
+                        const nxRes = await fetch('/api/assignee_work_by_sprint', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                sprint_name: nextSprint,
+                                exclude_subtasks: pdfOpts.excludeSubtasks,
+                                only_stories: pdfOpts.onlyStories,
+                            })
+                        });
+                        if (nxRes.ok) {
+                            const nxData = await nxRes.json();
+                            let nxIssues = nxData.issues || [];
+                            if (pdfOpts.aiStoriesOnly || pdfOpts.onlyStories) nxIssues = nxIssues.filter(isStoryIssue);
+                            if (nxIssues.length) {
+                                statusEl.textContent = 'Asking AI for next sprint plan…';
+                                const nxAi = await fetch('/api/assignee_work_ai_summary', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        sprint: nextSprint,
+                                        tickets: nxIssues,
+                                        stories_only: pdfOpts.aiStoriesOnly || pdfOpts.onlyStories,
+                                        planning_mode: true,
+                                    })
+                                });
+                                if (nxAi.ok) {
+                                    const nxSum = await nxAi.json();
+                                    nextWeekPlan = { sprint: nextSprint, issues: nxIssues, summary: nxSum };
+                                }
+                            }
+                        }
+                    } catch (e) { console.warn('Next sprint plan fetch failed:', e); }
+                }
             }
 
             statusEl.textContent = 'Building PDF…';
             await new Promise(r => setTimeout(r, 60));
 
+            let reportBaseIssues = null;
+            if (pdfOpts.onlyStories) {
+                try {
+                    statusEl.textContent = 'Fetching stories-only report dataset…';
+                    const fromDate = $('#fromDate').val();
+                    const toDate = $('#toDate').val();
+                    const labelRaw = $('#labelInput').val().trim();
+                    const labels = labelRaw ? labelRaw.split(',').map(x => x.trim()).filter(Boolean) : [];
+                    const sprintId = $('#sprintSelect').val();
+                    const assigneeIds = $('#assigneeSelect').val() || [];
+                    const baseRes = await fetch('/api/assignee_work', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-Project-Key': (localStorage.getItem('project_key') || projectKey || '').trim().toUpperCase()
+                        },
+                        body: JSON.stringify({
+                            from_date: fromDate,
+                            to_date: toDate,
+                            labels,
+                            sprint_id: sprintId || null,
+                            assignee_ids: assigneeIds,
+                            only_stories: true,
+                            exclude_subtasks: pdfOpts.excludeSubtasks,
+                        })
+                    });
+                    if (baseRes.ok) {
+                        const baseData = await baseRes.json();
+                        reportBaseIssues = baseData.issues || [];
+                    }
+                } catch (e) {
+                    console.warn('Stories-only base fetch failed:', e);
+                }
+            }
+
             closeSprintModal();
-            _buildPdf(reportTitle, sprintVal === '__all__' ? null : sprintVal, aiSummary, allSprintIssues);
+            _buildPdf(reportTitle, sprintVal === '__all__' ? null : sprintVal, aiSummary, allSprintIssues, pdfOpts, reportBaseIssues, nextWeekPlan);
         }
 
         /* ── Core PDF builder ── */
-        function _buildPdf(reportTitle, sprintName, aiSummary, allSprintIssues) {
+        function _buildPdf(reportTitle, sprintName, aiSummary, allSprintIssues, pdfOpts, reportBaseIssues, nextWeekPlan) {
+            pdfOpts = pdfOpts || {};
             const fromDate = $('#fromDate').val() || '';
             const toDate   = $('#toDate').val() || '';
 
@@ -1808,13 +2166,18 @@
             const toLabel   = fmtDate(toDate);
             const genLabel  = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
-            // All non-epic tickets (full date range, all sprints)
-            const allNonEpics  = latestResults.filter(i => !isEpic(i));
+            const brStoriesBanner = pdfOpts.onlyStories
+                ? 'STORIES'
+                : (pdfOpts.excludeSubtasks ? 'STORIES · TASKS' : 'STORIES · TASKS · SUB-TASKS');
+
+            // Date-range tickets (epics out; optional sub-tasks out).
+            const baseIssues = Array.isArray(reportBaseIssues) ? reportBaseIssues : latestResults;
+            const allNonEpics  = applyPdfFilters(baseIssues, pdfOpts);
+            const allStories   = allNonEpics.filter(isStoryIssue);
             const allWork      = allNonEpics.filter(isWorkItem);
             const allBugs      = allNonEpics.filter(isBug);
             const allProd      = allNonEpics.filter(isProductionPlatform);
 
-            // Sprint-specific slice (only used when a sprint is chosen)
             const sprintTickets = sprintName
                 ? allNonEpics.filter(i => Array.isArray(i.sprints) && i.sprints.includes(sprintName))
                 : allNonEpics;
@@ -1967,7 +2330,9 @@
                 doc.text(`Sprint: ${sprintName}`, pageW / 2, y + 4, { align: 'center' });
                 y += 11;
 
-                /* ── AI summaries ── */
+                const SC = _SECTION_COLORS;
+
+                /* ── AI summaries + quick ticket list ── */
                 if (aiSummary) {
                     y = _drawAiBox(aiSummary.overall_bullets, aiSummary.production_bullets, y);
                     doc.setDrawColor(220, 220, 220);
@@ -1976,13 +2341,11 @@
                     y += 3;
                 }
 
-                /* ── Use full JQL sprint fetch for ALL sprint-specific numbers ── */
-                // allSprintIssues = dedicated /api/assignee_work_by_sprint fetch (no date filter)
-                // Falls back to date-filtered sprintTickets if fetch failed
-                const nonEpicSprintIssues = allSprintIssues
-                    ? allSprintIssues.filter(i => !isEpic(i))
-                    : sprintTickets;
+                const nonEpicSprintIssues = applyPdfFilters(allSprintIssues || sprintTickets, pdfOpts);
+                y = _drawTicketQuickList(doc, nonEpicSprintIssues, y, MARGIN, pageW, 28);
+
                 const nspWork = nonEpicSprintIssues.filter(isWorkItem);
+                const nspStories = nonEpicSprintIssues.filter(isStoryIssue);
                 const nspBugs = nonEpicSprintIssues.filter(isBug);
                 const nspProd = nonEpicSprintIssues.filter(isProductionPlatform);
 
@@ -1990,10 +2353,10 @@
                 y = _sectionBanner('SPRINT SNAPSHOT — ' + sprintName.toUpperCase(), [109, 40, 217], y);
                 y = drawPdfSummaryCards(doc, y, {
                     total: nonEpicSprintIssues.length, totalDone: nonEpicSprintIssues.filter(isDone).length,
-                    work:  nspWork.length,              workDone:  nspWork.filter(isDone).length,
+                    work:  nspStories.length,           workDone:  nspStories.filter(isDone).length,
                     bugs:  nspBugs.length,               bugsDone:  nspBugs.filter(isDone).length,
                     production: nspProd.length,          productionDone: nspProd.filter(isDone).length,
-                });
+                }, pdfOpts);
 
                 y = ensurePdfY(doc, y, 8);
                 const compW = pageW - MARGIN * 2;
@@ -2013,12 +2376,7 @@
                         [15, 23, 42], y
                     );
 
-                    const sortedSprint = [...nonEpicSprintIssues].sort((a, b) => {
-                        const aDone = isDone(a) ? 0 : 1;
-                        const bDone = isDone(b) ? 0 : 1;
-                        if (aDone !== bDone) return aDone - bDone;
-                        return (a.status || '').localeCompare(b.status || '');
-                    });
+                    const sortedSprint = sortIssuesForPdfAllTicketsTable(nonEpicSprintIssues);
 
                     const sprintTableRows = sortedSprint.map(i => [
                         i.key || '',
@@ -2063,96 +2421,93 @@
                 }
 
                 /* ── Sprint ticket type breakdown tables (full JQL data) ── */
-                const SC = _SECTION_COLORS;
-                y = ensurePdfY(doc, y, 14);
-                y = _sectionBanner('STORIES · TASKS · SUB-TASKS', SC.stories, y);
-                y = renderReportTable(doc, '', toReportRows(nspWork), y, SC.stories);
-                y = ensurePdfY(doc, y, 14);
-                y = _sectionBanner('BUGS', SC.bugs, y);
-                y = renderReportTable(doc, '', toReportRows(nspBugs), y, SC.bugs);
-                if (nspProd.length) {
+                if (pdfOpts.breakdownTables) {
                     y = ensurePdfY(doc, y, 14);
-                    y = _sectionBanner('PRODUCTION TICKETS', SC.production, y);
-                    y = renderReportTable(doc, '', toReportRows(nspProd), y, SC.production);
+                    y = _sectionBanner(brStoriesBanner, SC.stories, y);
+                    y = renderReportTable(doc, '', toReportRows(nspWork), y, SC.stories);
+                    y = ensurePdfY(doc, y, 14);
+                    y = _sectionBanner('BUGS', SC.bugs, y);
+                    y = renderReportTable(doc, '', toReportRows(nspBugs), y, SC.bugs);
+                    if (nspProd.length) {
+                        y = ensurePdfY(doc, y, 14);
+                        y = _sectionBanner('PRODUCTION TICKETS', SC.production, y);
+                        y = renderReportTable(doc, '', toReportRows(nspProd), y, SC.production);
+                    }
                 }
 
                 /* ═══════════════════════════════════════════════════
-                   NEW PAGE — Full report across all sprints
+                   NEW PAGE — Full report across all sprints (optional)
                    ═══════════════════════════════════════════════════ */
-                doc.addPage();
-                y = _drawPageHeader(reportTitle + ' — All Sprints') + 6;
+                if (!pdfOpts.onlySprintReport) {
+                    doc.addPage();
+                    y = _drawPageHeader(reportTitle + ' — All Sprints') + 6;
 
-                doc.setFont('helvetica', 'normal');
-                doc.setFontSize(7.5);
-                doc.setTextColor(110, 110, 110);
-                doc.setFont('helvetica', 'normal');
-                doc.setFontSize(7.5);
-                doc.setTextColor(130, 130, 130);
-                doc.text('Full date range:', MARGIN, y);
-                const flw = doc.getTextWidth('Full date range:');
-                doc.setFont('helvetica', 'bold');
-                doc.setTextColor(30, 30, 30);
-                doc.text(` ${fromLabel}  to  ${toLabel}`, MARGIN + flw, y);
-                doc.setFont('helvetica', 'normal');
-                doc.setTextColor(130, 130, 130);
-                doc.text('  · All sprints combined', MARGIN + flw + doc.getTextWidth(` ${fromLabel}  to  ${toLabel}`), y);
-                y += 6;
+                    doc.setFont('helvetica', 'normal');
+                    doc.setFontSize(7.5);
+                    doc.setTextColor(130, 130, 130);
+                    doc.text('Full date range:', MARGIN, y);
+                    const flw = doc.getTextWidth('Full date range:');
+                    doc.setFont('helvetica', 'bold');
+                    doc.setTextColor(30, 30, 30);
+                    doc.text(` ${fromLabel}  to  ${toLabel}`, MARGIN + flw, y);
+                    doc.setFont('helvetica', 'normal');
+                    doc.setTextColor(130, 130, 130);
+                    doc.text('  · All sprints combined', MARGIN + flw + doc.getTextWidth(` ${fromLabel}  to  ${toLabel}`), y);
+                    y += 6;
 
-                /* ── Overall summary cards ── */
-                y = _sectionBanner('OVERALL SUMMARY — ALL SPRINTS', [15, 23, 42], y);
-                y = drawPdfSummaryCards(doc, y, {
-                    total: allNonEpics.length, totalDone: allNonEpics.filter(isDone).length,
-                    work:  allWork.length,      workDone:  allWork.filter(isDone).length,
-                    bugs:  allBugs.length,       bugsDone:  allBugs.filter(isDone).length,
-                    production: allProd.length,  productionDone: allProd.filter(isDone).length,
-                });
+                    y = _sectionBanner('OVERALL SUMMARY — ALL SPRINTS', [15, 23, 42], y);
+                    y = drawPdfSummaryCards(doc, y, {
+                        total: allNonEpics.length, totalDone: allNonEpics.filter(isDone).length,
+                        work:  allStories.length,    workDone:  allStories.filter(isDone).length,
+                        bugs:  allBugs.length,       bugsDone:  allBugs.filter(isDone).length,
+                        production: allProd.length,  productionDone: allProd.filter(isDone).length,
+                    }, pdfOpts);
 
-                /* ── All-sprints pie chart ── */
-                y = ensurePdfY(doc, y, 8);
-                doc.setFont('helvetica', 'normal');
-                doc.setFontSize(6.8);
-                doc.setTextColor(130, 130, 130);
-                doc.text('All sprints · top 10 shown', MARGIN, y);
-                y += 4;
-                const allPieW = pageW - MARGIN * 2;
-                const allPieH = allPieW / (560 / 196);
-                const allPieUrl = canvasSprintPieToDataUrl(allNonEpics);
-                if (allPieUrl) {
-                    y = ensurePdfY(doc, y, allPieH);
-                    try { doc.addImage(allPieUrl, 'PNG', MARGIN, y, allPieW, allPieH); } catch (e) {}
-                    y += allPieH + 5;
-                }
+                    y = ensurePdfY(doc, y, 8);
+                    doc.setFont('helvetica', 'normal');
+                    doc.setFontSize(6.8);
+                    doc.setTextColor(130, 130, 130);
+                    doc.text('All sprints · top 10 shown', MARGIN, y);
+                    y += 4;
+                    const allPieW = pageW - MARGIN * 2;
+                    const allPieH = allPieW / (560 / 196);
+                    const allPieUrl = canvasSprintPieToDataUrl(allNonEpics);
+                    if (allPieUrl) {
+                        y = ensurePdfY(doc, y, allPieH);
+                        try { doc.addImage(allPieUrl, 'PNG', MARGIN, y, allPieW, allPieH); } catch (e) {}
+                        y += allPieH + 5;
+                    }
 
-                /* ── All-sprints tables ── */
-                y = ensurePdfY(doc, y, 14);
-                y = _sectionBanner('ALL TICKETS — ALL SPRINTS (excl. epics)', SC.all, y);
-                y = renderReportTable(doc, '', toReportRows(allNonEpics), y, SC.all);
-                y = ensurePdfY(doc, y, 14);
-                y = _sectionBanner('STORIES · TASKS · SUB-TASKS — ALL SPRINTS', SC.stories, y);
-                y = renderReportTable(doc, '', toReportRows(allWork), y, SC.stories);
-                y = ensurePdfY(doc, y, 14);
-                y = _sectionBanner('BUGS — ALL SPRINTS', SC.bugs, y);
-                y = renderReportTable(doc, '', toReportRows(allBugs), y, SC.bugs);
-                if (allProd.length) {
                     y = ensurePdfY(doc, y, 14);
-                    y = _sectionBanner('PRODUCTION TICKETS — ALL SPRINTS', SC.production, y);
-                    y = renderReportTable(doc, '', toReportRows(allProd), y, SC.production);
+                    y = _sectionBanner('ALL TICKETS — ALL SPRINTS (excl. epics)', SC.all, y);
+                    y = renderReportTable(doc, '', toReportRows(sortIssuesForPdfAllTicketsTable(allNonEpics)), y, SC.all);
+                    if (pdfOpts.breakdownTables) {
+                        y = ensurePdfY(doc, y, 14);
+                        y = _sectionBanner(brStoriesBanner + ' — ALL SPRINTS', SC.stories, y);
+                        y = renderReportTable(doc, '', toReportRows(allWork), y, SC.stories);
+                        y = ensurePdfY(doc, y, 14);
+                        y = _sectionBanner('BUGS — ALL SPRINTS', SC.bugs, y);
+                        y = renderReportTable(doc, '', toReportRows(allBugs), y, SC.bugs);
+                        if (allProd.length) {
+                            y = ensurePdfY(doc, y, 14);
+                            y = _sectionBanner('PRODUCTION TICKETS — ALL SPRINTS', SC.production, y);
+                            y = renderReportTable(doc, '', toReportRows(allProd), y, SC.production);
+                        }
+                    }
                 }
 
             } else {
                 /* ── No sprint filter: single comprehensive report ── */
                 const SC = _SECTION_COLORS;
 
-                /* Summary cards */
                 y = _sectionBanner('OVERALL SUMMARY', [15, 23, 42], y);
                 y = drawPdfSummaryCards(doc, y, {
                     total: allNonEpics.length, totalDone: allNonEpics.filter(isDone).length,
-                    work:  allWork.length,      workDone:  allWork.filter(isDone).length,
+                    work:  allStories.length,    workDone:  allStories.filter(isDone).length,
                     bugs:  allBugs.length,       bugsDone:  allBugs.filter(isDone).length,
                     production: allProd.length,  productionDone: allProd.filter(isDone).length,
-                });
+                }, pdfOpts);
 
-                /* Sprint pie */
                 y = ensurePdfY(doc, y, 8);
                 doc.setFont('helvetica', 'normal');
                 doc.setFontSize(6.8);
@@ -2170,18 +2525,93 @@
 
                 y = ensurePdfY(doc, y, 14);
                 y = _sectionBanner('ALL TICKETS (excl. epics)', SC.all, y);
-                y = renderReportTable(doc, '', toReportRows(allNonEpics), y, SC.all);
-                y = ensurePdfY(doc, y, 14);
-                y = _sectionBanner('STORIES · TASKS · SUB-TASKS', SC.stories, y);
-                y = renderReportTable(doc, '', toReportRows(allWork), y, SC.stories);
-                y = ensurePdfY(doc, y, 14);
-                y = _sectionBanner('BUGS', SC.bugs, y);
-                y = renderReportTable(doc, '', toReportRows(allBugs), y, SC.bugs);
-                if (allProd.length) {
+                y = renderReportTable(doc, '', toReportRows(sortIssuesForPdfAllTicketsTable(allNonEpics)), y, SC.all);
+                if (pdfOpts.breakdownTables) {
                     y = ensurePdfY(doc, y, 14);
-                    y = _sectionBanner('PRODUCTION TICKETS', SC.production, y);
-                    y = renderReportTable(doc, '', toReportRows(allProd), y, SC.production);
+                    y = _sectionBanner(brStoriesBanner, SC.stories, y);
+                    y = renderReportTable(doc, '', toReportRows(allWork), y, SC.stories);
+                    y = ensurePdfY(doc, y, 14);
+                    y = _sectionBanner('BUGS', SC.bugs, y);
+                    y = renderReportTable(doc, '', toReportRows(allBugs), y, SC.bugs);
+                    if (allProd.length) {
+                        y = ensurePdfY(doc, y, 14);
+                        y = _sectionBanner('PRODUCTION TICKETS', SC.production, y);
+                        y = renderReportTable(doc, '', toReportRows(allProd), y, SC.production);
+                    }
                 }
+            }
+
+            if (pdfOpts.assigneeSpTable) {
+                const issuesForSp = sprintName
+                    ? applyPdfFilters(allSprintIssues || sprintTickets, pdfOpts)
+                    : allNonEpics;
+                y = renderAssigneeStoryPointsTable(doc, issuesForSp, y, MARGIN, pageW);
+            }
+
+            if (nextWeekPlan && nextWeekPlan.summary) {
+                y = ensurePdfY(doc, y, 18);
+                y = _sectionBanner(`NEXT WEEK PLAN — ${String(nextWeekPlan.sprint || '').toUpperCase()}`, [22, 101, 52], y);
+
+                // Keep the same visual pattern as sprint AI above (two-column AI summary card).
+                const nextOverall = (nextWeekPlan.summary.overall_bullets || []).slice(0, 8);
+                const nextProd = (nextWeekPlan.summary.production_bullets || []).slice(0, 6);
+                y = _drawAiBox(nextOverall, nextProd, y);
+
+                const nxIssues = sortIssuesForPdfAllTicketsTable(nextWeekPlan.issues || []);
+                y = ensurePdfY(doc, y, 12);
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(8);
+                doc.setTextColor(70, 85, 105);
+                doc.text(`Next sprint ticket list (${nxIssues.length})`, MARGIN, y);
+                y += 4;
+
+                const nxRows = nxIssues.length
+                    ? nxIssues.map(i => [
+                        i.key || '',
+                        i.type || '',
+                        (i.summary || '').slice(0, 100),
+                        i.status || '',
+                        i.priority || '',
+                    ])
+                    : [['—', '—', 'No tickets in selected next sprint', '—', '—']];
+
+                doc.autoTable({
+                    startY: y,
+                    head: [['Key', 'Type', 'Summary', 'Status', 'Priority']],
+                    body: nxRows,
+                    theme: 'grid',
+                    styles: {
+                        fontSize: 7,
+                        cellPadding: 2.2,
+                        overflow: 'linebreak',
+                        font: 'helvetica',
+                        textColor: [20, 20, 20],
+                    },
+                    headStyles: {
+                        fillColor: [15, 23, 42],
+                        textColor: [255, 255, 255],
+                        fontStyle: 'bold',
+                        fontSize: 7.5,
+                        cellPadding: 2.8,
+                    },
+                    columnStyles: {
+                        0: { cellWidth: 22, fontStyle: 'bold', textColor: [30, 64, 175] },
+                        1: { cellWidth: 20 },
+                        2: { cellWidth: 118 },
+                        3: { cellWidth: 34 },
+                        4: { cellWidth: 22 },
+                    },
+                    margin: { left: MARGIN, right: MARGIN },
+                    didParseCell(data) {
+                        if (data.section === 'body') {
+                            const issue = nxIssues[data.row.index];
+                            if (issue && isInProgressIssue(issue)) {
+                                data.cell.styles.fillColor = [219, 234, 254]; // light blue for in-progress
+                            }
+                        }
+                    },
+                });
+                y = doc.lastAutoTable.finalY + 8;
             }
 
             _addPdfFooter(doc);
