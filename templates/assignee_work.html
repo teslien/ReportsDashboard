@@ -614,6 +614,16 @@
                     <input type="checkbox" id="awCbNextWeekPlan" class="mt-1 rounded border-gray-600 bg-gray-800" />
                     <span><span class="font-semibold text-white">Include next-week plan + AI summary</span><span class="block text-xs text-gray-500 mt-0.5">Adds a section after story points using another sprint you choose below.</span></span>
                 </label>
+                <label class="flex items-start gap-3 cursor-pointer text-sm text-gray-200">
+                    <input type="checkbox" id="awCbCustomQuery" class="mt-1 rounded border-gray-600 bg-gray-800" />
+                    <span><span class="font-semibold text-white">Customize query</span><span class="block text-xs text-gray-500 mt-0.5">Apply extra JQL conditions while fetching report tickets.</span></span>
+                </label>
+                <div id="awCustomQueryWrap" class="hidden pl-6">
+                    <label class="block text-xs font-semibold text-gray-400 mb-1 uppercase tracking-wide">Custom JQL clause</label>
+                    <textarea id="awCustomQueryInput" rows="3"
+                              placeholder='e.g. status not in ("Open", "Ready for Dev") AND labels = critical'
+                              class="w-full bg-gray-800 border border-gray-600/60 rounded-xl px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-500"></textarea>
+                </div>
                 <div id="awNextSprintWrap" class="hidden pl-6">
                     <label class="block text-xs font-semibold text-gray-400 mb-1 uppercase tracking-wide">Next sprint</label>
                     <select id="awSprintPickNext"
@@ -1802,6 +1812,10 @@
                 const idx = rows.findIndex(r => r.label === 'Production');
                 if (idx >= 0) rows.splice(idx, 1);
             }
+            if (opts && opts.hideTaskCardTable) {
+                const idx = rows.findIndex(r => r.label === 'Tasks');
+                if (idx >= 0) rows.splice(idx, 1);
+            }
 
             ctx.fillStyle = '#111827';
             ctx.font = 'bold 10px sans-serif';
@@ -2180,6 +2194,9 @@
             awSyncModalOnlySprintState();
             document.getElementById('awCbNextWeekPlan').checked = false;
             awToggleNextSprintPick();
+            document.getElementById('awCbCustomQuery').checked = false;
+            document.getElementById('awCustomQueryInput').value = '';
+            awToggleCustomQuery();
 
             // Reset modal state
             document.getElementById('awModalGenerating').classList.add('hidden');
@@ -2214,6 +2231,14 @@
         }
         document.getElementById('awCbNextWeekPlan')?.addEventListener('change', awToggleNextSprintPick);
 
+        function awToggleCustomQuery() {
+            const cb = document.getElementById('awCbCustomQuery');
+            const wrap = document.getElementById('awCustomQueryWrap');
+            if (!cb || !wrap) return;
+            wrap.classList.toggle('hidden', !cb.checked);
+        }
+        document.getElementById('awCbCustomQuery')?.addEventListener('change', awToggleCustomQuery);
+
         function closeSprintModal() {
             document.getElementById('awSprintModal').classList.add('hidden');
         }
@@ -2235,7 +2260,14 @@
                 breakdownTables: document.getElementById('awCbBreakdown')?.checked !== false,
                 assigneeSpTable: !!document.getElementById('awCbAssigneeSp')?.checked,
                 includeNextWeekPlan: !!document.getElementById('awCbNextWeekPlan')?.checked,
+                useCustomQuery: !!document.getElementById('awCbCustomQuery')?.checked,
+                customQuery: String(document.getElementById('awCustomQueryInput')?.value || '').trim(),
             };
+
+            if (pdfOpts.useCustomQuery && !pdfOpts.customQuery) {
+                alert('Please enter a custom JQL clause or uncheck "Customize query".');
+                return;
+            }
 
             if (pdfOpts.noAiSummary) {
                 pdfOpts.aiStoriesOnly = false;
@@ -2261,6 +2293,7 @@
                         body: JSON.stringify({
                             sprint_name: sprintVal,
                             exclude_subtasks: pdfOpts.excludeSubtasks,
+                            custom_query: pdfOpts.useCustomQuery ? pdfOpts.customQuery : "",
                         })
                     });
                     if (jqlRes.ok) {
@@ -2327,6 +2360,7 @@
                             body: JSON.stringify({
                                 sprint_name: nextSprint,
                                 exclude_subtasks: pdfOpts.excludeSubtasks,
+                                custom_query: pdfOpts.useCustomQuery ? pdfOpts.customQuery : "",
                                 })
                         });
                         if (nxRes.ok) {

@@ -6694,6 +6694,7 @@ def assignee_work_search():
     labels = data.get("labels") or []
     sprint_id = data.get("sprint_id")
     assignee_ids = data.get("assignee_ids") or []
+    custom_query = str(data.get("custom_query") or "").strip()
     if not isinstance(assignee_ids, list):
         assignee_ids = []
     assignee_ids = [str(a).strip() for a in assignee_ids if str(a).strip()]
@@ -6731,6 +6732,8 @@ def assignee_work_search():
 
     if bool(data.get("exclude_subtasks")):
         jql_parts.append('issuetype not in ("Sub-task", "Subtask")')
+    if custom_query:
+        jql_parts.append(f"({custom_query})")
 
     jql = " AND ".join(jql_parts) + " ORDER BY updated DESC"
 
@@ -6795,6 +6798,7 @@ def assignee_work_by_sprint():
     safe_sprint = sprint_name.replace('"', '\\"')
     exclude_subtasks = bool(data.get("exclude_subtasks"))
     only_stories = bool(data.get("only_stories"))
+    custom_query = str(data.get("custom_query") or "").strip()
     jql_core = (
         f'project = "{project_key_str}" AND sprint = "{safe_sprint}"'
         f' AND {_ASSIGNEE_WORK_JQL_EXCLUDE_EPIC}'
@@ -6803,6 +6807,8 @@ def assignee_work_by_sprint():
         jql_core += ' AND issuetype in ("Story", "User Story")'
     if exclude_subtasks:
         jql_core += ' AND issuetype not in ("Sub-task", "Subtask")'
+    if custom_query:
+        jql_core += f" AND ({custom_query})"
     jql = jql_core + " ORDER BY updated DESC"
 
     try:
