@@ -830,16 +830,30 @@
   }
 
   #td-assignee-sp-wrap .td-asp-table-shell {
+    max-width: 780px;
     border: 1px solid #e2e8f0;
     border-radius: 10px;
     overflow: hidden;
     background: #fafafa;
+    margin: 0 auto;
   }
 
   #td-assignee-sp-table {
-    width: 100%;
+    width: min(100%, 780px);
     border-collapse: collapse;
     background: #ffffff;
+    margin: 0 auto;
+    table-layout: fixed;
+  }
+
+  #td-assignee-sp-table th:first-child,
+  #td-assignee-sp-table td:first-child {
+    width: 68%;
+  }
+
+  #td-assignee-sp-table th:last-child,
+  #td-assignee-sp-table td:last-child {
+    width: 32%;
   }
 
   #td-assignee-sp-table thead th {
