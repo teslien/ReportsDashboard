@@ -1157,8 +1157,6 @@ def auth_callback():
         # Redirect based on role
         if user_obj and user_obj.role_name == 'Employee':
             return redirect(url_for('employee_todo_page'))
-        elif user_obj and user_obj.can_view_page("todo"):
-            return redirect(url_for('todo_page'))
         else:
             return redirect(url_for('index'))
         
