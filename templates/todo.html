@@ -4,7 +4,7 @@
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta charset="UTF-8">
-    <title>My Tasks - Jira Analytics</title>
+    <title>{{ user_name }}'s Tasks - Jira Analytics</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
@@ -18,6 +18,94 @@
             backdrop-filter: blur(10px);
             border: 1px solid rgba(255, 255, 255, 0.05);
         }
+
+        /* Notification Styles */
+        .notification {
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            padding: 16px 20px;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            z-index: 9999;
+            animation: slideIn 0.3s ease-out;
+            max-width: 400px;
+        }
+
+        .notification.success {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+        }
+
+        .notification.error {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            color: white;
+        }
+
+        .notification.info {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            color: white;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        /* Dialog Styles */
+        .dialog-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(4px);
+            z-index: 9998;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn 0.2s ease-out;
+        }
+
+        .dialog-box {
+            background: #1f2937;
+            border-radius: 16px;
+            padding: 24px;
+            max-width: 400px;
+            width: 90%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            animation: scaleIn 0.2s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+
+            to {
+                opacity: 1;
+            }
+        }
+
+        @keyframes scaleIn {
+            from {
+                transform: scale(0.9);
+                opacity: 0;
+            }
+
+            to {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
     </style>
     <link rel="stylesheet" href="/static/theme.css">
     <script src="/static/theme.js"></script>
@@ -30,7 +118,7 @@
 
     <main class="pt-24 pb-12 px-6 max-w-4xl mx-auto">
         <div class="flex justify-between items-center mb-10">
-            <h1 class="text-3xl font-bold">My Tasks</h1>
+            <h1 class="text-3xl font-bold">{{ user_name }}'s Tasks</h1>
             <div class="flex items-center gap-2 bg-gray-800 p-2 rounded-lg border border-gray-700">
                 <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -40,6 +128,11 @@
                 <input type="date" id="dateFilter" onchange="loadTodos()"
                     class="bg-transparent border-none outline-none text-sm text-white cursor-pointer" />
             </div>
+        </div>
+
+        <!-- Productivity Stats -->
+        <div id="productivityStats" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+            <!-- Stats will be injected here -->
         </div>
 
         <!-- Task List Container -->
@@ -56,11 +149,44 @@
                     class="w-full bg-transparent text-xl font-semibold outline-none placeholder-gray-600" />
                 <button onclick="hideAddTask()" class="text-gray-500 hover:text-white transition">&times;</button>
             </div>
+            <div class="mb-3">
+                <div class="flex gap-2">
+                    <input type="text" id="taskTicketKey" placeholder="Ticket key (optional, e.g. TIM-1234)"
+                        oninput="this.value=this.value.toUpperCase()"
+                        class="flex-1 bg-gray-900/60 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 outline-none focus:border-blue-500 transition uppercase" />
+                    <button id="fetchTodoTicketBtn" onclick="fetchTodoTicket()" type="button"
+                        class="bg-blue-700 hover:bg-blue-600 text-white font-bold px-4 rounded-lg text-xs transition">
+                        Fetch
+                    </button>
+                </div>
+                <div id="todoTicketPreview"
+                    class="hidden mt-2 text-xs rounded-lg border border-gray-700 bg-gray-900/40 p-2.5 text-gray-300">
+                </div>
+                <div id="todoTicketError"
+                    class="hidden mt-2 text-xs rounded-lg border border-red-700/50 bg-red-900/20 p-2 text-red-300">
+                </div>
+            </div>
             <textarea id="taskDescription" placeholder="Description" rows="2"
-                class="w-full bg-transparent text-sm text-gray-400 outline-none placeholder-gray-600 mb-2 resize-none"></textarea>
+                class="w-full bg-transparent text-sm text-gray-400 outline-none placeholder-gray-600 mb-4 resize-none"></textarea>
+
+            <!-- Story Points -->
+            <div class="mb-4">
+                <label class="text-xs text-gray-400 mb-1 block">Story Points</label>
+                <input type="number" id="taskStoryPoints" placeholder="0" step="0.5" min="0"
+                    class="w-32 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-300 outline-none" />
+            </div>
+
+            <!-- Hotfix Checkbox -->
+            <div class="mb-4">
+                <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-300">
+                    <input type="checkbox" id="taskIsHotfix" class="w-4 h-4 cursor-pointer" />
+                    <span>🔥 Mark as Hotfix</span>
+                </label>
+            </div>
 
             <!-- Tag Selection -->
             <div class="mb-4">
+                <label class="text-xs text-gray-400 mb-1 block">Tags</label>
                 <div id="tagSelectorList" class="flex flex-wrap gap-1.5">
                     <!-- Tags will be dynamically loaded here by JS -->
                 </div>
@@ -70,9 +196,9 @@
                 <div class="flex items-center gap-4">
                     <select id="taskPriority"
                         class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-gray-300 outline-none">
-                        <option value="Low">Low Priority</option>
-                        <option value="Medium">Medium Priority</option>
-                        <option value="High">High Priority</option>
+                        <option value="Low">🟢 Low Priority</option>
+                        <option value="Medium">🟡 Medium Priority</option>
+                        <option value="High">🔴 High Priority</option>
                     </select>
                     <input type="datetime-local" id="taskDueDate"
                         class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-gray-300 outline-none" />
@@ -91,6 +217,73 @@
     </main>
 
     <script>
+        // Notification System
+        function showNotification(message, type = 'success') {
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            notification.innerHTML = `
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            ${type === 'success' ? '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>' :
+                    type === 'error' ? '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>' :
+                        '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>'}
+                        </svg>
+                        <span style="font-weight: 600;">${message}</span>
+                    </div>
+                    <button onclick="this.parentElement.parentElement.remove()" style="background: transparent; border: none; color: white; cursor: pointer; font-size: 20px; padding: 0; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; opacity: 0.7; transition: opacity 0.15s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Dismiss">
+                        ×
+                    </button>
+                </div>
+            `;
+            document.body.appendChild(notification);
+            const autoHideTimeout = setTimeout(() => {
+                notification.style.animation = 'slideIn 0.3s ease-out reverse';
+                setTimeout(() => notification.remove(), 300);
+            }, 3000);
+
+            // Clear auto-hide if manually closed
+            notification.querySelector('button').addEventListener('click', () => {
+                clearTimeout(autoHideTimeout);
+            });
+        }
+
+        // Dialog System
+        function showDialog(title, message, onConfirm, onCancel) {
+            const overlay = document.createElement('div');
+            overlay.className = 'dialog-overlay';
+            overlay.innerHTML = `
+                <div class="dialog-box">
+                    <h3 style="font-size: 20px; font-weight: 700; margin-bottom: 12px; color: white;">${title}</h3>
+                    <p style="color: #9ca3af; margin-bottom: 24px; line-height: 1.6;">${message}</p>
+                    <div style="display: flex; gap: 12px; justify-content: flex-end;">
+                        <button id="dialogCancel" style="padding: 10px 20px; border-radius: 8px; font-weight: 600; background: #374151; color: white; border: none; cursor: pointer; transition: all 0.2s;">
+                            Cancel
+                        </button>
+                        <button id="dialogConfirm" style="padding: 10px 20px; border-radius: 8px; font-weight: 600; background: #ef4444; color: white; border: none; cursor: pointer; transition: all 0.2s;">
+                            Confirm
+                        </button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(overlay);
+
+            document.getElementById('dialogCancel').onclick = () => {
+                overlay.remove();
+                if (onCancel) onCancel();
+            };
+            document.getElementById('dialogConfirm').onclick = () => {
+                overlay.remove();
+                if (onConfirm) onConfirm();
+            };
+            overlay.onclick = (e) => {
+                if (e.target === overlay) {
+                    overlay.remove();
+                    if (onCancel) onCancel();
+                }
+            };
+        }
+
         // Set default date to today
         const today = new Date().toISOString().split('T')[0];
         document.getElementById('dateFilter').value = today;
@@ -115,8 +308,104 @@
             }
         }
 
+        async function fetchTodoTicket() {
+            const keyInput = document.getElementById('taskTicketKey');
+            const previewEl = document.getElementById('todoTicketPreview');
+            const errorEl = document.getElementById('todoTicketError');
+            const btn = document.getElementById('fetchTodoTicketBtn');
+            let key = (keyInput.value || '').trim().toUpperCase();
+            if (!key) return;
+            if (/^\d+$/.test(key)) {
+                key = 'TIM-' + key;
+                keyInput.value = key;
+            }
+
+            previewEl.classList.add('hidden');
+            errorEl.classList.add('hidden');
+            btn.textContent = '...';
+            btn.disabled = true;
+            try {
+                const headers = window.getApiHeaders ? window.getApiHeaders() : {
+                    'X-Project-Key': (localStorage.getItem("project_key") || "").trim().toUpperCase()
+                };
+                const res = await fetch(`/api/jira/ticket/${key}`, { headers });
+                const data = await res.json();
+                console.log('DEBUG: Jira ticket response:', data);
+                console.log('DEBUG: Story points value:', data.story_points, 'Type:', typeof data.story_points);
+
+                if (!res.ok || data.error) {
+                    errorEl.textContent = data.error || 'Ticket not found.';
+                    errorEl.classList.remove('hidden');
+                    return;
+                }
+
+                // Helpful defaults: fill title if empty, append summary to description if empty.
+                if (!document.getElementById('taskName').value.trim() && data.summary) {
+                    document.getElementById('taskName').value = data.summary;
+                }
+                if (!document.getElementById('taskDescription').value.trim() && data.summary) {
+                    document.getElementById('taskDescription').value = data.summary;
+                }
+
+                // Auto-fill story points - check for both number and string values
+                console.log('DEBUG: Checking story points - value:', data.story_points);
+                if (data.story_points !== undefined && data.story_points !== null && data.story_points !== 0) {
+                    console.log('DEBUG: Setting story points to:', data.story_points);
+                    document.getElementById('taskStoryPoints').value = data.story_points;
+                } else {
+                    console.log('DEBUG: Story points is 0, null, or undefined - not setting');
+                }
+
+                previewEl.innerHTML = `
+                    <div class="font-mono text-blue-400 font-bold">${data.key || key}</div>
+                    <div class="text-gray-100 mt-1">${data.summary || '—'}</div>
+                    <div class="text-gray-400 mt-1">Status: ${data.status || '—'} · Assignee: ${data.assignee || 'Unassigned'}${data.story_points ? ` · Story Points: ${data.story_points}` : ''}</div>
+                `;
+                previewEl.classList.remove('hidden');
+            } catch (e) {
+                errorEl.textContent = 'Network error while fetching ticket.';
+                errorEl.classList.remove('hidden');
+            } finally {
+                btn.textContent = 'Fetch';
+                btn.disabled = false;
+            }
+        }
+
         function renderTodos(todos) {
             const taskList = document.getElementById('taskList');
+
+            // Calculate productivity stats (always show, even if no tasks)
+            const totalTasks = todos.length;
+            const completedTasks = todos.filter(t => t.status === 'Done').length;
+            const totalStoryPoints = todos.reduce((sum, t) => sum + (parseFloat(t.story_points) || 0), 0);
+            const completedStoryPoints = todos.filter(t => t.status === 'Done').reduce((sum, t) => sum + (parseFloat(t.story_points) || 0), 0);
+            const hotfixCount = todos.filter(t => t.is_hotfix).length;
+
+            // Update stats display
+            const statsEl = document.getElementById('productivityStats');
+            statsEl.innerHTML = `
+                <div class="glass p-4 rounded-xl border border-white/10">
+                    <div class="text-[10px] text-gray-500 font-semibold uppercase tracking-wide mb-2">Total Tasks</div>
+                    <div class="text-2xl font-bold text-white">${totalTasks}</div>
+                    <div class="text-xs text-gray-400 mt-1">${completedTasks} completed</div>
+                </div>
+                <div class="glass p-4 rounded-xl border border-white/10">
+                    <div class="text-[10px] text-gray-500 font-semibold uppercase tracking-wide mb-2">
+                        <svg class="w-3 h-3 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                        </svg>
+                        Story Points
+                    </div>
+                    <div class="text-2xl font-bold text-blue-400">${totalStoryPoints.toFixed(1)}</div>
+                    <div class="text-xs text-gray-400 mt-1">${completedStoryPoints.toFixed(1)} completed</div>
+                </div>
+                <div class="glass p-4 rounded-xl border border-white/10">
+                    <div class="text-[10px] text-gray-500 font-semibold uppercase tracking-wide mb-2">🔥 Hotfixes</div>
+                    <div class="text-2xl font-bold text-red-400">${hotfixCount}</div>
+                    <div class="text-xs text-gray-400 mt-1">${hotfixCount > 0 ? 'Urgent items' : 'No urgent items'}</div>
+                </div>
+            `;
+
             if (todos.length === 0) {
                 taskList.innerHTML = '<div class="text-center py-20 text-gray-600 bg-gray-800/20 rounded-2xl border border-dashed border-gray-700">No tasks for this day. Enjoy your time!</div>';
                 return;
@@ -140,6 +429,9 @@
                     } catch (e) { console.error("Error parsing tags", e); }
                 }
 
+                const hotfixBadge = t.is_hotfix ? '<span class="inline-flex items-center gap-1 bg-red-900/30 text-red-400 border border-red-800/50 px-2 py-0.5 rounded-full text-[9px] font-bold ml-2"><svg class="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M12.395 2.553a1 1 0 00-1.45-.385c-.345.23-.614.558-.822.88-.214.33-.403.713-.57 1.116-.334.804-.614 1.768-.84 2.734a31.365 31.365 0 00-.613 3.58 2.64 2.64 0 01-.945-1.067c-.328-.68-.398-1.534-.398-2.654A1 1 0 005.05 6.05 6.981 6.981 0 003 11a7 7 0 1011.95-4.95c-.592-.591-.98-.985-1.348-1.467-.363-.476-.724-1.063-1.207-2.03zM12.12 15.12A3 3 0 017 13s.879.5 2.5.5c0-1 .5-4 1.25-4.5.5 1 .786 1.293 1.371 1.879A2.99 2.99 0 0113 13a2.99 2.99 0 01-.879 2.121z" clip-rule="evenodd"></path></svg>HOTFIX</span>' : '';
+                const storyPointsBadge = (t.story_points && t.story_points > 0) ? `<span class="inline-flex items-center gap-1 bg-blue-900/30 text-blue-400 border border-blue-800/50 px-2 py-0.5 rounded-full text-[9px] font-bold ml-2"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>${t.story_points} SP</span>` : '';
+
                 return `
                 <div class="group flex flex-col md:flex-row md:items-center justify-between p-4 bg-gray-800/40 hover:bg-gray-800/60 transition rounded-xl border border-white/5 gap-4">
                     <div class="flex items-start gap-4 flex-1">
@@ -147,7 +439,8 @@
                             ${t.status === 'Done' ? '✓' : ''}
                         </button>
                         <div class="flex-1 min-w-0">
-                            <h3 class="font-medium truncate ${t.status === 'Done' ? 'line-through text-gray-500' : 'text-gray-100'}">${t.title}</h3>
+                            <h3 class="font-medium ${t.status === 'Done' ? 'line-through text-gray-500' : 'text-gray-100'} flex items-center flex-wrap">${t.title}${hotfixBadge}${storyPointsBadge}</h3>
+                            ${t.ticket_key ? `<div class="text-[11px] text-blue-400 font-mono mt-0.5">${t.ticket_key}</div>` : ''}
                             <p class="text-xs text-gray-500 break-words line-clamp-2">${t.description || ''}</p>
                             ${tagsHtml}
                         </div>
@@ -235,7 +528,12 @@
             // Default to "Save" and empty fields
             document.getElementById('todoId').value = "";
             document.getElementById('taskName').value = "";
+            document.getElementById('taskTicketKey').value = "";
             document.getElementById('taskDescription').value = "";
+            document.getElementById('taskStoryPoints').value = "";
+            document.getElementById('taskIsHotfix').checked = false;
+            document.getElementById('todoTicketPreview').classList.add('hidden');
+            document.getElementById('todoTicketError').classList.add('hidden');
             document.getElementById('taskPriority').value = "Low";
             selectedTags = [];
             renderTagSelector();
@@ -246,11 +544,9 @@
                 form.classList.remove('scale-95', 'opacity-0');
             }, 10);
 
-            // Set default time to now + 1 hour rounded
-            const now = new Date();
-            now.setHours(now.getHours() + 1);
-            now.setMinutes(0);
-            document.getElementById('taskDueDate').value = now.toISOString().slice(0, 16);
+            // Use the currently selected date from the date filter
+            const selectedDate = document.getElementById('dateFilter').value;
+            document.getElementById('taskDueDate').value = `${selectedDate}T09:00`;
             document.getElementById('taskName').focus();
         }
 
@@ -260,7 +556,12 @@
 
             document.getElementById('todoId').value = todo.id;
             document.getElementById('taskName').value = todo.title;
+            document.getElementById('taskTicketKey').value = todo.ticket_key || "";
             document.getElementById('taskDescription').value = todo.description || "";
+            document.getElementById('taskStoryPoints').value = todo.story_points || "";
+            document.getElementById('taskIsHotfix').checked = todo.is_hotfix || false;
+            document.getElementById('todoTicketPreview').classList.add('hidden');
+            document.getElementById('todoTicketError').classList.add('hidden');
             document.getElementById('taskPriority').value = todo.priority;
 
             try {
@@ -290,17 +591,17 @@
 
         async function saveTodo() {
             const id = document.getElementById('todoId').value;
-            const title = document.getElementById('taskName').value;
+            const title = document.getElementById('taskName').value.trim();
+            const ticket_key = (document.getElementById('taskTicketKey').value || '').trim().toUpperCase();
             const description = document.getElementById('taskDescription').value;
             const priority = document.getElementById('taskPriority').value;
             const due_date_time = document.getElementById('taskDueDate').value;
-            const due_date = due_date_time.split('T')[0];
+            const due_date = due_date_time ? due_date_time.split('T')[0] : null;
             const tags = JSON.stringify(selectedTags);
+            const story_points = parseFloat(document.getElementById('taskStoryPoints').value) || 0;
+            const is_hotfix = document.getElementById('taskIsHotfix').checked;
 
-            if (!title || !due_date) {
-                alert("Please enter a title and date.");
-                return;
-            }
+            // Title and due_date are now optional - no validation needed
 
             const method = id ? "PUT" : "POST";
             const url = id ? `/api/todos/${id}` : "/api/todos";
@@ -312,33 +613,68 @@
                     "Content-Type": "application/json",
                     "X-Project-Key": projectKey
                 },
-                body: JSON.stringify({ title, description, priority, due_date, tags })
+                body: JSON.stringify({ title, ticket_key, description, priority, due_date, tags, story_points, is_hotfix })
             });
 
             if (res.ok) {
                 hideAddTask();
+                showNotification(id ? 'Task updated successfully' : 'Task created successfully', 'success');
                 loadTodos();
+            } else {
+                showNotification('Failed to save task', 'error');
             }
         }
 
         async function toggleStatus(id, currentStatus) {
             const newStatus = currentStatus === 'Pending' ? 'Done' : 'Pending';
-            const res = await fetch(`/api/todos/${id}`, {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ status: newStatus })
-            });
-            if (res.ok) loadTodos();
+
+            // If unchecking a completed task, show confirmation dialog
+            if (currentStatus === 'Done') {
+                showDialog(
+                    'Uncheck Task?',
+                    'Are you sure you want to mark this task as incomplete?',
+                    async () => {
+                        const res = await fetch(`/api/todos/${id}`, {
+                            method: "PUT",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ status: newStatus })
+                        });
+                        if (res.ok) {
+                            showNotification('Task marked as incomplete', 'info');
+                            loadTodos();
+                        }
+                    }
+                );
+            } else {
+                // Marking as complete - no confirmation needed
+                const res = await fetch(`/api/todos/${id}`, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ status: newStatus })
+                });
+                if (res.ok) {
+                    showNotification('Task completed! 🎉', 'success');
+                    loadTodos();
+                }
+            }
         }
 
         async function deleteTodo(id) {
-            if (!confirm("Delete this task?")) return;
-            const projectKey = (localStorage.getItem("project_key") || "").trim().toUpperCase();
-            const res = await fetch(`/api/todos/${id}`, {
-                method: "DELETE",
-                headers: { "X-Project-Key": projectKey }
-            });
-            if (res.ok) loadTodos();
+            showDialog(
+                'Delete Task?',
+                'Are you sure you want to delete this task? This action cannot be undone.',
+                async () => {
+                    const projectKey = (localStorage.getItem("project_key") || "").trim().toUpperCase();
+                    const res = await fetch(`/api/todos/${id}`, {
+                        method: "DELETE",
+                        headers: { "X-Project-Key": projectKey }
+                    });
+                    if (res.ok) {
+                        showNotification('Task deleted', 'success');
+                        loadTodos();
+                    }
+                }
+            );
         }
     </script>
 </body>

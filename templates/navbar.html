@@ -232,6 +232,9 @@
                             </div>
                             
                             {% if current_user.role_name == 'Admin' %}
+                            <a href="/admin/employees" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white">
+                                <i class="fas fa-users mr-2"></i> Employee List
+                            </a>
                             <a href="/admin/users" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white">
                                 <i class="fas fa-users-cog mr-2"></i> User Management
                             </a>

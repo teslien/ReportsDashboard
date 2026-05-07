@@ -182,6 +182,9 @@ def page_permission_required(page_key):
             if not current_user.is_authenticated:
                 return redirect(url_for('login_page'))
             if not current_user.can_view_page(page_key):
+                # Employee role always redirects to their dedicated page
+                if current_user.role_name == 'Employee':
+                    return redirect(url_for('employee_todo_page'))
                 return render_template("403.html"), 403
             return f(*args, **kwargs)
         return decorated_function
@@ -343,6 +346,22 @@ def _get_explicit_request_jira_headers():
         "Content-Type": "application/json",
     }
 
+def _get_admin_jira_headers():
+    """Return Jira auth headers using admin credentials from database only (no request overrides)."""
+    db_email, db_token, _, _ = _get_jira_config()
+    email = db_email or DEFAULT_JIRA_EMAIL
+    token = db_token or DEFAULT_JIRA_API_TOKEN
+
+    if not email or not token:
+        return {"Content-Type": "application/json"}
+
+    auth_str = f"{email}:{token}"
+    auth_b64 = base64.b64encode(auth_str.encode()).decode()
+    return {
+        "Authorization": f"Basic {auth_b64}",
+        "Content-Type": "application/json",
+    }
+
 # Proxies to allow dynamic access per request while keeping existing code working
 PROJECT_KEY = LocalProxy(_get_project_key)
 HEADERS = LocalProxy(_get_jira_headers)
@@ -453,6 +472,7 @@ def init_db():
         cursor.execute("INSERT INTO roles (name, permissions) VALUES ('Admin', '{\"all\": true}')")
         cursor.execute("INSERT INTO roles (name, permissions) VALUES ('Editor', '{\"view\": true, \"edit\": true}')")
         cursor.execute("INSERT INTO roles (name, permissions) VALUES ('Viewer', '{\"view\": true, \"allowed_pages\": [\"dashboard\", \"sprint_tracker\"]}')")
+        cursor.execute("INSERT INTO roles (name, permissions) VALUES ('Employee', '{\"view\": true, \"allowed_pages\": [\"employee_todo\"]}')")
     else:
         # Ensure Viewer keeps dashboard access and can open the sprint tracker in read-only mode.
         cursor.execute("SELECT permissions FROM roles WHERE name = 'Viewer'")
@@ -493,6 +513,11 @@ def init_db():
                 perms["allowed_pages"] = allowed
                 cursor.execute("UPDATE roles SET permissions = %s WHERE name = 'Editor'", (json.dumps(perms),))
 
+        # Ensure Employee role exists on existing databases
+        cursor.execute("SELECT id FROM roles WHERE name = 'Employee'")
+        if not cursor.fetchone():
+            cursor.execute("INSERT INTO roles (name, permissions) VALUES ('Employee', '{\"view\": true, \"allowed_pages\": [\"employee_todo\"]}')")
+
     # Trackers Table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS trackers (
@@ -517,15 +542,44 @@ def init_db():
         CREATE TABLE IF NOT EXISTS todos (
             id INT AUTO_INCREMENT PRIMARY KEY,
             user_id INT,
-            title TEXT NOT NULL,
+            title TEXT,
+            ticket_key VARCHAR(255),
             description TEXT,
             priority VARCHAR(50) DEFAULT 'Low',
-            due_date DATE NOT NULL,
+            due_date DATE,
             status VARCHAR(50) DEFAULT 'Pending',
             tags TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            story_points DECIMAL(5,2) DEFAULT 0,
+            is_hotfix BOOLEAN DEFAULT FALSE,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            completed_at DATETIME NULL
         )
     ''')
+    try:
+        cursor.execute("ALTER TABLE todos ADD COLUMN ticket_key VARCHAR(255)")
+    except:
+        pass
+    try:
+        cursor.execute("ALTER TABLE todos ADD COLUMN story_points DECIMAL(5,2) DEFAULT 0")
+    except:
+        pass
+    try:
+        cursor.execute("ALTER TABLE todos ADD COLUMN is_hotfix BOOLEAN DEFAULT FALSE")
+    except:
+        pass
+    try:
+        cursor.execute("ALTER TABLE todos ADD COLUMN completed_at DATETIME NULL")
+    except:
+        pass
+    # Make title and due_date nullable (optional)
+    try:
+        cursor.execute("ALTER TABLE todos MODIFY COLUMN title TEXT NULL")
+    except:
+        pass
+    try:
+        cursor.execute("ALTER TABLE todos MODIFY COLUMN due_date DATE NULL")
+    except:
+        pass
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS todo_tags (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -549,7 +603,9 @@ def init_db():
             account_id VARCHAR(255) NOT NULL,
             display_name VARCHAR(255) NOT NULL,
             avatar_url TEXT,
-            FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE
+            user_id INT DEFAULT NULL,
+            FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
         )
     ''')
     # Sprints Table
@@ -632,15 +688,29 @@ def init_db():
             team_id     INT NOT NULL,
             member_id   VARCHAR(255)    NOT NULL,
             member_name VARCHAR(255)    NOT NULL,
-            ticket_key  VARCHAR(255)    NOT NULL,
+            ticket_key  VARCHAR(255)    DEFAULT NULL,
+            todo_text   TEXT,
             comment     TEXT,
             deadline    DATE,
             status      VARCHAR(50)    DEFAULT 'Pending',
             tags        TEXT,
+            story_points DECIMAL(5,1) DEFAULT 0,
             created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE
         )
     ''')
+    try:
+        cursor.execute("ALTER TABLE scrum_notes ADD COLUMN todo_text TEXT")
+    except:
+        pass
+    try:
+        cursor.execute("ALTER TABLE scrum_notes ADD COLUMN story_points DECIMAL(5,1) DEFAULT 0")
+    except:
+        pass
+    try:
+        cursor.execute("ALTER TABLE scrum_notes MODIFY COLUMN ticket_key VARCHAR(255) DEFAULT NULL")
+    except:
+        pass
 
     # Jira Config Table
     cursor.execute('''
@@ -1084,6 +1154,11 @@ def auth_callback():
         user_obj = load_user(user_id)
         login_user(user_obj)
         
+        # Redirect based on role
+        if user_obj and user_obj.role_name == 'Employee':
+            return redirect(url_for('employee_todo_page'))
+        if user_obj and user_obj.can_view_page("todo"):
+            return redirect(url_for('todo_page'))
         return redirect(url_for('index'))
         
     except Exception as e:
@@ -1095,6 +1170,11 @@ def auth_callback():
 def logout():
     logout_user()
     return redirect(url_for('login_page'))
+
+@app.route("/api/current_user")
+@login_required
+def get_current_user():
+    return jsonify(current_user.to_dict())
 
 # =========================
 # 👑 ADMIN ROUTES
@@ -1154,6 +1234,217 @@ PAGE_PERMISSIONS = [
     {"key": "sprint_tracker", "label": "Sprint Tracker"},
     {"key": "team_diagram", "label": "Team Diagram Report"}
 ]
+
+@app.route("/admin/employees")
+@admin_required
+def admin_employees():
+    conn, cursor = get_db_connection(dictionary=True)
+    if not conn: return jsonify({"error": "Database error"}), 500
+    cursor.execute("""
+        SELECT u.*, r.name as role_name
+        FROM users u
+        LEFT JOIN roles r ON u.role_id = r.id
+        WHERE r.name = 'Employee'
+        ORDER BY u.name ASC
+    """)
+    users = cursor.fetchall()
+    conn.close()
+    return render_template("admin_employees.html", users=users)
+
+@app.route("/api/admin/employees/export_excel", methods=["POST"])
+@admin_required
+def admin_employees_export_excel():
+    """Export tickets & story points for selected employees as an Excel file."""
+    import io
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from flask import send_file
+
+    data = request.get_json(silent=True) or {}
+    employee_emails = data.get("employee_emails") or []
+    from_date = (data.get("from_date") or "").strip()
+    to_date = (data.get("to_date") or "").strip()
+
+    if not employee_emails:
+        return jsonify({"error": "No employees selected."}), 400
+    if not from_date or not to_date:
+        return jsonify({"error": "from_date and to_date are required."}), 400
+
+    # Use admin credentials only (not employee credentials)
+    admin_headers = _get_admin_jira_headers()
+    db_email, db_token, db_project, db_domain = _get_jira_config()
+    project_key_str = db_project or DEFAULT_PROJECT_KEY
+    jira_domain = db_domain or DEFAULT_JIRA_DOMAIN
+
+    if not project_key_str:
+        return jsonify({"error": "Missing project key. Save it in Settings first."}), 400
+    if "Authorization" not in admin_headers:
+        return jsonify({"error": "Missing admin Jira credentials. Save them in Settings first."}), 401
+
+    # Get ticket keys from todos table for selected employees
+    conn, cursor = get_db_connection(dictionary=True)
+    if not conn:
+        return jsonify({"error": "Database connection failed."}), 500
+
+    try:
+        # Build query to get ticket keys for selected employees in date range
+        placeholders = ', '.join(['%s'] * len(employee_emails))
+        query = f"""
+            SELECT DISTINCT t.ticket_key, u.email, u.name
+            FROM todos t
+            JOIN users u ON t.user_id = u.id
+            WHERE u.email IN ({placeholders})
+            AND t.ticket_key IS NOT NULL
+            AND t.ticket_key != ''
+            AND t.created_at >= %s
+            AND t.created_at <= %s
+        """
+        cursor.execute(query, employee_emails + [f"{from_date} 00:00:00", f"{to_date} 23:59:59"])
+        todo_rows = cursor.fetchall()
+
+        if not todo_rows:
+            conn.close()
+            return jsonify({"error": "No tickets found for selected employees in the date range."}), 400
+
+        ticket_keys = [row['ticket_key'] for row in todo_rows]
+        print(f"[DEBUG] Found {len(ticket_keys)} tickets in todos: {ticket_keys[:5]}...")
+
+    except Exception as e:
+        conn.close()
+        return jsonify({"error": f"Database error: {str(e)}"}), 500
+    finally:
+        conn.close()
+
+    # Fetch tickets from Jira using admin credentials
+    quoted_tickets = ", ".join(f'"{tk}"' for tk in ticket_keys)
+    jql = f'key in ({quoted_tickets}) ORDER BY updated DESC'
+
+    try:
+        _fields, _plat_cf = _assignee_work_jira_fields(admin_headers)
+        sp_candidates = _assignee_work_story_point_candidates(admin_headers)
+        start_at = 0
+        all_issues = []
+        while True:
+            res = requests.get(
+                f"{jira_domain}/rest/api/3/search/jql",
+                headers=admin_headers,
+                params={"jql": jql, "maxResults": 100, "startAt": start_at, "fields": _fields},
+                timeout=30
+            )
+            if res.status_code != 200:
+                return jsonify({"error": f"Jira API error: {res.text}"}), res.status_code
+            payload = res.json()
+            issues = payload.get("issues", [])
+            all_issues.extend(issues)
+            if len(all_issues) >= payload.get("total", 0) or not issues:
+                break
+            start_at += len(issues)
+
+        rows = [_assignee_work_issue_row(i, _plat_cf, sp_candidates) for i in all_issues]
+    except requests.Timeout:
+        return jsonify({"error": "Jira request timed out."}), 504
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    # Build Excel workbook
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Employee Tickets"
+
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill("solid", fgColor="1E40AF")
+    center = Alignment(horizontal="center", vertical="center")
+
+    headers = ["Assignee", "Ticket Key", "Summary", "Type", "Status", "Priority", "Story Points", "Sprints", "Updated"]
+    col_widths = [25, 14, 60, 14, 16, 12, 14, 30, 20]
+
+    for col_idx, (h, w) in enumerate(zip(headers, col_widths), start=1):
+        cell = ws.cell(row=1, column=col_idx, value=h)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = center
+        ws.column_dimensions[openpyxl.utils.get_column_letter(col_idx)].width = w
+
+    ws.row_dimensions[1].height = 20
+
+    for row_idx, r in enumerate(rows, start=2):
+        updated_str = (r.get("updated") or "")[:10]
+        ws.append([
+            r.get("assignee") or "",
+            r.get("key") or "",
+            r.get("summary") or "",
+            r.get("type") or "",
+            r.get("status") or "",
+            r.get("priority") or "",
+            r.get("story_points") or 0,
+            ", ".join(r.get("sprints") or []),
+            updated_str,
+        ])
+
+    # Summary sheet per employee
+    ws_summary = wb.create_sheet("Summary by Employee")
+    sum_headers = ["Employee", "Total Tickets", "Total Story Points"]
+    for col_idx, h in enumerate(sum_headers, start=1):
+        cell = ws_summary.cell(row=1, column=col_idx, value=h)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = center
+    ws_summary.column_dimensions["A"].width = 30
+    ws_summary.column_dimensions["B"].width = 16
+    ws_summary.column_dimensions["C"].width = 20
+
+    from collections import defaultdict
+    emp_stats = defaultdict(lambda: {"tickets": 0, "story_points": 0.0})
+    for r in rows:
+        name = r.get("assignee") or "Unassigned"
+        emp_stats[name]["tickets"] += 1
+        emp_stats[name]["story_points"] += float(r.get("story_points") or 0)
+
+    for row_idx, (name, stats) in enumerate(sorted(emp_stats.items()), start=2):
+        ws_summary.append([name, stats["tickets"], round(stats["story_points"], 2)])
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    filename = f"employee_report_{from_date}_to_{to_date}.xlsx"
+    return send_file(
+        output,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name=filename
+    )
+
+
+@app.route("/admin/employee/<int:user_id>/todo")
+@admin_required
+def admin_employee_todo(user_id):
+    conn, cursor = get_db_connection(dictionary=True)
+    if not conn: return jsonify({"error": "Database error"}), 500
+
+    # Get employee info
+    cursor.execute("""
+        SELECT u.*, r.name as role_name
+        FROM users u
+        LEFT JOIN roles r ON u.role_id = r.id
+        WHERE u.id = %s
+    """, (user_id,))
+    employee = cursor.fetchone()
+    conn.close()
+
+    if not employee:
+        return "Employee not found", 404
+
+    # Extract first name from email
+    user_name = "Employee"
+    if employee and employee['email']:
+        email_prefix = employee['email'].split('@')[0]
+        if '.' in email_prefix:
+            user_name = email_prefix.split('.')[0].capitalize()
+        else:
+            user_name = email_prefix.capitalize()
+
+    return render_template("employee_todo.html", project=PROJECT_KEY, user_name=user_name, todo_user_id=user_id)
 
 @app.route("/admin/roles")
 @admin_required
@@ -4526,53 +4817,104 @@ def update_ticket_comment(tracker_id):
 @app.route("/todo")
 @page_permission_required("todo")
 def todo_page():
-    return render_template("todo.html", project=PROJECT_KEY)
+    # Extract first name from email (before the dot)
+    user_name = "My"
+    if current_user and current_user.email:
+        email_prefix = current_user.email.split('@')[0]
+        if '.' in email_prefix:
+            user_name = email_prefix.split('.')[0].capitalize()
+        else:
+            user_name = email_prefix.capitalize()
+    return render_template("todo.html", project=PROJECT_KEY, user_name=user_name)
+
+@app.route("/employee/todo")
+@login_required
+def employee_todo_page():
+    if current_user.role_name != 'Employee' and current_user.role_name != 'Admin':
+        return render_template("403.html"), 403
+    # Extract first name from email (before the dot)
+    user_name = "My"
+    if current_user and current_user.email:
+        email_prefix = current_user.email.split('@')[0]
+        if '.' in email_prefix:
+            user_name = email_prefix.split('.')[0].capitalize()
+        else:
+            user_name = email_prefix.capitalize()
+    return render_template("employee_todo.html", project=PROJECT_KEY, user_name=user_name)
 
 @app.route("/api/todos", methods=["GET", "POST"])
 @login_required
 def manage_todos():
     conn, cursor = get_db_connection()
     if not conn: return jsonify({"error": "Database error"}), 500
-    
+
+    # Allow admins to view other users' todos via query parameter
+    todo_user_id = request.args.get("user_id", type=int) or current_user.id
+
+    # Check if user is admin when accessing other user's todos
+    if todo_user_id != current_user.id and current_user.role_name != 'Admin':
+        conn.close()
+        return jsonify({"error": "Unauthorized"}), 403
+
     if request.method == "POST":
         data = request.json
-        title = data.get("title")
+        title = data.get("title", "").strip() or "Untitled Task"
+        ticket_key = (data.get("ticket_key") or "").strip().upper() or None
         description = data.get("description", "")
         priority = data.get("priority", "Low")
-        due_date = data.get("due_date") # YYYY-MM-DD
+        due_date = data.get("due_date") or None  # YYYY-MM-DD, now optional
         tags = data.get("tags", "[]")
+        story_points = data.get("story_points", 0) or 0
+        is_hotfix = data.get("is_hotfix", False)
         if isinstance(tags, list):
             tags = json.dumps(tags)
-        
-        if not title or not due_date:
-            return jsonify({"error": "Title and due date are required"}), 400
-            
+
+        # Title and due_date are now optional - no validation needed
+
         cursor.execute('''
-            INSERT INTO todos (user_id, title, description, priority, due_date, tags)
-            VALUES (%s, %s, %s, %s, %s, %s)
-        ''', (current_user.id, title, description, priority, due_date, tags))
+            INSERT INTO todos (user_id, title, ticket_key, description, priority, due_date, tags, story_points, is_hotfix)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ''', (current_user.id, title, ticket_key, description, priority, due_date, tags, story_points, is_hotfix))
         conn.commit()
         todo_id = cursor.lastrowid
         conn.close()
         return jsonify({"id": todo_id, "title": title, "status": "Pending"})
-    
+
     else:
         date_filter = request.args.get("date")
         if date_filter:
-            cursor.execute("SELECT id, title, description, priority, due_date, status, tags FROM todos WHERE user_id = %s AND due_date = %s ORDER BY created_at DESC", (current_user.id, date_filter,))
+            # Show tasks for the selected date AND incomplete tasks from previous days
+            cursor.execute("""
+                SELECT id, title, ticket_key, description, priority, due_date, status, tags, story_points, is_hotfix, created_at, completed_at
+                FROM todos
+                WHERE user_id = %s
+                AND (
+                    due_date = %s
+                    OR (due_date < %s AND status = 'Pending')
+                )
+                ORDER BY
+                    CASE WHEN status = 'Pending' THEN 0 ELSE 1 END,
+                    due_date ASC,
+                    created_at DESC
+            """, (todo_user_id, date_filter, date_filter))
         else:
-            cursor.execute("SELECT id, title, description, priority, due_date, status, tags FROM todos WHERE user_id = %s ORDER BY due_date ASC, created_at DESC", (current_user.id,))
+            cursor.execute("SELECT id, title, ticket_key, description, priority, due_date, status, tags, story_points, is_hotfix, created_at, completed_at FROM todos WHERE user_id = %s ORDER BY due_date ASC, created_at DESC", (todo_user_id,))
             
         todos = []
         for r in cursor.fetchall():
             todos.append({
                 "id": r[0],
                 "title": r[1],
-                "description": r[2],
-                "priority": r[3],
-                "due_date": r[4],
-                "status": r[5],
-                "tags": r[6] or "[]"
+                "ticket_key": r[2],
+                "description": r[3],
+                "priority": r[4],
+                "due_date": r[5],
+                "status": r[6],
+                "tags": r[7] or "[]",
+                "story_points": float(r[8]) if r[8] else 0,
+                "is_hotfix": bool(r[9]) if r[9] else False,
+                "created_at": r[10].isoformat() if r[10] else None,
+                "completed_at": r[11].isoformat() if r[11] else None
             })
         conn.close()
         return jsonify(todos)
@@ -4612,9 +4954,12 @@ def update_delete_todo(todo_id):
         status = data.get("status")
         title = data.get("title")
         description = data.get("description")
+        ticket_key = data.get("ticket_key")
         priority = data.get("priority")
         due_date = data.get("due_date")
         tags = data.get("tags")
+        story_points = data.get("story_points")
+        is_hotfix = data.get("is_hotfix")
         if isinstance(tags, list):
             tags = json.dumps(tags)
         
@@ -4623,12 +4968,21 @@ def update_delete_todo(todo_id):
         if status:
             update_fields.append("status = %s")
             params.append(status)
+            # Track completed_at when status changes to Done
+            if status == 'Done':
+                update_fields.append("completed_at = NOW()")
+            elif status == 'Pending':
+                update_fields.append("completed_at = NULL")
         if title:
             update_fields.append("title = %s")
             params.append(title)
         if description is not None:
             update_fields.append("description = %s")
             params.append(description)
+        if ticket_key is not None:
+            tk = str(ticket_key).strip().upper()
+            update_fields.append("ticket_key = %s")
+            params.append(tk or None)
         if priority:
             update_fields.append("priority = %s")
             params.append(priority)
@@ -4638,6 +4992,12 @@ def update_delete_todo(todo_id):
         if tags is not None:
             update_fields.append("tags = %s")
             params.append(tags)
+        if story_points is not None:
+            update_fields.append("story_points = %s")
+            params.append(story_points)
+        if is_hotfix is not None:
+            update_fields.append("is_hotfix = %s")
+            params.append(is_hotfix)
             
         if update_fields:
             params.append(todo_id)
@@ -5201,9 +5561,9 @@ def team_members(team_id):
         conn.close()
         return jsonify({"success": True})
     else:
-        cursor.execute("SELECT id, account_id, display_name, avatar_url FROM team_members WHERE team_id = %s", (team_id,))
+        cursor.execute("SELECT id, account_id, display_name, avatar_url, user_id FROM team_members WHERE team_id = %s", (team_id,))
         members = [
-            {"id": r[0], "accountId": r[1], "account_id": r[1], "displayName": r[2], "avatarUrl": r[3]}
+            {"id": r[0], "accountId": r[1], "account_id": r[1], "displayName": r[2], "avatarUrl": r[3], "userId": r[4]}
             for r in cursor.fetchall()
         ]
         conn.close()
@@ -5217,6 +5577,127 @@ def delete_team_member(team_id, member_id):
     conn.commit()
     conn.close()
     return jsonify({"success": True})
+
+# Link team member with user
+@app.route("/api/team_members/<int:member_id>/link_user", methods=["PUT"])
+def link_team_member_to_user(member_id):
+    conn, cursor = get_db_connection()
+    if not conn: return jsonify({"error": "Database error"}), 500
+    
+    data = request.json
+    user_id = data.get("user_id")
+    
+    if user_id is None:
+        # Unlink user
+        cursor.execute("UPDATE team_members SET user_id = NULL WHERE id = %s", (member_id,))
+    else:
+        # Link user
+        cursor.execute("UPDATE team_members SET user_id = %s WHERE id = %s", (user_id, member_id))
+    
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True})
+
+# Get all users for linking dropdown
+@app.route("/api/users/list", methods=["GET"])
+def list_users():
+    conn, cursor = get_db_connection()
+    if not conn: return jsonify({"error": "Database error"}), 500
+    
+    cursor.execute("""
+        SELECT u.id, u.email, u.name, r.name as role_name 
+        FROM users u 
+        LEFT JOIN roles r ON u.role_id = r.id 
+        ORDER BY u.email
+    """)
+    users = [
+        {"id": r[0], "email": r[1], "name": r[2], "role": r[3]}
+        for r in cursor.fetchall()
+    ]
+    conn.close()
+    return jsonify(users)
+
+# Get team members with linked user info
+@app.route("/api/teams/<int:team_id>/members_with_users", methods=["GET"])
+def team_members_with_users(team_id):
+    conn, cursor = get_db_connection()
+    if not conn: return jsonify({"error": "Database error"}), 500
+    
+    cursor.execute("""
+        SELECT tm.id, tm.account_id, tm.display_name, tm.avatar_url, tm.user_id,
+               u.email, u.name
+        FROM team_members tm
+        LEFT JOIN users u ON tm.user_id = u.id
+        WHERE tm.team_id = %s
+    """, (team_id,))
+    
+    members = [
+        {
+            "id": r[0],
+            "accountId": r[1],
+            "displayName": r[2],
+            "avatarUrl": r[3],
+            "userId": r[4],
+            "userEmail": r[5],
+            "userName": r[6]
+        }
+        for r in cursor.fetchall()
+    ]
+    conn.close()
+    return jsonify(members)
+
+# Get todos for a team member (via linked user)
+@app.route("/api/team_members/<int:member_id>/todos", methods=["GET"])
+def get_team_member_todos(member_id):
+    conn, cursor = get_db_connection()
+    if not conn: return jsonify({"error": "Database error"}), 500
+    
+    date = request.args.get("date", datetime.now().strftime("%Y-%m-%d"))
+    
+    # Get the linked user_id for this team member
+    cursor.execute("SELECT user_id FROM team_members WHERE id = %s", (member_id,))
+    result = cursor.fetchone()
+    
+    if not result or not result[0]:
+        conn.close()
+        return jsonify({"error": "No user linked to this team member"}), 404
+    
+    user_id = result[0]
+    
+    # Get todos for this user on the specified date
+    cursor.execute("""
+        SELECT id, title, description, status, priority, due_date, tags, 
+               ticket_key, story_points, is_hotfix, created_at, completed_at
+        FROM todos
+        WHERE user_id = %s AND due_date = %s
+        ORDER BY 
+            CASE priority 
+                WHEN 'High' THEN 1 
+                WHEN 'Medium' THEN 2 
+                WHEN 'Low' THEN 3 
+            END,
+            created_at DESC
+    """, (user_id, date))
+    
+    todos = []
+    for r in cursor.fetchall():
+        todos.append({
+            "id": r[0],
+            "title": r[1],
+            "description": r[2],
+            "status": r[3],
+            "priority": r[4],
+            "due_date": r[5].strftime("%Y-%m-%d") if r[5] else None,
+            "tags": r[6],
+            "ticket_key": r[7],
+            "story_points": float(r[8]) if r[8] else 0,
+            "is_hotfix": bool(r[9]),
+            "created_at": r[10].strftime("%Y-%m-%d %H:%M:%S") if r[10] else None,
+            "completed_at": r[11].strftime("%Y-%m-%d %H:%M:%S") if r[11] else None
+        })
+    
+    conn.close()
+    return jsonify(todos)
 
 # =========================
 # SPRINT PLANNING API
@@ -5495,6 +5976,40 @@ def scrum_notes_page():
     resp.headers["Expires"] = "0"
     return resp
 
+def _coerce_story_points(raw):
+    """
+    Numeric story points from Jira custom field.
+    Handles number, string, and option-shaped dicts (like select fields).
+    """
+    if raw is None:
+        return 0.0
+    if isinstance(raw, bool):
+        return 0.0
+    if isinstance(raw, (int, float)):
+        x = float(raw)
+        # Check for NaN or infinity
+        if x != x or x == float("inf") or x == float("-inf"):
+            return 0.0
+        return x
+    if isinstance(raw, str) and raw.strip():
+        try:
+            return float(raw.strip().replace(",", ""))
+        except ValueError:
+            return 0.0
+    if isinstance(raw, dict):
+        if raw.get("errorMessage"):
+            return 0.0
+        # Try common nested keys
+        for k in ("value", "amount", "number"):
+            if k in raw:
+                return _coerce_story_points(raw.get(k))
+        nested = raw.get("storyPoints") or raw.get("estimate")
+        if nested is not None:
+            return _coerce_story_points(nested)
+    if isinstance(raw, list) and len(raw) == 1:
+        return _coerce_story_points(raw[0])
+    return 0.0
+
 @app.route("/api/jira/ticket/<key>", methods=["GET"])
 def fetch_jira_ticket(key):
     """Fetch a single Jira ticket's details (summary, status, priority, assignee)."""
@@ -5502,13 +6017,25 @@ def fetch_jira_ticket(key):
     headers_dict = dict(HEADERS)
     print(f"DEBUG fetch_jira_ticket: Headers are {dict(headers_dict)}")
 
+    # Get story points field candidates dynamically
+    sp_candidates = _team_diagram_merge_sp_field_candidates(JIRA_DOMAIN, headers_dict)
+    print(f"DEBUG: Story points field candidates: {sp_candidates}")
+    
+    # Build fields list including all story points candidates
+    base_fields = "summary,status,priority,assignee,issuetype,description,reporter,created,updated,customfield_10077,customfield_10020,labels,components,comment"
+    all_fields = base_fields
+    if sp_candidates:
+        all_fields = base_fields + "," + ",".join(sp_candidates)
+    
+    print(f"DEBUG: Fetching fields: {all_fields}")
+
     try:
         res = requests.get(
             f"{JIRA_DOMAIN}/rest/api/3/issue/{key.upper()}",
             headers=headers_dict,
-            params={"fields": "summary,status,priority,assignee,issuetype,description,reporter,created,updated,customfield_10016,customfield_10077,customfield_10020,labels,components,comment"}
+            params={"fields": all_fields}
         )
-        print(f"DEBUG fetch_jira_ticket: Jira returned {res.status_code} {res.text}")
+        print(f"DEBUG fetch_jira_ticket: Jira returned {res.status_code}")
         if res.status_code == 404:
             return jsonify({"error": f"Ticket {key} not found"}), 404
         if res.status_code != 200:
@@ -5535,8 +6062,11 @@ def fetch_jira_ticket(key):
             sp = sprint_val[-1]
             sprint = sp.get("name") or str(sp)
 
-        # Extract Story Points
-        story_points = f.get("customfield_10016")
+        # Extract Story Points - use the same proven logic as team_diagram
+        print(f"DEBUG: All custom fields in response: {[k for k in f.keys() if k.startswith('customfield_')]}")
+        story_points = _team_diagram_issue_story_points(f, sp_candidates)
+        print(f"DEBUG: Story points extracted: {story_points} from candidates: {sp_candidates}")
+        print(f"DEBUG: Story points after coercion: {story_points}")
 
         # Extract Description (Jira v3 uses Doc format)
         description = f.get("description")
@@ -5581,9 +6111,11 @@ def scrum_notes():
         team_id = data.get("team_id")
         member_id = data.get("member_id")
         member_name = data.get("member_name")
-        ticket_key = (data.get("ticket_key") or "").strip().upper()
+        ticket_key = (data.get("ticket_key") or "").strip().upper() or None  # Allow NULL
+        todo_text = data.get("todo_text", "")
         comment = data.get("comment", "")
         deadline = data.get("deadline") or None
+        story_points = data.get("story_points", 0)
 
         if isinstance(member_id, str):
             member_id = member_id.strip()
@@ -5610,14 +6142,19 @@ def scrum_notes():
                 conn.close()
                 return jsonify({"error": f"Could not resolve member ID for '{member_name}'. Please refresh the page."}), 400
 
-        if not all([date, team_id, member_id, member_name, ticket_key]) or member_id in invalid_member_ids:
+        # ticket_key is now optional, but we need at least todo_text or ticket_key
+        if not all([date, team_id, member_id, member_name]) or member_id in invalid_member_ids:
             conn.close()
-            return jsonify({"error": "Missing required fields (member_id)"}), 400
+            return jsonify({"error": "Missing required fields"}), 400
+        
+        if not ticket_key and not todo_text:
+            conn.close()
+            return jsonify({"error": "Either ticket_key or todo_text is required"}), 400
 
         cursor.execute("""
-            INSERT INTO scrum_notes (date, team_id, member_id, member_name, ticket_key, comment, deadline, tags)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-        """, (date, team_id, member_id, member_name, ticket_key, comment, deadline, data.get("tags", "")))
+            INSERT INTO scrum_notes (date, team_id, member_id, member_name, ticket_key, todo_text, comment, deadline, tags, story_points)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (date, team_id, member_id, member_name, ticket_key, todo_text, comment, deadline, data.get("tags", ""), story_points))
         conn.commit()
         new_id = cursor.lastrowid
         conn.close()
@@ -5630,7 +6167,7 @@ def scrum_notes():
             conn.close()
             return jsonify({"error": "date and team_id are required"}), 400
         cursor.execute("""
-            SELECT id, date, team_id, member_id, member_name, ticket_key, comment, deadline, status, tags
+            SELECT id, date, team_id, member_id, member_name, ticket_key, todo_text, comment, deadline, status, tags, story_points
             FROM scrum_notes
             WHERE date = %s AND team_id = %s
             ORDER BY member_name, created_at
@@ -5638,8 +6175,8 @@ def scrum_notes():
         rows = [{
             "id": r[0], "date": r[1], "team_id": r[2],
             "member_id": r[3], "member_name": r[4],
-            "ticket_key": r[5], "comment": r[6],
-            "deadline": r[7], "status": r[8], "tags": r[9]
+            "ticket_key": r[5], "todo_text": r[6], "comment": r[7],
+            "deadline": r[8], "status": r[9], "tags": r[10], "story_points": float(r[11]) if r[11] else 0
         } for r in cursor.fetchall()]
         conn.close()
         return jsonify(rows)
@@ -5661,6 +6198,9 @@ def scrum_note_item(note_id):
         if "comment" in data:
             fields.append("comment = %s")
             params.append(data["comment"])
+        if "todo_text" in data:
+            fields.append("todo_text = %s")
+            params.append(data["todo_text"])
         if "deadline" in data:
             fields.append("deadline = %s")
             params.append(data["deadline"] or None)
@@ -5790,7 +6330,7 @@ def scrum_notes_report():
         return jsonify({"error": "start and end dates are required"}), 400
 
     query = """
-        SELECT id, date, team_id, member_id, member_name, ticket_key, comment, deadline, status
+        SELECT id, date, team_id, member_id, member_name, ticket_key, todo_text, comment, deadline, status
         FROM scrum_notes
         WHERE date BETWEEN %s AND %s
     """
@@ -5811,8 +6351,8 @@ def scrum_notes_report():
     rows = [{
         "id": r[0], "date": r[1], "team_id": r[2],
         "member_id": r[3], "member_name": r[4],
-        "ticket_key": r[5], "comment": r[6],
-        "deadline": r[7], "status": r[8]
+        "ticket_key": r[5], "todo_text": r[6], "comment": r[7],
+        "deadline": r[8], "status": r[9]
     } for r in cursor.fetchall()]
     conn.close()
     return jsonify(rows)

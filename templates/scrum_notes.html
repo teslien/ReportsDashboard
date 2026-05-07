@@ -20,15 +20,17 @@
         }
 
         .status-badge-done {
-            background: rgba(16, 185, 129, 0.15);
-            color: #34d399;
-            border: 1px solid rgba(16, 185, 129, 0.3);
+            background: rgba(16, 185, 129, 0.2);
+            color: #10b981;
+            border: 1px solid rgba(16, 185, 129, 0.4);
+            box-shadow: 0 0 12px rgba(16, 185, 129, 0.15);
         }
 
         .status-badge-pending {
-            background: rgba(251, 191, 36, 0.12);
+            background: rgba(251, 191, 36, 0.15);
             color: #fbbf24;
-            border: 1px solid rgba(251, 191, 36, 0.3);
+            border: 1px solid rgba(251, 191, 36, 0.4);
+            box-shadow: 0 0 12px rgba(251, 191, 36, 0.1);
         }
 
         .priority-highest {
@@ -51,17 +53,29 @@
             color: #6b7280;
         }
 
-        .ticket-row:hover {
-            background: rgba(59, 130, 246, 0.06);
-        }
-
         .member-card {
-            transition: box-shadow 0.2s;
-            border: 1px solid rgba(255, 255, 255, 0.07);
+            transition: all 0.3s ease;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            background: linear-gradient(145deg, rgba(31, 41, 55, 0.8), rgba(17, 24, 39, 0.9));
         }
 
         .member-card:hover {
-            box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.4);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(99, 102, 241, 0.5);
+            transform: translateY(-2px);
+        }
+
+        .member-card-header {
+            background: linear-gradient(135deg, rgba(55, 65, 81, 0.7), rgba(31, 41, 55, 0.8));
+            border-bottom: 1px solid rgba(99, 102, 241, 0.2);
+        }
+
+        .ticket-row {
+            transition: all 0.2s ease;
+        }
+
+        .ticket-row:hover {
+            background: linear-gradient(90deg, rgba(59, 130, 246, 0.08), rgba(99, 102, 241, 0.05));
+            transform: scale(1.005);
         }
 
         .spinner {
@@ -143,7 +157,7 @@
             </div>
             <div class="w-full sm:w-auto">
                 <div
-                    class="grid grid-cols-3 gap-2 bg-gray-900/50 p-1.5 rounded-xl w-full sm:w-[420px] border border-gray-800">
+                    class="grid grid-cols-4 gap-2 bg-gray-900/50 p-1.5 rounded-xl w-full sm:w-[560px] border border-gray-800">
                     <button id="tabNotes" onclick="switchTab('notes')"
                         class="tab-active w-full px-4 py-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-2">
                         <span>📅</span> Daily Notes
@@ -155,6 +169,10 @@
                     <button id="tabTracker" onclick="switchTab('tracker')"
                         class="w-full px-4 py-2 rounded-lg text-xs font-bold text-gray-400 hover:text-white transition flex items-center justify-center gap-2 whitespace-nowrap">
                         <span>🔍</span> Tracker
+                    </button>
+                    <button id="tabManager" onclick="switchTab('manager')"
+                        class="w-full px-4 py-2 rounded-lg text-xs font-bold text-gray-400 hover:text-white transition flex items-center justify-center gap-2 whitespace-nowrap">
+                        <span>🗂️</span> Manager View
                     </button>
                 </div>
             </div>
@@ -211,7 +229,7 @@
             </div>
 
             <!-- Member cards grid -->
-            <div id="membersGrid" class="space-y-4"></div>
+            <div id="membersGrid" class="space-y-6"></div>
         </div>
 
         <!-- ============================================================ -->
@@ -281,7 +299,6 @@
                                 <th class="px-4 py-3 text-left">Status</th>
                                 <th class="px-4 py-3 text-left">Priority</th>
                                 <th class="px-4 py-3 text-left">Deadline</th>
-                                <th class="px-4 py-3 text-left">Comment</th>
                                 <th class="px-4 py-3 text-left">Note Status</th>
                             </tr>
                         </thead>
@@ -383,6 +400,68 @@
             </div>
         </div>
 
+        <!-- ============================================================ -->
+        <!--  TAB: MANAGER VIEW                                            -->
+        <!-- ============================================================ -->
+        <div id="managerTab" class="hidden">
+            <div class="glass rounded-2xl p-5 mb-6">
+                <div class="flex flex-wrap gap-4 items-end">
+                    <div>
+                        <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">From</label>
+                        <input type="date" id="managerStart"
+                            class="bg-gray-800 border border-gray-700 text-white rounded-lg px-3 h-9 outline-none focus:border-blue-500 transition text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">To</label>
+                        <input type="date" id="managerEnd"
+                            class="bg-gray-800 border border-gray-700 text-white rounded-lg px-3 h-9 outline-none focus:border-blue-500 transition text-sm">
+                    </div>
+                    <div class="min-w-[180px]">
+                        <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Team</label>
+                        <select id="managerTeam" onchange="loadManagerMembers()"
+                            class="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 h-9 outline-none focus:border-blue-500 transition text-sm">
+                            <option value="">All Teams</option>
+                        </select>
+                    </div>
+                    <div class="min-w-[180px]">
+                        <label
+                            class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Member</label>
+                        <select id="managerMember"
+                            class="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 h-9 outline-none focus:border-blue-500 transition text-sm">
+                            <option value="">All Members</option>
+                        </select>
+                    </div>
+                    <button onclick="generateManagerView()"
+                        class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-6 h-9 rounded-lg shadow-lg transition">
+                        View All
+                    </button>
+                </div>
+            </div>
+            <div id="managerTableWrap" class="hidden glass rounded-2xl overflow-hidden">
+                <div class="p-4 border-b border-gray-700">
+                    <span class="font-bold text-sm" id="managerCount">0 rows</span>
+                </div>
+                <div class="report-table-wrap">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="text-gray-400 text-xs uppercase tracking-wider bg-gray-800/60">
+                                <th class="px-4 py-3 text-left">Date</th>
+                                <th class="px-4 py-3 text-left">Team</th>
+                                <th class="px-4 py-3 text-left">Member</th>
+                                <th class="px-4 py-3 text-left">Ticket</th>
+                                <th class="px-4 py-3 text-left">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="managerBody" class="divide-y divide-gray-800"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div id="managerEmpty" class="glass rounded-2xl p-12 text-center text-gray-500">
+                <div class="text-5xl mb-4">🗂️</div>
+                <p>Pick range and filters, then click View All.</p>
+            </div>
+        </div>
+
     </main>
 
     <!-- ============================================================ -->
@@ -449,19 +528,12 @@
 
             <!-- Comment -->
             <div class="mb-4">
-                <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Comment <span
+                <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">To Do <span
                         class="text-gray-600">(optional)</span></label>
-                <textarea id="ticketComment" rows="2" placeholder="e.g. Will complete today, blocked on API review…"
+                <textarea id="ticketTodoText" rows="2" placeholder="e.g. Complete API integration and PR review today"
                     class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 outline-none focus:border-blue-500 transition text-sm resize-none"></textarea>
             </div>
 
-            <!-- Deadline -->
-            <div class="mb-6">
-                <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Deadline <span
-                        class="text-gray-600">(optional)</span></label>
-                <input type="date" id="ticketDeadline"
-                    class="bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 outline-none focus:border-blue-500 transition text-sm">
-            </div>
 
             <div class="flex justify-end gap-3">
                 <button onclick="closeModal()"
@@ -488,6 +560,11 @@
                     class="text-gray-500 hover:text-white transition text-2xl leading-none">&times;</button>
             </div>
             <input type="hidden" id="editNoteId">
+            <div class="mb-4">
+                <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">To Do</label>
+                <textarea id="editTodoText" rows="3"
+                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 outline-none focus:border-blue-500 transition text-sm resize-none"></textarea>
+            </div>
             <div class="mb-4">
                 <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Comment</label>
                 <textarea id="editComment" rows="3"
@@ -653,6 +730,56 @@
     </div>
 
     <!-- ============================================================ -->
+    <!--  LINK USER MODAL                                             -->
+    <!-- ============================================================ -->
+    <div id="linkUserModal" class="fixed inset-0 z-[60] hidden">
+        <div class="modal-backdrop absolute inset-0" onclick="closeLinkUserModal()"></div>
+        <div
+            class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md glass rounded-2xl p-8 shadow-2xl">
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-xl font-bold">Link Team Member to User</h3>
+                <button onclick="closeLinkUserModal()"
+                    class="text-gray-500 hover:text-white transition text-2xl leading-none">&times;</button>
+            </div>
+
+            <input type="hidden" id="linkMemberId">
+
+            <div class="mb-4">
+                <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Team Member</label>
+                <div class="bg-gray-800/70 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-white">
+                    <span id="linkMemberName"></span>
+                </div>
+            </div>
+
+            <div class="mb-6">
+                <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Link to User
+                    Account</label>
+                <select id="linkUserSelect"
+                    class="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-4 py-2.5 outline-none focus:border-blue-500 transition text-sm">
+                    <option value="">— Select a user —</option>
+                </select>
+                <p class="text-xs text-gray-500 mt-2">
+                    <i class="fas fa-info-circle"></i> Linking allows automatic fetching of todos from the user's task
+                    list
+                </p>
+            </div>
+
+            <div class="flex justify-end gap-3">
+                <button onclick="closeLinkUserModal()"
+                    class="text-gray-400 hover:text-white font-medium px-4 py-2 transition">Cancel</button>
+                <button onclick="unlinkUser()"
+                    class="bg-red-600 hover:bg-red-500 text-white font-bold px-6 py-2 rounded-lg shadow-lg transition">
+                    Unlink
+                </button>
+                <button onclick="saveLinkUser()"
+                    class="bg-purple-600 hover:bg-purple-500 text-white font-bold px-6 py-2 rounded-lg shadow-lg transition">
+                    Link User
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
     <!--  SCRIPT                                                       -->
     <!-- ============================================================ -->
     <script>
@@ -662,6 +789,7 @@
         let currentNotes = [];   // notes from DB for today
         let jiraCache = {};      // key -> ticket info cache
         let reportData = [];
+        let managerData = [];
         let currentModalMemberId = '';  // set when opening Add Ticket modal, never from DOM
         let currentModalMemberName = '';
         const TRACKER_TAGS = ["PR Raised", "PR Merged", "PR Delayed", "Demo Done", "Blocked", "Staged", "Production", "Hot Fix", "Previous Sprint", "Waiting for Demo"];
@@ -700,10 +828,12 @@
             const d = new Date();
             document.getElementById('reportEnd').value = today;
             document.getElementById('trackerEnd').value = today;
+            document.getElementById('managerEnd').value = today;
             d.setDate(d.getDate() - 7);
             const start = d.toISOString().split('T')[0];
             document.getElementById('reportStart').value = start;
             document.getElementById('trackerStart').value = start;
+            document.getElementById('managerStart').value = start;
         })();
 
         // ─── Tabs ─────────────────────────────────────────────────────────
@@ -711,6 +841,7 @@
             document.getElementById('notesTab').classList.toggle('hidden', tab !== 'notes');
             document.getElementById('reportTab').classList.toggle('hidden', tab !== 'report');
             document.getElementById('trackerTab').classList.toggle('hidden', tab !== 'tracker');
+            document.getElementById('managerTab').classList.toggle('hidden', tab !== 'manager');
 
             const baseClass = 'w-full px-4 py-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-2';
             const inactiveClass = ' text-gray-400 hover:text-white';
@@ -719,6 +850,7 @@
             document.getElementById('tabNotes').className = baseClass + (tab === 'notes' ? activeClass : inactiveClass);
             document.getElementById('tabReport').className = baseClass + (tab === 'report' ? activeClass : inactiveClass);
             document.getElementById('tabTracker').className = baseClass + (tab === 'tracker' ? activeClass : inactiveClass);
+            document.getElementById('tabManager').className = baseClass + (tab === 'manager' ? activeClass : inactiveClass);
         }
 
         // ─── Date helpers ─────────────────────────────────────────────────
@@ -755,10 +887,12 @@
             const sel = document.getElementById('teamSelect');
             const rSel = document.getElementById('reportTeam');
             const tSel = document.getElementById('trackerTeam');
+            const mSel = document.getElementById('managerTeam');
             allTeams.forEach(t => {
                 if (sel) sel.add(new Option(t.name, t.id));
                 if (rSel) rSel.add(new Option(t.name, t.id));
                 if (tSel) tSel.add(new Option(t.name, t.id));
+                if (mSel) mSel.add(new Option(t.name, t.id));
             });
         }
 
@@ -794,6 +928,9 @@
                 document.getElementById('notesEmpty').classList.remove('hidden');
                 return;
             }
+
+            // Auto-fetch todos for linked members
+            await autoFetchAllMemberTodos();
 
             // Pre-fetch Jira data for all unique ticket keys not in cache
             const keys = [...new Set(currentNotes.map(n => n.ticket_key).filter(k => k && !jiraCache[k]))];
@@ -834,81 +971,146 @@
                 const avatarColor = getAvatarColor(member.displayName);
                 const initials = getInitials(member.displayName);
 
+                // Calculate story points
+                const totalStoryPoints = notes.reduce((sum, n) => sum + (parseFloat(n.story_points) || 0), 0);
+                const completedStoryPoints = notes.filter(n => n.status === 'Done').reduce((sum, n) => sum + (parseFloat(n.story_points) || 0), 0);
+
                 const rows = notes.length === 0
-                    ? `<tr><td colspan="7" class="px-4 py-6 text-center text-gray-600 text-sm italic">No tickets logged yet</td></tr>`
+                    ? `<tr><td colspan="7" class="px-6 py-16 text-center">
+                        <div class="flex flex-col items-center gap-4">
+                            <div class="w-16 h-16 rounded-full bg-gradient-to-br from-gray-800/60 to-gray-700/40 flex items-center justify-center ring-2 ring-gray-700/30 shadow-lg">
+                                <i class="fas fa-clipboard-list text-gray-500 text-2xl"></i>
+                            </div>
+                            <div class="space-y-1">
+                                <div class="text-gray-400 text-base font-semibold">No tasks logged yet</div>
+                                <div class="text-gray-600 text-xs">Click "Add Task" to get started</div>
+                            </div>
+                        </div>
+                    </td></tr>`
                     : notes.map(n => {
                         const jira = jiraCache[n.ticket_key] || {};
                         const priority = jira.priority || '—';
                         const statusText = jira.status || '—';
-                        const summary = jira.summary || '<span class="text-gray-600 italic">Loading…</span>';
+                        const summary = jira.summary || n.todo_text || '<span class="text-gray-600 italic">No summary</span>';
                         const noteStatus = n.status;
-                        const isOwner = jira.assignee || '—';
+                        const storyPoints = parseFloat(n.story_points) || 0;
+                        const ticketDisplay = n.ticket_key
+                            ? `<div class="flex items-center gap-1.5 overflow-hidden">
+                                ${jira.type_icon ? `<img src="${jira.type_icon}" class="w-3.5 h-3.5 flex-shrink-0" title="${jira.type || ''}">` : ''}
+                                <a href="javascript:void(0)" onclick="viewTicketDetails('${n.ticket_key}')"
+                                   class="font-mono text-blue-400 hover:text-blue-300 font-bold text-xs transition truncate">${n.ticket_key}</a>
+                            </div>`
+                            : `<span class="text-xs text-gray-500 italic">No ticket</span>`;
+
                         return `
-                <tr class="ticket-row transition" data-note-id="${n.id}">
-                    <td class="px-4 py-3">
-                        <div class="flex items-center gap-1.5 overflow-hidden">
-                            ${jira.type_icon ? `<img src="${jira.type_icon}" class="w-3.5 h-3.5 flex-shrink-0" title="${jira.type || ''}">` : ''}
-                            <a href="javascript:void(0)" onclick="viewTicketDetails('${n.ticket_key}')"
-                               class="font-mono text-blue-400 hover:text-blue-300 font-bold text-xs transition truncate">${n.ticket_key}</a>
-                        </div>
+                <tr class="ticket-row group" data-note-id="${n.id}">
+                    <td class="px-5 py-4">${ticketDisplay}</td>
+                    <td class="px-5 py-4 text-gray-200 text-sm max-w-xs truncate" title="${summary}">${summary}</td>
+                    <td class="px-5 py-4">
+                        <span class="text-xs px-2.5 py-1 rounded-md bg-gray-700/60 text-gray-300 font-medium border border-gray-600/40">${statusText}</span>
                     </td>
-                    <td class="px-4 py-3 text-gray-200 text-xs max-w-xs truncate" title="${jira.summary || ''}">${summary}</td>
-                    <td class="px-4 py-3">
-                        <span class="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">${statusText}</span>
+                    <td class="px-5 py-4 text-xs font-bold priority-${(priority || '').toLowerCase()}">${priority}</td>
+                    <td class="px-5 py-4">
+                        <span class="text-xs px-2.5 py-1 rounded-md ${storyPoints > 0 ? 'bg-blue-900/40 text-blue-300 border border-blue-700/50' : 'text-gray-600'} font-bold">
+                            ${storyPoints > 0 ? storyPoints + ' SP' : '—'}
+                        </span>
                     </td>
-                    <td class="px-4 py-3 text-xs priority-${(priority || '').toLowerCase()}">${priority}</td>
-                    <td class="px-4 py-3 text-xs text-gray-400">${n.deadline || '—'}</td>
-                    <td class="px-4 py-3 text-xs text-gray-300 max-w-[160px] truncate" title="${n.comment || ''}">${n.comment || '<span class="text-gray-600 italic">—</span>'}</td>
-                    <td class="px-4 py-3">
-                        <div class="flex items-center gap-1.5 flex-nowrap">
-                            <span class="text-xs px-2 py-0.5 rounded-full font-semibold ${noteStatus === 'Done' ? 'status-badge-done' : 'status-badge-pending'}">
+                    <td class="px-5 py-4 text-xs text-gray-400 font-medium">${n.deadline || '—'}</td>
+                    <td class="px-5 py-4">
+                        <div class="flex items-center gap-2 flex-nowrap">
+                            <span class="text-xs px-2.5 py-1 rounded-md font-bold ${noteStatus === 'Done' ? 'status-badge-done' : 'status-badge-pending'}">
                                 ${noteStatus}
                             </span>
                             <button onclick="toggleStatus(${n.id}, '${noteStatus}')" title="Toggle status"
-                                class="text-gray-500 hover:text-green-400 transition text-base leading-none">✓</button>
-                             <button onclick="openEditModal(${n.id}, '${n.ticket_key}', \`${(n.comment || '').replace(/`/g, '\\`')}\`, '${n.deadline || ''}', '${(n.tags || '').replace(/'/g, "\\'")}')" title="Edit"
-                                class="text-gray-500 hover:text-yellow-400 transition">✎</button>
+                                class="w-7 h-7 rounded-md flex items-center justify-center bg-gray-700/30 text-gray-500 hover:text-green-400 hover:bg-green-900/20 transition-all">
+                                <i class="fas fa-check text-xs"></i>
+                            </button>
+                             <button onclick="openEditModal(${n.id}, '${n.ticket_key || ''}', \`${(n.todo_text || '').replace(/`/g, '\\`')}\`, \`${(n.comment || '').replace(/`/g, '\\`')}\`, '${n.deadline || ''}', '${(n.tags || '').replace(/'/g, "\\'")}')" title="Edit"
+                                class="w-7 h-7 rounded-md flex items-center justify-center bg-gray-700/30 text-gray-500 hover:text-yellow-400 hover:bg-yellow-900/20 transition-all">
+                                <i class="fas fa-edit text-xs"></i>
+                            </button>
                             <button onclick="deleteNote(${n.id})" title="Delete"
-                                class="text-gray-600 hover:text-red-400 transition ml-0.5">✕</button>
+                                class="w-7 h-7 rounded-md flex items-center justify-center bg-gray-700/30 text-gray-600 hover:text-red-400 hover:bg-red-900/20 transition-all">
+                                <i class="fas fa-trash text-xs"></i>
+                            </button>
                         </div>
                     </td>
                 </tr>`;
                     }).join('');
 
                 const safeId = (memberId && String(memberId) !== 'undefined') ? memberId : '';
+                const linkedUserBadge = member.userId
+                    ? `<span class="text-[10px] px-2 py-0.5 rounded-full bg-green-900/30 text-green-400 border border-green-700/30 font-semibold">👤 Linked</span>`
+                    : `<span class="text-[10px] px-2 py-0.5 rounded-full bg-yellow-900/30 text-yellow-400 border border-yellow-700/30 font-semibold">⚠️ Not Linked</span>`;
+
+                const fetchTodosButton = member.userId
+                    ? `<button type="button" onclick="fetchMemberTodos(${member.id}, '${member.displayName}')" 
+                        class="bg-indigo-600/80 hover:bg-indigo-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition flex items-center gap-1.5"
+                        title="Fetch todos from linked user's task list">
+                        <i class="fas fa-sync-alt"></i> Fetch Todos
+                    </button>`
+                    : '';
 
                 return `
-        <div class="member-card glass rounded-2xl overflow-hidden">
+        <div class="member-card rounded-2xl overflow-hidden shadow-lg">
             <!-- Member header -->
-            <div class="flex items-center gap-3 px-5 py-4 bg-gray-800/60 border-b border-gray-700/60">
-                <div class="flex-shrink-0 w-9 h-9 rounded-full ${avatarColor} flex items-center justify-center text-xs font-black text-white shadow-md">
+            <div class="member-card-header flex items-center gap-3 px-6 py-5">
+                <div class="flex-shrink-0 w-11 h-11 rounded-full ${avatarColor} flex items-center justify-center text-sm font-black text-white shadow-lg ring-2 ring-gray-700/50">
                     ${initials}
                 </div>
                 <div class="flex-1">
-                    <h3 class="font-bold text-white text-sm">${member.displayName}</h3>
-                    <p class="text-xs text-gray-500">${notes.length} ticket${notes.length !== 1 ? 's' : ''} today</p>
+                    <div class="flex items-center gap-2 mb-1">
+                        <h3 class="font-bold text-white text-base">${member.displayName}</h3>
+                        ${linkedUserBadge}
+                    </div>
+                    <div class="flex items-center gap-3 text-xs">
+                        <span class="text-gray-400 flex items-center gap-1">
+                            <i class="fas fa-ticket-alt text-blue-400"></i>
+                            <span class="font-semibold">${notes.length}</span> task${notes.length !== 1 ? 's' : ''}
+                        </span>
+                        <span class="text-gray-600">•</span>
+                        <span class="text-gray-400 flex items-center gap-1">
+                            <i class="fas fa-chart-line text-purple-400"></i>
+                            <span class="font-semibold">${totalStoryPoints.toFixed(1)}</span> SP
+                        </span>
+                        ${completedStoryPoints > 0 ? `
+                        <span class="text-gray-600">•</span>
+                        <span class="text-green-400 flex items-center gap-1">
+                            <i class="fas fa-check-circle"></i>
+                            <span class="font-semibold">${completedStoryPoints.toFixed(1)}</span> done
+                        </span>
+                        ` : ''}
+                    </div>
                 </div>
-                <button type="button" class="add-ticket-btn bg-blue-600/80 hover:bg-blue-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition flex items-center gap-1.5"
-                    data-member-id="${String(safeId).replace(/"/g, '&quot;')}"
-                    data-member-name="${String(member.displayName || '').replace(/"/g, '&quot;')}">
-                    <span class="text-base leading-none">+</span> Add Ticket
-                </button>
+                <div class="flex items-center gap-2">
+                    ${fetchTodosButton}
+                    <button type="button" onclick="openLinkUserModal(${member.id}, '${member.displayName}', ${member.userId || 'null'})"
+                        class="bg-purple-600/90 hover:bg-purple-500 text-white text-xs font-bold px-3.5 py-2 rounded-lg transition-all flex items-center gap-1.5 shadow-md hover:shadow-lg hover:scale-105"
+                        title="Link this team member to a user account">
+                        <i class="fas fa-link"></i> Link
+                    </button>
+                    <button type="button" class="add-ticket-btn bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white text-xs font-bold px-4 py-2 rounded-lg transition-all flex items-center gap-1.5 shadow-md hover:shadow-lg hover:scale-105"
+                        data-member-id="${String(safeId).replace(/"/g, '&quot;')}"
+                        data-member-name="${String(member.displayName || '').replace(/"/g, '&quot;')}">
+                        <span class="text-base leading-none">+</span> Add Task
+                    </button>
+                </div>
             </div>
             <!-- Ticket table -->
             <div class="overflow-x-auto">
-                <table class="w-full text-sm">
+                <table class="w-full">
                     <thead>
-                        <tr class="text-gray-500 text-[11px] uppercase tracking-wider">
-                            <th class="px-4 py-2 text-left">Ticket</th>
-                            <th class="px-4 py-2 text-left">Summary</th>
-                            <th class="px-4 py-2 text-left">Status</th>
-                            <th class="px-4 py-2 text-left">Priority</th>
-                            <th class="px-4 py-2 text-left">Deadline</th>
-                            <th class="px-4 py-2 text-left">Comment</th>
-                            <th class="px-4 py-2 text-left">Note</th>
+                        <tr class="bg-gray-800/50 border-b border-gray-700/40">
+                            <th class="px-5 py-3.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-wider">Ticket</th>
+                            <th class="px-5 py-3.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-wider">Summary</th>
+                            <th class="px-5 py-3.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-wider">Status</th>
+                            <th class="px-5 py-3.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-wider">Priority</th>
+                            <th class="px-5 py-3.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-wider">Story Points</th>
+                            <th class="px-5 py-3.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-wider">Deadline</th>
+                            <th class="px-5 py-3.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-wider">Actions</th>
                         </tr>
                     </thead>
-                    <tbody class="divide-y divide-gray-800/60">${rows}</tbody>
+                    <tbody class="divide-y divide-gray-800/40">${rows}</tbody>
                 </table>
             </div>
         </div>`;
@@ -931,8 +1133,7 @@
             document.getElementById('modalMemberId').value = currentModalMemberId;
             document.getElementById('modalMemberName').value = currentModalMemberName;
             document.getElementById('ticketKeyInput').value = '';
-            document.getElementById('ticketComment').value = '';
-            document.getElementById('ticketDeadline').value = '';
+            document.getElementById('ticketTodoText').value = '';
             document.getElementById('ticketPreview').classList.add('hidden');
             document.getElementById('ticketError').classList.add('hidden');
             document.getElementById('addTicketModal').classList.remove('hidden');
@@ -941,6 +1142,220 @@
 
         function closeModal() {
             document.getElementById('addTicketModal').classList.add('hidden');
+        }
+
+        // ─── Link User Modal ─────────────────────────────────────────────
+        let allUsers = [];
+
+        async function loadAllUsers() {
+            try {
+                const res = await fetch('/api/users/list');
+                if (res.ok) {
+                    allUsers = await res.json();
+                }
+            } catch (e) {
+                console.error('Failed to load users:', e);
+            }
+        }
+
+        async function openLinkUserModal(memberId, memberName, currentUserId) {
+            // Load users if not already loaded
+            if (allUsers.length === 0) {
+                await loadAllUsers();
+            }
+
+            document.getElementById('linkMemberId').value = memberId;
+            document.getElementById('linkMemberName').textContent = memberName;
+
+            // Populate user dropdown
+            const select = document.getElementById('linkUserSelect');
+            select.innerHTML = '<option value="">— Select a user —</option>' +
+                allUsers.map(u => `<option value="${u.id}" ${u.id === currentUserId ? 'selected' : ''}>${u.email} (${u.role || 'No Role'})</option>`).join('');
+
+            document.getElementById('linkUserModal').classList.remove('hidden');
+        }
+
+        function closeLinkUserModal() {
+            document.getElementById('linkUserModal').classList.add('hidden');
+        }
+
+        async function saveLinkUser() {
+            const memberId = document.getElementById('linkMemberId').value;
+            const userId = document.getElementById('linkUserSelect').value;
+
+            if (!userId) {
+                alert('Please select a user to link');
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/team_members/${memberId}/link_user`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_id: parseInt(userId) })
+                });
+
+                if (res.ok) {
+                    closeLinkUserModal();
+                    // Reload members to show updated link status
+                    const teamId = document.getElementById('teamSelect').value;
+                    if (teamId) {
+                        await loadMembers(teamId);
+                        renderMemberCards();
+                    }
+                    alert('User linked successfully!');
+                } else {
+                    alert('Failed to link user');
+                }
+            } catch (e) {
+                console.error('Error linking user:', e);
+                alert('Network error while linking user');
+            }
+        }
+
+        async function unlinkUser() {
+            const memberId = document.getElementById('linkMemberId').value;
+
+            if (!confirm('Are you sure you want to unlink this user?')) {
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/team_members/${memberId}/link_user`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_id: null })
+                });
+
+                if (res.ok) {
+                    closeLinkUserModal();
+                    // Reload members to show updated link status
+                    const teamId = document.getElementById('teamSelect').value;
+                    if (teamId) {
+                        await loadMembers(teamId);
+                        renderMemberCards();
+                    }
+                    alert('User unlinked successfully!');
+                } else {
+                    alert('Failed to unlink user');
+                }
+            } catch (e) {
+                console.error('Error unlinking user:', e);
+                alert('Network error while unlinking user');
+            }
+        }
+
+        // ─── Fetch Member Todos ──────────────────────────────────────────
+        async function fetchMemberTodos(memberId, memberName, silent = false) {
+            const date = document.getElementById('scrumDate').value;
+            const teamId = document.getElementById('teamSelect').value;
+
+            if (!silent && !confirm(`Fetch todos from ${memberName}'s task list for ${date}?`)) {
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/team_members/${memberId}/todos?date=${date}`);
+
+                if (!res.ok) {
+                    if (res.status === 404) {
+                        if (!silent) alert('No user linked to this team member or no todos found');
+                    } else {
+                        if (!silent) alert('Failed to fetch todos');
+                    }
+                    return;
+                }
+
+                const todos = await res.json();
+
+                if (todos.length === 0) {
+                    if (!silent) alert(`No todos found for ${memberName} on ${date}`);
+                    return;
+                }
+
+                // Get member's account_id for scrum notes
+                const member = currentMembers.find(m => m.id === memberId);
+                const memberAccountId = member ? (member.accountId || member.account_id) : String(memberId);
+
+                // Convert todos to scrum notes format and save them
+                let savedCount = 0;
+                for (const todo of todos) {
+                    // Check if this todo already exists (by ticket_key if present, or by title)
+                    const existingNote = currentNotes.find(n => {
+                        if (todo.ticket_key && n.ticket_key) {
+                            return n.ticket_key === todo.ticket_key && String(n.member_id) === String(memberAccountId);
+                        } else {
+                            // Match by title if no ticket key
+                            return n.todo_text === todo.title && String(n.member_id) === String(memberAccountId);
+                        }
+                    });
+
+                    if (existingNote) {
+                        console.log(`Skipping "${todo.title}" - already exists`);
+                        continue;
+                    }
+
+                    // Add all todos (with or without ticket key)
+                    const noteData = {
+                        date: date,
+                        team_id: parseInt(teamId),
+                        member_id: memberAccountId,
+                        member_name: memberName,
+                        ticket_key: todo.ticket_key || null,
+                        todo_text: todo.title || 'Untitled Task',
+                        comment: '',
+                        deadline: null,
+                        status: todo.status === 'Done' ? 'Done' : 'Pending',
+                        story_points: todo.story_points || 0,
+                        tags: ''
+                    };
+
+                    try {
+                        const saveRes = await fetch(`/api/scrum_notes`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(noteData)
+                        });
+
+                        if (saveRes.ok) {
+                            savedCount++;
+                        } else {
+                            const errorData = await saveRes.json();
+                            console.error('Error saving todo:', errorData);
+                        }
+                    } catch (e) {
+                        console.error('Error saving todo:', e);
+                    }
+                }
+
+                if (savedCount > 0) {
+                    if (!silent) alert(`Successfully imported ${savedCount} todo(s) from ${memberName}'s task list!`);
+                    // Reload notes to show the new entries
+                    await loadNotes();
+                    renderMemberCards();
+                } else {
+                    if (!silent) alert(`All todos already exist in scrum notes`);
+                }
+
+            } catch (e) {
+                console.error('Error fetching member todos:', e);
+                if (!silent) alert('Network error while fetching todos');
+            }
+        }
+
+        // Auto-fetch todos for all linked members
+        async function autoFetchAllMemberTodos() {
+            const linkedMembers = currentMembers.filter(m => m.userId);
+
+            if (linkedMembers.length === 0) {
+                return;
+            }
+
+            console.log(`Auto-fetching todos for ${linkedMembers.length} linked member(s)...`);
+
+            for (const member of linkedMembers) {
+                await fetchMemberTodos(member.id, member.displayName, true);
+            }
         }
 
         async function fetchTicket() {
@@ -1021,8 +1436,7 @@
             const date = document.getElementById('scrumDate').value;
             const teamId = document.getElementById('teamSelect').value;
             const memberName = (currentModalMemberName || (document.getElementById('modalMemberName').value || '')).trim();
-            const comment = document.getElementById('ticketComment').value.trim();
-            const deadline = document.getElementById('ticketDeadline').value || null;
+            const todoText = document.getElementById('ticketTodoText').value.trim();
 
             // Always resolve member_id from currentMembers by name — never use hidden input (avoids "undefined" from cache)
             var memberId = '';
@@ -1042,7 +1456,11 @@
             const btn = document.getElementById('saveBtn');
             btn.textContent = 'Saving…'; btn.disabled = true;
 
-            var payload = { date: date, team_id: teamId, member_id: memberId, member_name: memberName, ticket_key: key, comment: comment, deadline: deadline };
+            // Get story points from jiraCache
+            const ticketData = jiraCache[key] || {};
+            const storyPoints = ticketData.story_points || 0;
+
+            var payload = { date: date, team_id: teamId, member_id: memberId, member_name: memberName, ticket_key: key, todo_text: todoText, comment: '', deadline: null, story_points: storyPoints };
 
             const projectKey = (localStorage.getItem("project_key") || "").trim().toUpperCase();
             const res = await fetch('/api/scrum_notes', {
@@ -1068,9 +1486,10 @@
         // ─── Edit Modal ───────────────────────────────────────────────────
         let currentEditTags = [];
 
-        function openEditModal(noteId, ticketKey, comment, deadline, tags) {
+        function openEditModal(noteId, ticketKey, todoText, comment, deadline, tags) {
             document.getElementById('editNoteId').value = noteId;
             document.getElementById('editKey').textContent = ticketKey;
+            document.getElementById('editTodoText').value = todoText;
             document.getElementById('editComment').value = comment;
             document.getElementById('editDeadline').value = deadline || '';
 
@@ -1108,6 +1527,7 @@
 
         async function saveEdit() {
             const noteId = document.getElementById('editNoteId').value;
+            const todoText = document.getElementById('editTodoText').value.trim();
             const comment = document.getElementById('editComment').value.trim();
             const deadline = document.getElementById('editDeadline').value || null;
             const tags = currentEditTags.join(",");
@@ -1119,7 +1539,7 @@
                     'Content-Type': 'application/json',
                     'X-Project-Key': projectKey
                 },
-                body: JSON.stringify({ comment, deadline, tags })
+                body: JSON.stringify({ todo_text: todoText, comment, deadline, tags })
             });
             if (res.ok) { closeEditModal(); await loadNotes(); }
             else alert('Failed to save.');
@@ -1158,6 +1578,73 @@
             });
             const members = await res.json();
             members.forEach(m => sel.add(new Option(m.displayName, m.accountId)));
+        }
+
+        async function loadManagerMembers() {
+            const teamId = document.getElementById('managerTeam').value;
+            const sel = document.getElementById('managerMember');
+            sel.innerHTML = '<option value="">All Members</option>';
+            if (!teamId) return;
+            const projectKey = (localStorage.getItem("project_key") || "").trim().toUpperCase();
+            const res = await fetch(`/api/teams/${teamId}/members`, {
+                headers: { 'X-Project-Key': projectKey }
+            });
+            const members = await res.json();
+            members.forEach(m => sel.add(new Option(m.displayName, m.accountId)));
+        }
+
+        async function generateManagerView() {
+            const start = document.getElementById('managerStart').value;
+            const end = document.getElementById('managerEnd').value;
+            const teamId = document.getElementById('managerTeam').value;
+            const memberId = document.getElementById('managerMember').value;
+            if (!start || !end) { alert('Please select a date range.'); return; }
+
+            let url = `/api/scrum_notes/report?start=${start}&end=${end}`;
+            if (teamId) url += `&team_id=${teamId}`;
+            if (memberId) url += `&member_id=${memberId}`;
+            const res = await fetch(url);
+            managerData = await res.json();
+
+            const keys = [...new Set(managerData.map(n => n.ticket_key).filter(k => !jiraCache[k]))];
+            await Promise.all(keys.map(k => fetchJiraAndCache(k)));
+            renderManagerView();
+        }
+
+        function renderManagerView() {
+            const wrap = document.getElementById('managerTableWrap');
+            const empty = document.getElementById('managerEmpty');
+            const tbody = document.getElementById('managerBody');
+
+            if (!managerData.length) {
+                wrap.classList.add('hidden');
+                empty.classList.remove('hidden');
+                return;
+            }
+
+            const teamMap = Object.fromEntries((allTeams || []).map(t => [String(t.id), t.name]));
+            empty.classList.add('hidden');
+            wrap.classList.remove('hidden');
+            document.getElementById('managerCount').textContent = `${managerData.length} row${managerData.length !== 1 ? 's' : ''} found`;
+
+            tbody.innerHTML = managerData.map(n => {
+                const jira = jiraCache[n.ticket_key] || {};
+                const badge = n.status === 'Done'
+                    ? '<span class="status-badge-done text-xs px-2 py-0.5 rounded-full font-semibold">Done</span>'
+                    : '<span class="status-badge-pending text-xs px-2 py-0.5 rounded-full font-semibold">Pending</span>';
+                return `
+        <tr class="hover:bg-gray-800/40 transition">
+            <td class="px-4 py-3 text-xs text-gray-400 font-mono whitespace-nowrap">${n.date || '—'}</td>
+            <td class="px-4 py-3 text-xs text-gray-300">${teamMap[String(n.team_id)] || n.team_id || '—'}</td>
+            <td class="px-4 py-3 text-sm font-semibold">${n.member_name || '—'}</td>
+            <td class="px-4 py-3">
+                <a href="javascript:void(0)" onclick="viewTicketDetails('${n.ticket_key}')"
+                   class="font-mono text-blue-400 hover:text-blue-300 font-bold text-xs transition">${n.ticket_key}</a>
+                <div class="text-[11px] text-gray-500 mt-1 max-w-[280px] truncate" title="${jira.summary || ''}">${jira.summary || '—'}</div>
+            </td>
+            <td class="px-4 py-3">${badge}</td>
+        </tr>`;
+            }).join('');
         }
 
         async function generateReport() {
@@ -1237,7 +1724,6 @@
             <td class="px-4 py-3"><span class="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">${jira.status || '—'}</span></td>
             <td class="px-4 py-3 text-xs priority-${(jira.priority || '').toLowerCase()}">${jira.priority || '—'}</td>
             <td class="px-4 py-3 text-xs text-gray-400">${n.deadline || '—'}</td>
-            <td class="px-4 py-3 text-xs text-gray-300 max-w-[160px] truncate" title="${n.comment || ''}">${n.comment || '—'}</td>
             <td class="px-4 py-3">${statusBadge}</td>
         </tr>`;
             }).join('');

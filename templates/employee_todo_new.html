@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Tasks</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background: #f8fafc !important; color: #0f172a !important; }
+        .emp-nav { position: fixed; top: 0; left: 0; right: 0; z-index: 1000; background: rgba(255, 255, 255, 0.97); backdrop-filter: blur(8px); border-bottom: 1px solid #e2e8f0; }
+        .emp-nav-wrap { width: 100%; height: 58px; padding: 0 24px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+        .emp-brand { display: inline-flex; align-items: center; text-decoration: none; line-height: 0; }
+        .emp-brand-logo { height: 28px; width: auto; display: block; }
+        .emp-logout-btn { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; background: #f1f5f9; color: #475569; text-decoration: none; font-size: 13px; font-weight: 600; border-radius: 8px; border: 1px solid #e2e8f0; transition: all 0.18s; }
+        .emp-logout-btn:hover { background: #e2e8f0; color: #1e293b; border-color: #cbd5e1; }
+        .emp-card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08); }
+        .emp-card:hover { box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1); }
+        .emp-input, .emp-textarea, .emp-select { background: #ffffff; border: 1px solid #cbd5e1; color: #0f172a; border-radius: 8px; padding: 10px 12px; font-size: 14px; outline: none; transition: all 0.15s; }
+        .emp-input:focus, .emp-textarea:focus, .emp-select:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); }
+        .emp-btn-primary { background: #3b82f6; color: white; font-weight: 600; padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; transition: all 0.15s; }
+        .emp-btn-primary:hover { background: #2563eb; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3); }
+        .emp-btn-success { background: #10b981; color: white; font-weight: 600; padding: 10px 24px; border-radius: 8px; border: none; cursor: pointer; transition: all 0.15s; }
+        .emp-btn-success:hover { background: #059669; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); }
+        .emp-btn-secondary { background: #f1f5f9; color: #475569; font-weight: 600; padding: 10px 20px; border-radius: 8px; border: 1px solid #e2e8f0; cursor: pointer; transition: all 0.15s; }
+        .emp-btn-secondary:hover { background: #e2e8f0; color: #1e293b; }
+        .emp-checkbox { width: 24px; height: 24px; border-radius: 50%; border: 2px solid #cbd5e1; cursor: pointer; transition: all 0.15s; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+        .emp-checkbox:hover { border-color: #3b82f6; }
+        .emp-checkbox.done { background: #10b981; border-color: #10b981; }
+        .emp-tag { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 600; border: 1px solid; }
+        .emp-tag.blue { background: #dbeafe; color: #1e40af; border-color: #93c5fd; }
+        .emp-tag.red { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+        .emp-tag.green { background: #d1fae5; color: #065f46; border-color: #6ee7b7; }
+        .emp-tag.yellow { background: #fef3c7; color: #92400e; border-color: #fcd34d; }
+        .emp-tag.purple { background: #e9d5ff; color: #6b21a8; border-color: #c084fc; }
+        .emp-tag.pink { background: #fce7f3; color: #9f1239; border-color: #f9a8d4; }
+        .emp-tag.gray { background: #f1f5f9; color: #475569; border-color: #cbd5e1; }
+        .emp-priority-high { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+        .emp-priority-medium { background: #fef3c7; color: #92400e; border-color: #fcd34d; }
+        .emp-priority-low { background: #f1f5f9; color: #475569; border-color: #cbd5e1; }
+        .emp-label { display: block; font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 8px; }
+        .emp-required { color: #ef4444; }
+        @media (max-width: 700px) { .emp-nav-wrap { padding: 0 12px; } }
+    </style>
+</head>
+<body>
+    <nav class="emp-nav">
+        <div class="emp-nav-wrap">
+            <a href="/employee/todo" class="emp-brand">
+                <img src="/static/lumber-logo.png" alt="LUMBER" class="emp-brand-logo" />
+            </a>
+            <a href="/logout" class="emp-logout-btn">
+                <i class="fas fa-sign-out-alt"></i>
+                <span>Logout</span>
+            </a>
+        </div>
+    </nav>
+
+    <main style="padding-top: 90px; padding-bottom: 48px; padding-left: 24px; padding-right: 24px; max-width: 1000px; margin: 0 auto;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px;">
+            <h1 style="font-size: 28px; font-weight: 700; color: #0f172a;">My Tasks</h1>
+            <div style="display: flex; align-items: center; gap: 8px; background: #ffffff; padding: 8px 12px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                <i class="fas fa-calendar" style="color: #64748b; font-size: 16px;"></i>
+                <input type="date" id="dateFilter" onchange="loadTodos()" class="emp-input" style="border: none; padding: 4px; width: 140px;" />
+            </div>
+        </div>
+
+        <div id="taskList" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 24px;"></div>
+
+        <div id="addTaskForm" style="display: none;" class="emp-card" style="padding: 28px; margin-bottom: 24px;">
+            <input type="hidden" id="todoId" value="" />
+            
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                <h2 style="font-size: 20px; font-weight: 700; color: #0f172a; margin: 0;">
+                    <span id="formTitle">Add New Task</span>
+                </h2>
+                <button onclick="hideAddTask()" style="background: #f1f5f9; border: 1px solid #e2e8f0; color: #64748b; font-size: 20px; cursor: pointer; padding: 4px 10px; border-radius: 6px; transition: all 0.15s;" onmouseover="this.style.background='#e2e8f0'" onmouseout="this.style.background='#f1f5f9'">&times;</button>
+            </div>
+
+            <div style="margin-bottom: 20px;">
+                <label class="emp-label">Task Name <span class="emp-required">*</span></label>
+                <input type="text" id="taskName" placeholder="Enter task name" class="emp-input" style="width: 100%; font-size: 15px;" />
+            </div>
+
+            <div style="margin-bottom: 20px;">
+                <label class="emp-label">Jira Ticket (Optional)</label>
+                <div style="display: flex; gap: 8px;">
+                    <input type="text" id="taskTicketKey" placeholder="e.g. TIM-1234" oninput="this.value=this.value.toUpperCase()" class="emp-input" style="flex: 1; text-transform: uppercase; font-family: monospace;" />
+                    <button id="fetchTodoTicketBtn" onclick="fetchTodoTicket()" type="button" class="emp-btn-primary" style="padding: 10px 20px;">
+                        <i class="fas fa-download" style="margin-right: 6px;"></i>Fetch
+                    </button>
+                </div>
+                <div id="todoTicketPreview" style="display: none; margin-top: 10px; font-size: 12px; border-radius: 8px; border: 1px solid #cbd5e1; background: #f8fafc; padding: 12px; color: #475569;"></div>
+                <div id="todoTicketError" style="display: none; margin-top: 10px; font-size: 12px; border-radius: 8px; border: 1px solid #fca5a5; background: #fee2e2; padding: 10px; color: #991b1b;"></div>
+            </div>
+
+            <div style="margin-bottom: 20px;">
+                <label class="emp-label">Description</label>
+                <textarea id="taskDescription" placeholder="Add task details..." rows="3" class="emp-textarea" style="width: 100%; resize: vertical;"></textarea>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;">
+                <div>
+                    <label class="emp-label">Priority <span class="emp-required">*</span></label>
+                    <select id="taskPriority" class="emp-select" style="width: 100%;">
+                        <option value="Low">🟢 Low Priority</option>
+                        <option value="Medium">🟡 Medium Priority</option>
+                        <option value="High">🔴 High Priority</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="emp-label">Due Date <span class="emp-required">*</span></label>
+                    <input type="datetime-local" id="taskDueDate" class="emp-input" style="width: 100%;" />
+                </div>
+            </div>
+
+            <div style="margin-bottom: 24px;">
+                <label class="emp-label">Tags</label>
+                <div id="tagSelectorList" style="display: flex; flex-wrap: wrap; gap: 8px; min-height: 32px;"></div>
+            </div>
+
+            <div style="display: flex; gap: 12px; justify-content: flex-end; border-top: 1px solid #e2e8f0; padding-top: 20px;">
+                <button onclick="hideAddTask()" class="emp-btn-secondary" style="padding: 10px 24px;">Cancel</button>
+                <button id="saveButton" onclick="saveTodo()" class="emp-btn-success" style="padding: 10px 32px;">
+                    <i class="fas fa-check" style="margin-right: 6px;"></i><span id="saveButtonText">Save Task</span>
+                </button>
+            </div>
+        </div>
+
+        <button onclick="showAddTask()" style="display: flex; align-items: center; gap: 8px; color: #3b82f6; background: #eff6ff; border: 2px dashed #93c5fd; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.15s; padding: 12px 20px; border-radius: 8px; width: 100%;" onmouseover="this.style.background='#dbeafe'" onmouseout="this.style.background='#eff6ff'">
+            <i class="fas fa-plus-circle" style="font-size: 18px;"></i>
+            <span>Add New Task</span>
+        </button>
+    </main>
+
+    <script>
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('dateFilter').value = today;
+        Promise.all([loadTodoTags(), loadTodos()]);
+
+        async function loadTodos() {
+            const date = document.getElementById('dateFilter').value;
+            const taskList = document.getElementById('taskList');
+            taskList.innerHTML = '<div style="text-align: center; padding: 40px; color: #94a3b8;">Loading tasks...</div>';
+            try {
+                const projectKey = (localStorage.getItem("project_key") || "").trim().toUpperCase();
+                const res = await fetch(`/api/todos?date=${date}`, { headers: { "X-Project-Key": projectKey } });
+                const todos = await res.json();
+                renderTodos(todos);
+            } catch (e) {
+                taskList.innerHTML = '<div style="text-align: center; padding: 40px; color: #ef4444;">Error loading tasks.</div>';
+            }
+        }
+
+        async function fetchTodoTicket() {
+            const keyInput = document.getElementById('taskTicketKey');
+            const previewEl = document.getElementById('todoTicketPreview');
+            const errorEl = document.getElementById('todoTicketError');
+            const btn = document.getElementById('fetchTodoTicketBtn');
+            let key = (keyInput.value || '').trim().toUpperCase();
+            if (!key) return;
+            if (/^\d+$/.test(key)) { key = 'TIM-' + key; keyInput.value = key; }
+            previewEl.style.display = 'none'; errorEl.style.display = 'none';
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; btn.disabled = true;
+            try {
+                const headers = window.getApiHeaders ? window.getApiHeaders() : { 'X-Project-Key': (localStorage.getItem("project_key") || "").trim().toUpperCase() };
+                const res = await fetch(`/api/jira/ticket/${key}`, { headers });
+                const data = await res.json();
+                if (!res.ok || data.error) { errorEl.textContent = data.error || 'Ticket not found.'; errorEl.style.display = 'block'; return; }
+                if (!document.getElementById('taskName').value.trim() && data.summary) document.getElementById('taskName').value = data.summary;
+                if (!document.getElementById('taskDescription').value.trim() && data.summary) document.getElementById('taskDescription').value = data.summary;
+                previewEl.innerHTML = `<div style="font-family: monospace; color: #3b82f6; font-weight: 700;">${data.key || key}</div><div style="color: #1e293b; margin-top: 4px;">${data.summary || '—'}</div><div style="color: #64748b; margin-top: 4px;">Status: ${data.status || '—'} · Assignee: ${data.assignee || 'Unassigned'}</div>`;
+                previewEl.style.display = 'block';
+            } catch (e) { errorEl.textContent = 'Network error while fetching ticket.'; errorEl.style.display = 'block'; }
+            finally { btn.innerHTML = '<i class="fas fa-download" style="margin-right: 6px;"></i>Fetch'; btn.disabled = false; }
+        }
+
+        function renderTodos(todos) {
+            const taskList = document.getElementById('taskList');
+            if (todos.length === 0) {
+                taskList.innerHTML = '<div style="text-align: center; padding: 80px; color: #94a3b8; background: #ffffff; border-radius: 12px; border: 2px dashed #cbd5e1;"><i class="fas fa-inbox" style="font-size: 48px; margin-bottom: 16px; display: block; opacity: 0.5;"></i>No tasks for this day. Enjoy your time!</div>';
+                return;
+            }
+            taskList.innerHTML = todos.map(t => {
+                let tagsHtml = '';
+                if (t.tags && t.tags !== '[]') {
+                    try {
+                        const tagsArray = JSON.parse(t.tags);
+                        if (tagsArray.length > 0 && window.availableTags) {
+                            tagsHtml = '<div style="display: flex; gap: 4px; margin-top: 8px;">' + tagsArray.map(tagName => {
+                                const tagObj = window.availableTags.find(x => x.name === tagName);
+                                return tagObj ? `<span class="emp-tag ${tagObj.color}">${tagName}</span>` : '';
+                            }).join('') + '</div>';
+                        }
+                    } catch (e) {}
+                }
+                const priorityClass = t.priority === 'High' ? 'emp-priority-high' : (t.priority === 'Medium' ? 'emp-priority-medium' : 'emp-priority-low');
+                const isDone = t.status === 'Done';
+                return `<div class="emp-card" style="padding: 20px; display: flex; align-items: start; gap: 16px; transition: all 0.15s;">
+                    <button onclick="toggleStatus(${t.id}, '${t.status}')" class="emp-checkbox ${isDone ? 'done' : ''}" style="margin-top: 2px;">
+                        ${isDone ? '<i class="fas fa-check" style="color: white; font-size: 12px;"></i>' : ''}
+                    </button>
+                    <div style="flex: 1; min-width: 0;">
+                        <h3 style="font-weight: 600; font-size: 16px; color: ${isDone ? '#94a3b8' : '#0f172a'}; ${isDone ? 'text-decoration: line-through;' : ''} margin-bottom: 4px;">${t.title}</h3>
+                        ${t.ticket_key ? `<div style="font-size: 12px; color: #3b82f6; font-family: monospace; margin-bottom: 4px;"><i class="fas fa-ticket" style="margin-right: 4px;"></i>${t.ticket_key}</div>` : ''}
+                        ${t.description ? `<p style="font-size: 14px; color: #64748b; margin-top: 6px; line-height: 1.5;">${t.description}</p>` : ''}
+                        ${tagsHtml}
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 12px; flex-shrink: 0;">
+                        <span class="emp-tag ${priorityClass}" style="text-transform: uppercase; font-size: 10px; padding: 4px 10px; font-weight: 700;">${t.priority}</span>
+                        <button onclick='editTodo(${JSON.stringify(t).replace(/'/g, "&apos;")})' style="background: #f1f5f9; border: 1px solid #e2e8f0; color: #64748b; cursor: pointer; padding: 6px 10px; border-radius: 6px; transition: all 0.15s;" onmouseover="this.style.background='#e2e8f0'" onmouseout="this.style.background='#f1f5f9'" title="Edit">
+                            <i class="fas fa-edit" style="font-size: 14px;"></i>
+                        </button>
+                        <button onclick="deleteTodo(${t.id})" style="background: #fef2f2; border: 1px solid #fecaca; color: #dc2626; cursor: pointer; padding: 6px 10px; border-radius: 6px; transition: all 0.15s;" onmouseover="this.style.background='#fee2e2'" onmouseout="this.style.background='#fef2f2'" title="Delete">
+                            <i class="fas fa-trash" style="font-size: 14px;"></i>
+                        </button>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        let selectedTags = []; window.availableTags = [];
+        async function loadTodoTags() {
+            try { const res = await fetch('/api/settings/todo_tags'); if (res.ok) window.availableTags = await res.json(); }
+            catch (err) { console.error("Failed to load tags:", err); }
+        }
+
+        function renderTagSelector() {
+            const container = document.getElementById('tagSelectorList');
+            if (window.availableTags.length === 0) {
+                container.innerHTML = '<span style="font-size: 12px; color: #94a3b8; font-style: italic;">No tags available</span>';
+                return;
+            }
+            container.innerHTML = window.availableTags.map(t => {
+                const isSelected = selectedTags.includes(t.name);
+                const opacity = isSelected ? '1' : '0.5';
+                const ring = isSelected ? 'box-shadow: 0 0 0 2px #3b82f6;' : '';
+                return `<button type="button" onclick="toggleTagSelection(this, '${t.name}')" class="emp-tag ${t.color}" style="opacity: ${opacity}; cursor: pointer; transition: all 0.15s; ${ring}">${t.name}</button>`;
+            }).join('');
+        }
+
+        function toggleTagSelection(btn, tagName) {
+            if (selectedTags.includes(tagName)) selectedTags = selectedTags.filter(t => t !== tagName);
+            else selectedTags.push(tagName);
+            renderTagSelector();
+        }
+
+        function showAddTask() {
+            document.getElementById('todoId').value = ""; document.getElementById('taskName').value = "";
+            document.getElementById('taskTicketKey').value = ""; document.getElementById('taskDescription').value = "";
+            document.getElementById('todoTicketPreview').style.display = 'none'; document.getElementById('todoTicketError').style.display = 'none';
+            document.getElementById('taskPriority').value = "Low"; selectedTags = []; renderTagSelector();
+            document.getElementById('formTitle').textContent = "Add New Task";
+            document.getElementById('saveButtonText').textContent = "Save Task";
+            document.getElementById('addTaskForm').style.display = 'block';
+            const now = new Date(); now.setHours(now.getHours() + 1); now.setMinutes(0);
+            document.getElementById('taskDueDate').value = now.toISOString().slice(0, 16);
+            document.getElementById('taskName').focus();
+        }
+
+        function editTodo(todo) {
+            document.getElementById('todoId').value = todo.id; document.getElementById('taskName').value = todo.title;
+            document.getElementById('taskTicketKey').value = todo.ticket_key || ""; document.getElementById('taskDescription').value = todo.description || "";
+            document.getElementById('todoTicketPreview').style.display = 'none'; document.getElementById('todoTicketError').style.display = 'none';
+            document.getElementById('taskPriority').value = todo.priority;
+            try { selectedTags = JSON.parse(todo.tags || "[]"); } catch (e) { selectedTags = []; }
+            renderTagSelector(); document.getElementById('taskDueDate').value = `${todo.due_date}T09:00`;
+            document.getElementById('formTitle').textContent = "Edit Task";
+            document.getElementById('saveButtonText').textContent = "Update Task";
+            document.getElementById('addTaskForm').style.display = 'block'; document.getElementById('taskName').focus();
+        }
+
+        function hideAddTask() { document.getElementById('addTaskForm').style.display = 'none'; }
+
+        async function saveTodo() {
+            const id = document.getElementById('todoId').value; const title = document.getElementById('taskName').value;
+            const ticket_key = (document.getElementById('taskTicketKey').value || '').trim().toUpperCase();
+            const description = document.getElementById('taskDescription').value; const priority = document.getElementById('taskPriority').value;
+            const due_date_time = document.getElementById('taskDueDate').value; const due_date = due_date_time.split('T')[0];
+            const tags = JSON.stringify(selectedTags);
+            if (!title || !due_date) { alert("Please enter a title and date."); return; }
+            const method = id ? "PUT" : "POST"; const url = id ? `/api/todos/${id}` : "/api/todos";
+            const projectKey = (localStorage.getItem("project_key") || "").trim().toUpperCase();
+            const res = await fetch(url, { method: method, headers: { "Content-Type": "application/json", "X-Project-Key": projectKey }, body: JSON.stringify({ title, ticket_key, description, priority, due_date, tags }) });
+            if (res.ok) { hideAddTask(); loadTodos(); }
+        }
+
+        async function toggleStatus(id, currentStatus) {
+            const newStatus = currentStatus === 'Pending' ? 'Done' : 'Pending';
+            const res = await fetch(`/api/todos/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: newStatus }) });
+            if (res.ok) loadTodos();
+        }
+
+        async function deleteTodo(id) {
+            if (!confirm("Delete this task?")) return;
+            const projectKey = (localStorage.getItem("project_key") || "").trim().toUpperCase();
+            const res = await fetch(`/api/todos/${id}`, { method: "DELETE", headers: { "X-Project-Key": projectKey } });
+            if (res.ok) loadTodos();
+        }
+    </script>
+</body>
+</html>
